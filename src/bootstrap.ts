@@ -140,7 +140,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
     if (process.env.NODE_ENV === 'production') {
       return new StructuredLogger({}, logLevel);
     } else {
-      return new ConsoleLogger('[Delegate]', true, logLevel);
+      return new ConsoleLogger('[Backbeat]', true, logLevel);
     }
   });
 
@@ -192,7 +192,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
   const logger = loggerResult.value;
 
   // All logs go to stderr to keep stdout clean for MCP protocol
-  logger.info('Bootstrapping Delegate', { config });
+  logger.info('Bootstrapping Backbeat', { config });
 
   // Register database with structured logging
   container.registerSingleton('database', () => {

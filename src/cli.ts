@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Set process title for easy identification in ps/pgrep/pkill
-process.title = 'delegate-cli';
+process.title = 'beat-cli';
 
 import { readFileSync } from 'fs';
 import path from 'path';

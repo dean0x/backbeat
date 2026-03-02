@@ -319,19 +319,19 @@ describe('ClaudeProcessSpawner - Behavioral Tests', () => {
       const spawnCall = spawnSpy.mock.calls[0];
       expect(spawnCall[2].env.CUSTOM_VAR).toBe('test-value');
       expect(spawnCall[2].env.PATH).toBe('/usr/bin:/bin');
-      expect(spawnCall[2].env.DELEGATE_WORKER).toBe('true');
+      expect(spawnCall[2].env.BACKBEAT_WORKER).toBe('true');
 
       process.env = originalEnv;
     });
 
-    it('should add DELEGATE_TASK_ID when task ID provided', () => {
+    it('should add BACKBEAT_TASK_ID when task ID provided', () => {
       const taskId = 'task-abc-123';
       const result = spawner.spawn('test', '/tmp', taskId);
 
       expect(result.ok).toBe(true);
       const spawnCall = spawnSpy.mock.calls[0];
-      expect(spawnCall[2].env.DELEGATE_TASK_ID).toBe(taskId);
-      expect(spawnCall[2].env.DELEGATE_WORKER).toBe('true');
+      expect(spawnCall[2].env.BACKBEAT_TASK_ID).toBe(taskId);
+      expect(spawnCall[2].env.BACKBEAT_WORKER).toBe('true');
     });
   });
 
@@ -459,8 +459,8 @@ describe('ClaudeProcessSpawner - Behavioral Tests', () => {
           expect(env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).toBeUndefined();
 
           // Delegate vars must be present
-          expect(env.DELEGATE_WORKER).toBe('true');
-          expect(env.DELEGATE_TASK_ID).toBe('task-123');
+          expect(env.BACKBEAT_WORKER).toBe('true');
+          expect(env.BACKBEAT_TASK_ID).toBe('task-123');
         }
       } finally {
         for (const [key, original] of Object.entries(saved)) {

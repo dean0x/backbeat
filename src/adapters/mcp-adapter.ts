@@ -122,7 +122,7 @@ export class MCPAdapter {
   ) {
     this.server = new Server(
       {
-        name: 'delegate',
+        name: 'backbeat',
         version: pkg.version,
       },
       {

@@ -56,8 +56,8 @@ export class ClaudeProcessSpawner implements ProcessSpawner {
       );
       const env = {
         ...cleanEnv,
-        DELEGATE_WORKER: 'true',
-        ...(taskId && { DELEGATE_TASK_ID: taskId }),
+        BACKBEAT_WORKER: 'true',
+        ...(taskId && { BACKBEAT_TASK_ID: taskId }),
       };
 
       const child = spawn(this.claudeCommand, args, {

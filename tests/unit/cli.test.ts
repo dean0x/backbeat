@@ -1532,7 +1532,7 @@ describe('CLI - Task Completion Lifecycle', () => {
   describe('Detach mode - task ID extraction', () => {
     it('should extract task ID from typical log output', () => {
       const logContent = [
-        '🚀 Bootstrapping Delegate...',
+        '🚀 Bootstrapping Backbeat...',
         '📝 Delegating task: analyze codebase',
         '✅ Task delegated successfully!',
         '📋 Task ID: task-abc123def456',
@@ -1552,7 +1552,7 @@ describe('CLI - Task Completion Lifecycle', () => {
     });
 
     it('should not match task ID in non-matching output', () => {
-      const logContent = '🚀 Bootstrapping Delegate...\nStill loading...';
+      const logContent = '🚀 Bootstrapping Backbeat...\nStill loading...';
       const taskIdPattern = /Task ID:\s+(task-\S+)/;
       expect(logContent.match(taskIdPattern)).toBeNull();
     });

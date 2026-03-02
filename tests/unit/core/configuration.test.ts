@@ -644,7 +644,7 @@ describe('Config File - loadConfigFile', () => {
   let restoreConfigDir: () => void;
 
   beforeEach(() => {
-    tempDir = path.join(tmpdir(), `delegate-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    tempDir = path.join(tmpdir(), `backbeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(tempDir, { recursive: true });
     restoreConfigDir = _testSetConfigDir(tempDir);
   });
@@ -699,7 +699,7 @@ describe('Config File - saveConfigValue', () => {
   let restoreConfigDir: () => void;
 
   beforeEach(() => {
-    tempDir = path.join(tmpdir(), `delegate-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    tempDir = path.join(tmpdir(), `backbeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(tempDir, { recursive: true });
     restoreConfigDir = _testSetConfigDir(tempDir);
   });
@@ -754,7 +754,7 @@ describe('Config File - resetConfigValue', () => {
   let restoreConfigDir: () => void;
 
   beforeEach(() => {
-    tempDir = path.join(tmpdir(), `delegate-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    tempDir = path.join(tmpdir(), `backbeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(tempDir, { recursive: true });
     restoreConfigDir = _testSetConfigDir(tempDir);
   });
@@ -796,7 +796,7 @@ describe('Config File - loadConfiguration with file', () => {
 
   beforeEach(() => {
     originalEnv = { ...process.env };
-    tempDir = path.join(tmpdir(), `delegate-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    tempDir = path.join(tmpdir(), `backbeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(tempDir, { recursive: true });
     restoreConfigDir = _testSetConfigDir(tempDir);
     // Clear env vars so we only see file + defaults

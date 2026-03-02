@@ -150,7 +150,7 @@ export function loadConfiguration(): Configuration {
   // Try env-only so valid env vars aren't dropped by a corrupt config file.
   const errors = parseResult.error.errors.map((e) => `  - ${e.path.join('.')}: ${e.message}`).join('\n');
   console.warn(
-    `[Delegate] Configuration file validation failed, falling back to environment variables and defaults:\n${errors}`,
+    `[Backbeat] Configuration file validation failed, falling back to environment variables and defaults:\n${errors}`,
   );
 
   const envOnlyResult = ConfigurationSchema.safeParse(envConfig);
@@ -163,14 +163,14 @@ export function loadConfiguration(): Configuration {
 }
 
 // ============================================================================
-// Config File Persistence (~/.delegate/config.json)
+// Config File Persistence (~/.backbeat/config.json)
 // ============================================================================
 
 // Display path for CLI (always shows real home path)
-export const CONFIG_FILE_PATH = path.join(homedir(), '.delegate', 'config.json');
+export const CONFIG_FILE_PATH = path.join(homedir(), '.backbeat', 'config.json');
 
 // Internal mutable paths — overridable via _testSetConfigDir() for test isolation
-let _configDir = path.join(homedir(), '.delegate');
+let _configDir = path.join(homedir(), '.backbeat');
 let _configFilePath = CONFIG_FILE_PATH;
 
 /** Test helper: redirect config reads/writes to a temp directory. Returns restore function. */
@@ -193,7 +193,7 @@ export function loadConfigFile(): Record<string, unknown> {
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
     return parsed as Record<string, unknown>;
   } catch {
-    console.warn(`[Delegate] Failed to parse config file, ignoring: ${_configFilePath}`);
+    console.warn(`[Backbeat] Failed to parse config file, ignoring: ${_configFilePath}`);
     return {};
   }
 }
