@@ -209,7 +209,7 @@ describe('MCPAdapter - Protocol Compliance', () => {
 
       expect(server).toBeTruthy();
       expect(typeof server).toBe('object');
-      // Server should be initialized with delegate name and package version
+      // Server should be initialized with backbeat name and package version
     });
 
     it('should declare tools capability in MCP protocol', () => {

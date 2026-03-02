@@ -171,7 +171,7 @@ export class TaskManagerService implements TaskManager {
    * @returns New task with retry tracking, or error if task cannot be retried
    *
    * @example
-   * // CLI usage: delegate retry-task abc-123
+   * // CLI usage: beat retry abc-123
    * // Creates new task def-456 with:
    * // - parentTaskId: abc-123 (or original if abc-123 is already a retry)
    * // - retryCount: 1 (or incremented from abc-123's count)

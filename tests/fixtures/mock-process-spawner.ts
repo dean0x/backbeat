@@ -192,7 +192,7 @@ class MockChildProcess extends EventEmitter {
     } else if (this.prompt.includes('pwd')) {
       // Simulate pwd command
       this.timeout = setTimeout(() => {
-        this.stdout.emit('data', Buffer.from('/workspace/delegate\n'));
+        this.stdout.emit('data', Buffer.from('/workspace/backbeat\n'));
         this.exitCode = 0;
         this.emit('exit', 0, null);
       }, this.executionDelay);

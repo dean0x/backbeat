@@ -1476,7 +1476,7 @@ describe('CLI - Task Completion Lifecycle', () => {
   });
 
   describe('--foreground flag', () => {
-    it('should be recognized as a valid delegate option', () => {
+    it('should be recognized as a valid run option', () => {
       const options = parseRunArgs(['--foreground', 'analyze codebase']);
       expect(options.foreground).toBe(true);
       expect(options.prompt).toBe('analyze codebase');
@@ -1976,7 +1976,7 @@ function waitForCompletion(eventBus: InMemoryEventBus, taskId: string): Promise<
 }
 
 /**
- * Parse delegate command args — mirrors the option parsing loop in cli.ts
+ * Parse run command args — mirrors the option parsing loop in cli.ts
  * for testing flag recognition without running the full CLI.
  */
 function parseRunArgs(args: string[]): RunOptions & { prompt: string } {

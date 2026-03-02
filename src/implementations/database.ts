@@ -127,7 +127,7 @@ export class Database {
     const homeDir = os.homedir();
 
     if (process.platform === 'win32') {
-      // Windows: %APPDATA%/delegate
+      // Windows: %APPDATA%/backbeat
       const appData = process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming');
       return path.join(appData, 'backbeat', 'backbeat.db');
     } else {
