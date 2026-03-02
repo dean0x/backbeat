@@ -137,9 +137,9 @@ Or add to your `.mcp.json`:
 ```json
 {
   "mcpServers": {
-    "delegate": {
+    "backbeat": {
       "command": "npx",
-      "args": ["-y", "delegate@0.3.0", "mcp", "start"]
+      "args": ["-y", "backbeat@0.3.0", "mcp", "start"]
     }
   }
 }

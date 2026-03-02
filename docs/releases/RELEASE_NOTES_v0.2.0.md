@@ -7,7 +7,7 @@
 - **Automatic recovery**: Tasks queued before a crash are automatically re-queued on startup
 - **Platform-specific storage**: 
   - Unix/Mac: `~/.backbeat/backbeat.db`
-  - Windows: `%APPDATA%/delegate/backbeat.db`
+  - Windows: `%APPDATA%/backbeat/backbeat.db`
 - **Task history**: Complete history of all delegated tasks with status, logs, and metadata
 
 ### 🔧 MCP Connection Stability
@@ -71,8 +71,8 @@ Add to your MCP configuration:
 ```json
 {
   "mcpServers": {
-    "delegate": {
-      "command": "delegate",
+    "backbeat": {
+      "command": "beat",
       "args": ["mcp", "start"]
     }
   }

@@ -23,7 +23,7 @@ Backbeat is an MCP (Model Context Protocol) server that enables Claude Code to d
 ```bash
 # Clone the repository
 git clone https://github.com/dean0x/delegate.git
-cd delegate
+cd backbeat
 
 # Install and build
 npm install
@@ -67,9 +67,9 @@ Add to `~/.config/claude/mcp_servers.json`:
 ```json
 {
   "mcpServers": {
-    "delegate": {
+    "backbeat": {
       "command": "node",
-      "args": ["/absolute/path/to/delegate/dist/index.js"],
+      "args": ["/absolute/path/to/backbeat/dist/index.js"],
       "env": {}
     }
   }
@@ -80,13 +80,13 @@ Add to `~/.config/claude/mcp_servers.json`:
 
 ```bash
 # Start the MCP server manually
-delegate mcp start
+beat mcp start
 
 # Test server startup and validation
-delegate mcp test
+beat mcp test
 
 # Show help
-delegate help
+beat help
 ```
 
 ## 📈 Performance

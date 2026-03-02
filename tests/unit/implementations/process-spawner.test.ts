@@ -458,7 +458,7 @@ describe('ClaudeProcessSpawner - Behavioral Tests', () => {
           expect(env.CLAUDE_CODE_ENTRYPOINT).toBeUndefined();
           expect(env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).toBeUndefined();
 
-          // Delegate vars must be present
+          // Backbeat vars must be present
           expect(env.BACKBEAT_WORKER).toBe('true');
           expect(env.BACKBEAT_TASK_ID).toBe('task-123');
         }

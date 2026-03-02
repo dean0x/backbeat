@@ -47,7 +47,7 @@ export class ClaudeProcessSpawner implements ProcessSpawner {
       // console.error(`[ProcessSpawner] Working directory: ${workingDirectory}`);
       // console.error(`[ProcessSpawner] Environment keys: ${Object.keys(process.env).length}`);
 
-      // Add Delegate-specific environment variables for identification
+      // Add Backbeat-specific environment variables for identification
       // CRITICAL: Strip all Claude Code nesting indicators to prevent rejection
       // Workers are independent Claude Code instances, not nested sessions
       // Claude Code checks CLAUDECODE and any CLAUDE_CODE_* prefixed vars
