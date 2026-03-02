@@ -141,11 +141,11 @@ describe('BackbeatError - REAL Error Behavior', () => {
 
   describe('Error type guards and helpers', () => {
     it('should identify BackbeatError instances', () => {
-      const delegateError = new BackbeatError(ErrorCode.TASK_NOT_FOUND, 'Not found');
+      const backbeatError = new BackbeatError(ErrorCode.TASK_NOT_FOUND, 'Not found');
       const regularError = new Error('Regular error');
       const typeError = new TypeError('Type error');
 
-      expect(isBackbeatError(delegateError)).toBe(true);
+      expect(isBackbeatError(backbeatError)).toBe(true);
       expect(isBackbeatError(regularError)).toBe(false);
       expect(isBackbeatError(typeError)).toBe(false);
       expect(isBackbeatError(null)).toBe(false);
@@ -165,11 +165,11 @@ describe('BackbeatError - REAL Error Behavior', () => {
     });
 
     it('should have meaningful error messages', () => {
-      const delegateError = taskNotFound('task-123');
+      const backbeatError = taskNotFound('task-123');
       const timeoutError = taskTimeout('task-456', TIMEOUTS.LONG);
       const resourceError = insufficientResources(95, 1000000);
 
-      expect(delegateError.message).toBe('Task task-123 not found');
+      expect(backbeatError.message).toBe('Task task-123 not found');
       expect(timeoutError.message).toBe('Task task-456 timed out after 5000ms');
       expect(resourceError.message).toContain('Insufficient resources');
     });
@@ -183,9 +183,9 @@ describe('BackbeatError - REAL Error Behavior', () => {
       expect(converted1.message).toBe('Regular');
 
       // Already BackbeatError
-      const delegateError = taskNotFound('task');
-      const converted2 = toBackbeatError(delegateError);
-      expect(converted2).toBe(delegateError); // Should return same instance
+      const backbeatError = taskNotFound('task');
+      const converted2 = toBackbeatError(backbeatError);
+      expect(converted2).toBe(backbeatError); // Should return same instance
 
       // String
       const converted3 = toBackbeatError('String error');

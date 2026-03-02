@@ -9,7 +9,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Configuration } from '../../../src/core/configuration';
-import type { TaskRequest, Task, TaskCheckpoint } from '../../../src/core/domain';
+import type { Task, TaskCheckpoint, TaskRequest } from '../../../src/core/domain';
 import { Priority, TaskId, TaskStatus } from '../../../src/core/domain';
 import { BackbeatError, ErrorCode } from '../../../src/core/errors';
 import type { EventBus } from '../../../src/core/events/event-bus';

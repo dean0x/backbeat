@@ -3,7 +3,7 @@
  */
 
 import { expect, vi } from 'vitest';
-import type { TaskRequest, Task } from '../../src/core/domain';
+import type { Task, TaskRequest } from '../../src/core/domain';
 import { createTask, Priority, TaskId, TaskStatus } from '../../src/core/domain';
 import type { EventBus } from '../../src/core/events/event-bus';
 import type {

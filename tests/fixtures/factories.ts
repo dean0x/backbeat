@@ -9,11 +9,11 @@
 import { randomUUID } from 'crypto';
 import type { Configuration } from '../../src/core/configuration';
 import type {
-  TaskRequest,
   Priority,
   SystemResources,
   Task,
   TaskId,
+  TaskRequest,
   TaskStatus,
   Worker,
   WorkerId,

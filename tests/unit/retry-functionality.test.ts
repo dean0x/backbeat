@@ -5,15 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Configuration } from '../../src/core/configuration.js';
-import {
-  createTask,
-  TaskRequest,
-  isTerminalState,
-  Priority,
-  Task,
-  TaskId,
-  TaskStatus,
-} from '../../src/core/domain.js';
+import { createTask, isTerminalState, Priority, Task, TaskId, TaskRequest, TaskStatus } from '../../src/core/domain.js';
 import { ErrorCode } from '../../src/core/errors.js';
 import { InMemoryEventBus } from '../../src/core/events/event-bus.js';
 import { err, ok } from '../../src/core/result.js';

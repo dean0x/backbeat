@@ -12,12 +12,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadConfiguration } from '../../src/core/configuration';
 import type { Container } from '../../src/core/container';
 import type {
-  TaskRequest,
   ResumeTaskRequest,
   Schedule,
   ScheduleCreateRequest,
   ScheduleExecution,
   Task,
+  TaskRequest,
 } from '../../src/core/domain';
 import {
   createSchedule,

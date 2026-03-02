@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { type TaskRequest, Priority, type Task, TaskId, TaskStatus } from '../../src/core/domain';
+import { Priority, type Task, TaskId, type TaskRequest, TaskStatus } from '../../src/core/domain';
 
 export const createTestTask = (overrides?: Partial<Task>): Task => ({
   id: overrides?.id || TaskId(`test-task-${randomUUID()}`),

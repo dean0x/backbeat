@@ -5,7 +5,6 @@
 
 import { ChildProcess } from 'child_process';
 import {
-  TaskRequest,
   ResumeTaskRequest,
   Schedule,
   ScheduleCreateRequest,
@@ -16,10 +15,11 @@ import {
   TaskCheckpoint,
   TaskId,
   TaskOutput,
+  TaskRequest,
   Worker,
   WorkerId,
 } from './domain.js';
-import { BaseEvent, BackbeatEvent, EventHandler } from './events/events.js';
+import { BackbeatEvent, BaseEvent, EventHandler } from './events/events.js';
 import { Result } from './result.js';
 
 /**

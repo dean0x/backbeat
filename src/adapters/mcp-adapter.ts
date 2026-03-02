@@ -7,7 +7,6 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { z } from 'zod';
 import pkg from '../../package.json' with { type: 'json' };
 import {
-  TaskRequest,
   Priority,
   ResumeTaskRequest,
   ScheduleCreateRequest,
@@ -16,6 +15,7 @@ import {
   ScheduleType,
   Task,
   TaskId,
+  TaskRequest,
 } from '../core/domain.js';
 import { Logger, ScheduleService, TaskManager } from '../core/interfaces.js';
 import { match } from '../core/result.js';

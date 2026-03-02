@@ -7,7 +7,7 @@ import { Configuration } from '../configuration.js';
 import { BackbeatError, ErrorCode } from '../errors.js';
 import { Logger } from '../interfaces.js';
 import { err, ok, Result } from '../result.js';
-import { BaseEvent, createEvent, BackbeatEvent, EventHandler } from './events.js';
+import { BackbeatEvent, BaseEvent, createEvent, EventHandler } from './events.js';
 
 /**
  * Event bus interface for dependency injection

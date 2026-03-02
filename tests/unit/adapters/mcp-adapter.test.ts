@@ -13,7 +13,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MCPAdapter } from '../../../src/adapters/mcp-adapter';
-import type { TaskRequest, Task } from '../../../src/core/domain';
+import type { Task, TaskRequest } from '../../../src/core/domain';
 import { BackbeatError, ErrorCode, taskNotFound } from '../../../src/core/errors';
 import type { EventBus } from '../../../src/core/events/event-bus';
 import type { Logger, ScheduleRepository, TaskManager } from '../../../src/core/interfaces';

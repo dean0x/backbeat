@@ -17,12 +17,12 @@ import { Configuration } from '../core/configuration.js';
 import {
   canCancel,
   createTask,
-  TaskRequest,
   isTerminalState,
   ResumeTaskRequest,
   Task,
   TaskId,
   TaskOutput,
+  TaskRequest,
 } from '../core/domain.js';
 import { BackbeatError, ErrorCode, taskNotFound } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
