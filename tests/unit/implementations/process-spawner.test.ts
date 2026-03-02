@@ -88,7 +88,7 @@ describe('ClaudeProcessSpawner - Behavioral Tests', () => {
         expect(result.error).toBeInstanceOf(Error);
         expect(result.error.message).toContain('Command not found');
         expect(typeof result.error.message).toBe('string');
-        expect(result.error.name).toBe('DelegateError');
+        expect(result.error.name).toBe('BackbeatError');
         expect(result.error.stack).toBeDefined();
       }
       if (!result.ok) {
@@ -254,7 +254,7 @@ describe('ClaudeProcessSpawner - Behavioral Tests', () => {
         expect(result.error.code).toBe('PROCESS_KILL_FAILED');
         expect(result.error.message).toContain('99999');
         expect(result.error.message).toContain('No such process');
-        expect(result.error.name).toBe('DelegateError');
+        expect(result.error.name).toBe('BackbeatError');
         expect(result.error.context).toBeDefined();
         expect(result.error.context?.pid).toBe(invalidPid);
         expect(typeof result.error.message).toBe('string');

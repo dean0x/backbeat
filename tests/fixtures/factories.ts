@@ -9,7 +9,7 @@
 import { randomUUID } from 'crypto';
 import type { Configuration } from '../../src/core/configuration';
 import type {
-  DelegateRequest,
+  TaskRequest,
   Priority,
   SystemResources,
   Task,
@@ -35,7 +35,7 @@ import {
  *   .build();
  */
 export class TaskFactory {
-  private request: DelegateRequest = {
+  private request: TaskRequest = {
     prompt: 'test task prompt',
     priority: 'P2' as Priority,
     timeout: 30000,

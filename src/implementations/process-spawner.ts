@@ -5,7 +5,7 @@
 
 import { ChildProcess, spawn } from 'child_process';
 import { Configuration } from '../core/configuration.js';
-import { DelegateError, ErrorCode, processSpawnFailed } from '../core/errors.js';
+import { BackbeatError, ErrorCode, processSpawnFailed } from '../core/errors.js';
 import { ProcessSpawner } from '../core/interfaces.js';
 import { err, ok, Result, tryCatch } from '../core/result.js';
 
@@ -101,7 +101,7 @@ export class ClaudeProcessSpawner implements ProcessSpawner {
         this.killTimeouts.set(pid, timeoutId);
       },
       (error) =>
-        new DelegateError(ErrorCode.PROCESS_KILL_FAILED, `Failed to kill process ${pid}: ${error}`, { pid, error }),
+        new BackbeatError(ErrorCode.PROCESS_KILL_FAILED, `Failed to kill process ${pid}: ${error}`, { pid, error }),
     );
   }
 

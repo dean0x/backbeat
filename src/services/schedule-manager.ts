@@ -15,7 +15,7 @@ import {
   ScheduleStatus,
   ScheduleType,
 } from '../core/domain.js';
-import { DelegateError, ErrorCode } from '../core/errors.js';
+import { BackbeatError, ErrorCode } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
 import { Logger, ScheduleExecution, ScheduleRepository, ScheduleService } from '../core/interfaces.js';
 import { err, ok, Result } from '../core/result.js';
@@ -50,14 +50,14 @@ export class ScheduleManagerService implements ScheduleService {
     // Validate schedule type requirements
     if (request.scheduleType === ScheduleType.CRON && !request.cronExpression) {
       return err(
-        new DelegateError(ErrorCode.INVALID_INPUT, 'cronExpression is required for cron schedules', {
+        new BackbeatError(ErrorCode.INVALID_INPUT, 'cronExpression is required for cron schedules', {
           scheduleType: request.scheduleType,
         }),
       );
     }
     if (request.scheduleType === ScheduleType.ONE_TIME && !request.scheduledAt) {
       return err(
-        new DelegateError(ErrorCode.INVALID_INPUT, 'scheduledAt is required for one-time schedules', {
+        new BackbeatError(ErrorCode.INVALID_INPUT, 'scheduledAt is required for one-time schedules', {
           scheduleType: request.scheduleType,
         }),
       );
@@ -74,7 +74,7 @@ export class ScheduleManagerService implements ScheduleService {
     // Validate timezone
     const tz = request.timezone ?? 'UTC';
     if (!isValidTimezone(tz)) {
-      return err(new DelegateError(ErrorCode.INVALID_INPUT, `Invalid timezone: ${tz}`, { timezone: tz }));
+      return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Invalid timezone: ${tz}`, { timezone: tz }));
     }
 
     // Parse scheduledAt if provided
@@ -83,14 +83,14 @@ export class ScheduleManagerService implements ScheduleService {
       scheduledAtMs = Date.parse(request.scheduledAt);
       if (isNaN(scheduledAtMs)) {
         return err(
-          new DelegateError(ErrorCode.INVALID_INPUT, `Invalid scheduledAt datetime: ${request.scheduledAt}`, {
+          new BackbeatError(ErrorCode.INVALID_INPUT, `Invalid scheduledAt datetime: ${request.scheduledAt}`, {
             scheduledAt: request.scheduledAt,
           }),
         );
       }
       if (scheduledAtMs <= Date.now()) {
         return err(
-          new DelegateError(ErrorCode.INVALID_INPUT, 'scheduledAt must be in the future', {
+          new BackbeatError(ErrorCode.INVALID_INPUT, 'scheduledAt must be in the future', {
             scheduledAt: request.scheduledAt,
           }),
         );
@@ -103,7 +103,7 @@ export class ScheduleManagerService implements ScheduleService {
       expiresAtMs = Date.parse(request.expiresAt);
       if (isNaN(expiresAtMs)) {
         return err(
-          new DelegateError(ErrorCode.INVALID_INPUT, `Invalid expiresAt datetime: ${request.expiresAt}`, {
+          new BackbeatError(ErrorCode.INVALID_INPUT, `Invalid expiresAt datetime: ${request.expiresAt}`, {
             expiresAt: request.expiresAt,
           }),
         );
@@ -121,7 +121,7 @@ export class ScheduleManagerService implements ScheduleService {
     } else {
       if (scheduledAtMs === undefined) {
         return err(
-          new DelegateError(ErrorCode.INVALID_INPUT, 'scheduledAt must be provided for one-time schedules', {
+          new BackbeatError(ErrorCode.INVALID_INPUT, 'scheduledAt must be provided for one-time schedules', {
             scheduleType: request.scheduleType,
           }),
         );
@@ -135,7 +135,7 @@ export class ScheduleManagerService implements ScheduleService {
       const pathValidation = validatePath(request.workingDirectory);
       if (!pathValidation.ok) {
         return err(
-          new DelegateError(ErrorCode.INVALID_DIRECTORY, `Invalid working directory: ${pathValidation.error.message}`, {
+          new BackbeatError(ErrorCode.INVALID_DIRECTORY, `Invalid working directory: ${pathValidation.error.message}`, {
             workingDirectory: request.workingDirectory,
           }),
         );
@@ -287,17 +287,17 @@ export class ScheduleManagerService implements ScheduleService {
     const result = await this.scheduleRepository.findById(scheduleId);
     if (!result.ok) {
       return err(
-        new DelegateError(ErrorCode.SYSTEM_ERROR, `Failed to get schedule: ${result.error.message}`, { scheduleId }),
+        new BackbeatError(ErrorCode.SYSTEM_ERROR, `Failed to get schedule: ${result.error.message}`, { scheduleId }),
       );
     }
 
     if (!result.value) {
-      return err(new DelegateError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`, { scheduleId }));
+      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`, { scheduleId }));
     }
 
     if (expectedStatus !== undefined && result.value.status !== expectedStatus) {
       return err(
-        new DelegateError(
+        new BackbeatError(
           ErrorCode.INVALID_OPERATION,
           `Schedule ${scheduleId} is not ${expectedStatus} (status: ${result.value.status})`,
           { scheduleId, expectedStatus, actualStatus: result.value.status },

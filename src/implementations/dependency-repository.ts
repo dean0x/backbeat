@@ -8,7 +8,7 @@
 import SQLite from 'better-sqlite3';
 import { z } from 'zod';
 import { TaskId } from '../core/domain.js';
-import { DelegateError, ErrorCode, operationErrorHandler } from '../core/errors.js';
+import { BackbeatError, ErrorCode, operationErrorHandler } from '../core/errors.js';
 import { DependencyRepository, TaskDependency } from '../core/interfaces.js';
 import { err, ok, Result, tryCatch, tryCatchAsync } from '../core/result.js';
 import { Database } from './database.js';
@@ -196,14 +196,14 @@ export class SQLiteDependencyRepository implements DependencyRepository {
   async addDependencies(taskId: TaskId, dependsOn: readonly TaskId[]): Promise<Result<readonly TaskDependency[]>> {
     // VALIDATION: Reject empty arrays
     if (dependsOn.length === 0) {
-      return err(new DelegateError(ErrorCode.INVALID_OPERATION, 'Cannot add dependencies: empty array provided'));
+      return err(new BackbeatError(ErrorCode.INVALID_OPERATION, 'Cannot add dependencies: empty array provided'));
     }
 
     // SECURITY: Prevent DoS attacks with excessive dependencies
     // Limit to MAX_DEPENDENCIES_PER_TASK for reasonable production workflows
     if (dependsOn.length > SQLiteDependencyRepository.MAX_DEPENDENCIES_PER_TASK) {
       return err(
-        new DelegateError(
+        new BackbeatError(
           ErrorCode.INVALID_OPERATION,
           `Cannot add ${dependsOn.length} dependencies: task cannot have more than ${SQLiteDependencyRepository.MAX_DEPENDENCIES_PER_TASK} dependencies`,
         ),
@@ -218,13 +218,13 @@ export class SQLiteDependencyRepository implements DependencyRepository {
       // VALIDATION: Check dependent task exists
       const taskExistsResult = this.checkTaskExistsStmt.get(taskId) as { count: number };
       if (taskExistsResult.count === 0) {
-        throw new DelegateError(ErrorCode.TASK_NOT_FOUND, `Task not found: ${taskId}`);
+        throw new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Task not found: ${taskId}`);
       }
 
       // SECURITY: Check current dependency count to prevent exceeding MAX_DEPENDENCIES_PER_TASK total
       const existingDepsCount = (this.getDependenciesStmt.all(taskId) as DependencyRow[]).length;
       if (existingDepsCount + dependsOn.length > SQLiteDependencyRepository.MAX_DEPENDENCIES_PER_TASK) {
-        throw new DelegateError(
+        throw new BackbeatError(
           ErrorCode.INVALID_OPERATION,
           `Cannot add ${dependsOn.length} dependencies: task would exceed maximum of ${SQLiteDependencyRepository.MAX_DEPENDENCIES_PER_TASK} dependencies (currently has ${existingDepsCount})`,
         );
@@ -234,7 +234,7 @@ export class SQLiteDependencyRepository implements DependencyRepository {
       for (const depId of dependsOn) {
         const depExistsResult = this.checkTaskExistsStmt.get(depId) as { count: number };
         if (depExistsResult.count === 0) {
-          throw new DelegateError(ErrorCode.TASK_NOT_FOUND, `Task not found: ${depId}`);
+          throw new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Task not found: ${depId}`);
         }
       }
 
@@ -242,7 +242,7 @@ export class SQLiteDependencyRepository implements DependencyRepository {
       for (const depId of dependsOn) {
         const existsResult = this.checkDependencyExistsStmt.get(taskId, depId) as { count: number };
         if (existsResult.count > 0) {
-          throw new DelegateError(
+          throw new BackbeatError(
             ErrorCode.INVALID_OPERATION,
             `Dependency already exists: ${taskId} depends on ${depId}`,
           );
@@ -270,14 +270,14 @@ export class SQLiteDependencyRepository implements DependencyRepository {
     return tryCatch(
       () => addDependenciesTransaction(taskId, dependsOn),
       (error) => {
-        // Preserve semantic DelegateError types
-        if (error instanceof DelegateError) {
+        // Preserve semantic BackbeatError types
+        if (error instanceof BackbeatError) {
           return error;
         }
 
         // Handle UNIQUE constraint violation
         if (error instanceof Error && error.message.includes('UNIQUE constraint')) {
-          return new DelegateError(
+          return new BackbeatError(
             ErrorCode.INVALID_OPERATION,
             `One or more dependencies already exist for task: ${taskId}`,
             { taskId, dependsOn },
@@ -285,7 +285,7 @@ export class SQLiteDependencyRepository implements DependencyRepository {
         }
 
         // Unknown errors become SYSTEM_ERROR
-        return new DelegateError(ErrorCode.SYSTEM_ERROR, `Failed to add dependencies: ${error}`, { taskId, dependsOn });
+        return new BackbeatError(ErrorCode.SYSTEM_ERROR, `Failed to add dependencies: ${error}`, { taskId, dependsOn });
       },
     );
   }
@@ -378,7 +378,7 @@ export class SQLiteDependencyRepository implements DependencyRepository {
         const result = this.resolveDependencyStmt.run(resolution, resolvedAt, taskId, dependsOnTaskId);
 
         if (result.changes === 0) {
-          throw new DelegateError(
+          throw new BackbeatError(
             ErrorCode.TASK_NOT_FOUND,
             `Dependency not found: ${taskId} depends on ${dependsOnTaskId}`,
           );

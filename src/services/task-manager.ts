@@ -17,14 +17,14 @@ import { Configuration } from '../core/configuration.js';
 import {
   canCancel,
   createTask,
-  DelegateRequest,
+  TaskRequest,
   isTerminalState,
   ResumeTaskRequest,
   Task,
   TaskId,
   TaskOutput,
 } from '../core/domain.js';
-import { DelegateError, ErrorCode, taskNotFound } from '../core/errors.js';
+import { BackbeatError, ErrorCode, taskNotFound } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
 import { TaskLogsQueryEvent, TaskStatusQueryEvent } from '../core/events/events.js';
 import { CheckpointRepository, Logger, TaskManager } from '../core/interfaces.js';
@@ -45,9 +45,9 @@ export class TaskManagerService implements TaskManager {
    * Delegate a task - purely event-driven, no direct state management
    */
 
-  async delegate(request: DelegateRequest): Promise<Result<Task>> {
+  async delegate(request: TaskRequest): Promise<Result<Task>> {
     // Apply configuration defaults to request
-    let requestWithDefaults: DelegateRequest = {
+    let requestWithDefaults: TaskRequest = {
       ...request,
       timeout: request.timeout ?? this.config.timeout,
       maxOutputBuffer: request.maxOutputBuffer ?? this.config.maxOutputBuffer,
@@ -63,7 +63,7 @@ export class TaskManagerService implements TaskManager {
         { taskId: continueFromId },
       );
       if (!lookupResult.ok || lookupResult.value === null) {
-        return err(new DelegateError(ErrorCode.TASK_NOT_FOUND, `continueFrom task not found: ${continueFromId}`));
+        return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `continueFrom task not found: ${continueFromId}`));
       }
 
       // Auto-add to dependsOn if missing
@@ -196,7 +196,7 @@ export class TaskManagerService implements TaskManager {
     // Only retry tasks that are in terminal states
     if (!isTerminalState(originalTask.status)) {
       return err(
-        new DelegateError(
+        new BackbeatError(
           ErrorCode.INVALID_OPERATION,
           `Task ${taskId} cannot be retried in state ${originalTask.status}`,
         ),
@@ -214,7 +214,7 @@ export class TaskManagerService implements TaskManager {
     const retryCount = (originalTask.retryCount || 0) + 1;
 
     // Create the retry request with all the original task's configuration
-    const retryRequest: DelegateRequest = {
+    const retryRequest: TaskRequest = {
       prompt: originalTask.prompt,
       priority: originalTask.priority,
       workingDirectory: originalTask.workingDirectory,
@@ -282,7 +282,7 @@ export class TaskManagerService implements TaskManager {
     // Only resume tasks in terminal states
     if (!isTerminalState(originalTask.status)) {
       return err(
-        new DelegateError(
+        new BackbeatError(
           ErrorCode.INVALID_OPERATION,
           `Task ${taskId} cannot be resumed in state ${originalTask.status}`,
         ),
@@ -318,7 +318,7 @@ export class TaskManagerService implements TaskManager {
     const retryCount = (originalTask.retryCount || 0) + 1;
 
     // Create new task with enriched prompt and same configuration
-    const resumeRequest: DelegateRequest = {
+    const resumeRequest: TaskRequest = {
       prompt: enrichedPrompt,
       priority: originalTask.priority,
       workingDirectory: originalTask.workingDirectory,

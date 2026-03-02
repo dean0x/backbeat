@@ -19,7 +19,7 @@ import { bootstrap } from '../../src/bootstrap.js';
 import { Container } from '../../src/core/container.js';
 import type { Task, TaskCheckpoint } from '../../src/core/domain.js';
 import { Priority, TaskId, TaskStatus } from '../../src/core/domain.js';
-import { DelegateError, ErrorCode } from '../../src/core/errors.js';
+import { BackbeatError, ErrorCode } from '../../src/core/errors.js';
 import { EventBus } from '../../src/core/events/event-bus.js';
 import type { CheckpointCreatedEvent, TaskResumedEvent } from '../../src/core/events/events.js';
 import { CheckpointRepository, TaskManager, TaskRepository } from '../../src/core/interfaces.js';
@@ -170,7 +170,7 @@ describe('Integration: Task Resumption - End-to-End Flow', () => {
       // Manually emit TaskFailed event (since NoOpProcessSpawner always exits 0)
       await eventBus.emit('TaskFailed', {
         taskId: failTask.value.id,
-        error: new DelegateError(ErrorCode.SYSTEM_ERROR, 'Simulated test failure'),
+        error: new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Simulated test failure'),
       });
       await failCheckpointPromise;
       await flushEventLoop();

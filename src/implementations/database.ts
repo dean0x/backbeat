@@ -422,7 +422,7 @@ export class Database {
         up: (db) => {
           // Schedules table - stores schedule definitions
           // ARCHITECTURE: Supports both cron-based recurring and one-time schedules
-          // Pattern: task_template stored as JSON for DelegateRequest serialization
+          // Pattern: task_template stored as JSON for TaskRequest serialization
           db.exec(`
             CREATE TABLE IF NOT EXISTS schedules (
               id TEXT PRIMARY KEY,

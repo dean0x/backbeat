@@ -11,7 +11,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Configuration } from '../../../../src/core/configuration';
 import type { Task, Worker } from '../../../../src/core/domain';
-import { DelegateError, ErrorCode, taskNotFound } from '../../../../src/core/errors';
+import { BackbeatError, ErrorCode, taskNotFound } from '../../../../src/core/errors';
 import type { ResourceMonitor, WorkerPool } from '../../../../src/core/interfaces';
 import { err, ok } from '../../../../src/core/result';
 import { WorkerHandler } from '../../../../src/services/handlers/worker-handler';
@@ -443,7 +443,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
     it('should decrement resource monitor worker count on timeout', async () => {
       resourceMonitor.incrementWorkerCount();
       const task = new TaskFactory().build();
-      const error = new DelegateError(ErrorCode.TASK_TIMEOUT, 'Task timed out', { taskId: task.id });
+      const error = new BackbeatError(ErrorCode.TASK_TIMEOUT, 'Task timed out', { taskId: task.id });
 
       await workerHandler.onWorkerTimeout(task.id, error);
 
@@ -452,7 +452,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
 
     it('should emit TaskTimeout event when worker times out', async () => {
       const task = new TaskFactory().build();
-      const error = new DelegateError(ErrorCode.TASK_TIMEOUT, 'Task timed out', { taskId: task.id });
+      const error = new BackbeatError(ErrorCode.TASK_TIMEOUT, 'Task timed out', { taskId: task.id });
 
       await workerHandler.onWorkerTimeout(task.id, error);
 
@@ -461,7 +461,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
 
     it('should include error in TaskTimeout event', async () => {
       const task = new TaskFactory().build();
-      const error = new DelegateError(ErrorCode.TASK_TIMEOUT, 'Task exceeded 5 minute limit', {
+      const error = new BackbeatError(ErrorCode.TASK_TIMEOUT, 'Task exceeded 5 minute limit', {
         taskId: task.id,
         timeoutMs: 300000,
       });
@@ -521,7 +521,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
       // Make spawn fail
       workerPool.spawn = vi
         .fn()
-        .mockResolvedValue(err(new DelegateError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
+        .mockResolvedValue(err(new BackbeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
 
       resourceMonitor.setCanSpawn(true);
       eventBus.setRequestResponse('NextTaskQuery', ok(task));
@@ -537,7 +537,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
 
       workerPool.spawn = vi
         .fn()
-        .mockResolvedValue(err(new DelegateError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
+        .mockResolvedValue(err(new BackbeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
 
       resourceMonitor.setCanSpawn(true);
       eventBus.setRequestResponse('NextTaskQuery', ok(task));
@@ -552,7 +552,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
       const task = new TaskFactory().withPrompt('test task').build();
 
       // Simulate error in event processing
-      eventBus.setRequestResponse('NextTaskQuery', err(new DelegateError(ErrorCode.SYSTEM_ERROR, 'Query failed', {})));
+      eventBus.setRequestResponse('NextTaskQuery', err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Query failed', {})));
 
       resourceMonitor.setCanSpawn(true);
 
@@ -652,7 +652,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
 
         workerPool.spawn = vi
           .fn()
-          .mockResolvedValue(err(new DelegateError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
+          .mockResolvedValue(err(new BackbeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
 
         resourceMonitor.setCanSpawn(true);
         eventBus.setRequestResponse('NextTaskQuery', ok(task));
@@ -726,7 +726,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
 
         workerPool.spawn = vi
           .fn()
-          .mockResolvedValue(err(new DelegateError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
+          .mockResolvedValue(err(new BackbeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
 
         resourceMonitor.setCanSpawn(true);
         eventBus.setRequestResponse('NextTaskQuery', ok(task));
@@ -780,7 +780,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
 
         workerPool.spawn = vi
           .fn()
-          .mockResolvedValue(err(new DelegateError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
+          .mockResolvedValue(err(new BackbeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
 
         resourceMonitor.setCanSpawn(true);
         eventBus.setRequestResponse('NextTaskQuery', ok(task));
@@ -904,7 +904,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
           callCount++;
           if (callCount === 1) {
             // First spawn fails
-            return err(new DelegateError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {}));
+            return err(new BackbeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {}));
           }
           // Subsequent spawns succeed (but won't happen due to delay)
           return ok(new WorkerFactory().build());

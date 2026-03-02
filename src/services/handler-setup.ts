@@ -6,7 +6,7 @@
 
 import { Configuration } from '../core/configuration.js';
 import { Container } from '../core/container.js';
-import { DelegateError, ErrorCode } from '../core/errors.js';
+import { BackbeatError, ErrorCode } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
 import { EventHandlerRegistry } from '../core/events/handlers.js';
 import {
@@ -69,7 +69,7 @@ function getDependency<T>(container: Container, key: string): Result<T> {
   const result = container.get(key);
   if (!result.ok) {
     return err(
-      new DelegateError(ErrorCode.DEPENDENCY_INJECTION_FAILED, `Handler setup requires '${key}' service`, {
+      new BackbeatError(ErrorCode.DEPENDENCY_INJECTION_FAILED, `Handler setup requires '${key}' service`, {
         service: key,
         error: result.error.message,
       }),
@@ -204,7 +204,7 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
   const registerResult = registry.registerAll(standardHandlers);
   if (!registerResult.ok) {
     return err(
-      new DelegateError(ErrorCode.SYSTEM_ERROR, `Failed to register event handlers: ${registerResult.error.message}`, {
+      new BackbeatError(ErrorCode.SYSTEM_ERROR, `Failed to register event handlers: ${registerResult.error.message}`, {
         error: registerResult.error,
       }),
     );
@@ -216,7 +216,7 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
     // Cleanup any handlers that were already initialized
     await registry.shutdown();
     return err(
-      new DelegateError(ErrorCode.SYSTEM_ERROR, `Failed to initialize event handlers: ${initResult.error.message}`, {
+      new BackbeatError(ErrorCode.SYSTEM_ERROR, `Failed to initialize event handlers: ${initResult.error.message}`, {
         error: initResult.error,
       }),
     );
@@ -236,7 +236,7 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
     // Cleanup standard handlers on failure
     await registry.shutdown();
     return err(
-      new DelegateError(
+      new BackbeatError(
         ErrorCode.SYSTEM_ERROR,
         `Failed to create DependencyHandler: ${dependencyHandlerResult.error.message}`,
         { error: dependencyHandlerResult.error },
@@ -259,7 +259,7 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
     // Cleanup previous handlers on failure
     await registry.shutdown();
     return err(
-      new DelegateError(
+      new BackbeatError(
         ErrorCode.SYSTEM_ERROR,
         `Failed to create ScheduleHandler: ${scheduleHandlerResult.error.message}`,
         { error: scheduleHandlerResult.error },
@@ -282,7 +282,7 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
     // Cleanup previous handlers on failure
     await registry.shutdown();
     return err(
-      new DelegateError(
+      new BackbeatError(
         ErrorCode.SYSTEM_ERROR,
         `Failed to create CheckpointHandler: ${checkpointHandlerResult.error.message}`,
         { error: checkpointHandlerResult.error },

@@ -4,7 +4,7 @@ import { homedir } from 'os';
 import path from 'path';
 import { bootstrap } from '../../bootstrap.js';
 import type { Container } from '../../core/container.js';
-import type { DelegateRequest } from '../../core/domain.js';
+import type { TaskRequest } from '../../core/domain.js';
 import { Priority, TaskId } from '../../core/domain.js';
 import type { EventBus } from '../../core/events/event-bus.js';
 import type {
@@ -249,7 +249,7 @@ export async function delegateTask(
       if (params.length > 0) ui.info(params.join(' | '));
     }
 
-    const request: DelegateRequest = {
+    const request: TaskRequest = {
       prompt,
       ...options,
       priority: options?.priority ? Priority[options.priority as keyof typeof Priority] : undefined,

@@ -6,7 +6,7 @@
  */
 
 import type { TaskCheckpoint, TaskId } from '../../core/domain.js';
-import { DelegateError, ErrorCode } from '../../core/errors.js';
+import { BackbeatError, ErrorCode } from '../../core/errors.js';
 import { EventBus } from '../../core/events/event-bus.js';
 import type { TaskCancelledEvent, TaskCompletedEvent, TaskFailedEvent } from '../../core/events/events.js';
 import { BaseEventHandler } from '../../core/events/handlers.js';
@@ -45,7 +45,7 @@ export class CheckpointHandler extends BaseEventHandler {
     taskRepo: TaskRepository,
     eventBus: EventBus,
     logger: Logger,
-  ): Promise<Result<CheckpointHandler, DelegateError>> {
+  ): Promise<Result<CheckpointHandler, BackbeatError>> {
     const handlerLogger = logger.child ? logger.child({ module: 'CheckpointHandler' }) : logger;
 
     const handler = new CheckpointHandler(checkpointRepo, outputCapture, taskRepo, eventBus, handlerLogger);
@@ -64,7 +64,7 @@ export class CheckpointHandler extends BaseEventHandler {
    * Subscribe to task terminal events
    * ARCHITECTURE: Called by factory after initialization
    */
-  private subscribeToEvents(): Result<void, DelegateError> {
+  private subscribeToEvents(): Result<void, BackbeatError> {
     const subscriptions = [
       this.eventBus.subscribe('TaskCompleted', this.handleTaskCompleted.bind(this)),
       this.eventBus.subscribe('TaskFailed', this.handleTaskFailed.bind(this)),
@@ -74,7 +74,7 @@ export class CheckpointHandler extends BaseEventHandler {
     for (const result of subscriptions) {
       if (!result.ok) {
         return err(
-          new DelegateError(ErrorCode.SYSTEM_ERROR, `Failed to subscribe to events: ${result.error.message}`, {
+          new BackbeatError(ErrorCode.SYSTEM_ERROR, `Failed to subscribe to events: ${result.error.message}`, {
             error: result.error,
           }),
         );

@@ -8,7 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TaskId, WorkerId } from '../../../src/core/domain';
-import { DelegateError, ErrorCode } from '../../../src/core/errors';
+import { BackbeatError, ErrorCode } from '../../../src/core/errors';
 import type { EventBus } from '../../../src/core/events/event-bus';
 import type { SystemResourcesUpdatedEvent, WorkerKilledEvent } from '../../../src/core/events/events';
 import type { Logger, ResourceMonitor, TaskQueue, WorkerPool } from '../../../src/core/interfaces';
@@ -113,7 +113,7 @@ describe('AutoscalingManager', () => {
     });
 
     it('should return error if any subscription fails', async () => {
-      const subscribeError = new DelegateError(ErrorCode.RESOURCE_LIMIT_EXCEEDED, 'Max subscriptions reached');
+      const subscribeError = new BackbeatError(ErrorCode.RESOURCE_LIMIT_EXCEEDED, 'Max subscriptions reached');
       vi.mocked(eventBus.subscribe).mockReturnValueOnce(ok('sub-1')).mockReturnValueOnce(err(subscribeError));
 
       const result = await manager.setup();
@@ -409,7 +409,7 @@ describe('AutoscalingManager', () => {
     it('should log error when canSpawnWorker returns an error Result', async () => {
       vi.mocked(queue.size).mockReturnValue(2);
       vi.mocked(workers.getWorkerCount).mockReturnValue(0);
-      const monitorError = new DelegateError(ErrorCode.RESOURCE_MONITORING_FAILED, 'Cannot read resources');
+      const monitorError = new BackbeatError(ErrorCode.RESOURCE_MONITORING_FAILED, 'Cannot read resources');
       vi.mocked(monitor.canSpawnWorker).mockResolvedValue(err(monitorError));
 
       await triggerCheckScaling();
@@ -449,7 +449,7 @@ describe('AutoscalingManager', () => {
       vi.mocked(queue.size).mockReturnValue(2);
       vi.mocked(workers.getWorkerCount).mockReturnValue(0);
       vi.mocked(monitor.canSpawnWorker).mockResolvedValue(ok(true));
-      vi.mocked(queue.peek).mockReturnValue(err(new DelegateError(ErrorCode.QUEUE_EMPTY, 'Queue error')));
+      vi.mocked(queue.peek).mockReturnValue(err(new BackbeatError(ErrorCode.QUEUE_EMPTY, 'Queue error')));
 
       await triggerCheckScaling();
 
@@ -506,7 +506,7 @@ describe('AutoscalingManager', () => {
 
     it('should omit resource info when getResources fails', async () => {
       vi.mocked(monitor.getResources).mockResolvedValue(
-        err(new DelegateError(ErrorCode.RESOURCE_MONITORING_FAILED, 'Cannot read resources')),
+        err(new BackbeatError(ErrorCode.RESOURCE_MONITORING_FAILED, 'Cannot read resources')),
       );
 
       const status = await manager.getStatus();
@@ -516,7 +516,7 @@ describe('AutoscalingManager', () => {
 
     it('should set canSpawn to false when canSpawnWorker returns an error', async () => {
       vi.mocked(monitor.canSpawnWorker).mockResolvedValue(
-        err(new DelegateError(ErrorCode.RESOURCE_MONITORING_FAILED, 'Check failed')),
+        err(new BackbeatError(ErrorCode.RESOURCE_MONITORING_FAILED, 'Check failed')),
       );
 
       const status = await manager.getStatus();

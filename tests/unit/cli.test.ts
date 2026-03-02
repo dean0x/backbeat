@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadConfiguration } from '../../src/core/configuration';
 import type { Container } from '../../src/core/container';
 import type {
-  DelegateRequest,
+  TaskRequest,
   ResumeTaskRequest,
   Schedule,
   ScheduleCreateRequest,
@@ -27,7 +27,7 @@ import {
   ScheduleType,
   TaskId,
 } from '../../src/core/domain';
-import { DelegateError, ErrorCode, taskNotFound } from '../../src/core/errors';
+import { BackbeatError, ErrorCode, taskNotFound } from '../../src/core/errors';
 import { InMemoryEventBus } from '../../src/core/events/event-bus';
 import type {
   OutputCapturedEvent,
@@ -51,7 +51,7 @@ const VALID_WORKING_DIR = '/workspace/test';
  * Simulates TaskManager behavior without full bootstrap overhead
  */
 class MockTaskManager implements TaskManager {
-  delegateCalls: DelegateRequest[] = [];
+  delegateCalls: TaskRequest[] = [];
   statusCalls: (string | undefined)[] = [];
   logsCalls: Array<{ taskId: string; tail?: number }> = [];
   cancelCalls: Array<{ taskId: string; reason?: string }> = [];
@@ -59,7 +59,7 @@ class MockTaskManager implements TaskManager {
 
   private taskStorage = new Map<string, Task>();
 
-  async delegate(request: DelegateRequest) {
+  async delegate(request: TaskRequest) {
     this.delegateCalls.push(request);
     const task = new TaskFactory()
       .withPrompt(request.prompt)
@@ -123,7 +123,7 @@ class MockTaskManager implements TaskManager {
     }
     if (oldTask.status !== 'completed' && oldTask.status !== 'failed' && oldTask.status !== 'cancelled') {
       return err(
-        new DelegateError(
+        new BackbeatError(
           ErrorCode.INVALID_OPERATION,
           `Task ${request.taskId} cannot be resumed in state ${oldTask.status}`,
         ),
@@ -196,7 +196,7 @@ class MockScheduleService implements ScheduleService {
     this.getCalls.push({ scheduleId, includeHistory, historyLimit });
     const schedule = this.scheduleStorage.get(scheduleId);
     if (!schedule) {
-      return err(new DelegateError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
+      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
     }
     const history: ScheduleExecution[] | undefined = includeHistory ? [] : undefined;
     return ok({ schedule, history });
@@ -206,7 +206,7 @@ class MockScheduleService implements ScheduleService {
     this.cancelCalls.push({ scheduleId, reason });
     const schedule = this.scheduleStorage.get(scheduleId);
     if (!schedule) {
-      return err(new DelegateError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
+      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
     }
     return ok(undefined);
   }
@@ -215,7 +215,7 @@ class MockScheduleService implements ScheduleService {
     this.pauseCalls.push({ scheduleId });
     const schedule = this.scheduleStorage.get(scheduleId);
     if (!schedule) {
-      return err(new DelegateError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
+      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
     }
     return ok(undefined);
   }
@@ -224,7 +224,7 @@ class MockScheduleService implements ScheduleService {
     this.resumeCalls.push({ scheduleId });
     const schedule = this.scheduleStorage.get(scheduleId);
     if (!schedule) {
-      return err(new DelegateError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
+      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
     }
     return ok(undefined);
   }
@@ -258,7 +258,7 @@ class MockContainer implements Container {
   get<T>(key: string) {
     const value = this.services.get(key);
     if (!value) {
-      return err(new DelegateError(ErrorCode.DEPENDENCY_INJECTION_FAILED, `Service not found: ${key}`, { key }));
+      return err(new BackbeatError(ErrorCode.DEPENDENCY_INJECTION_FAILED, `Service not found: ${key}`, { key }));
     }
 
     // Handle singleton factories
@@ -1336,7 +1336,7 @@ describe('CLI - Task Completion Lifecycle', () => {
 
       await eventBus.emit<TaskFailedEvent>('TaskFailed', {
         taskId,
-        error: new DelegateError(ErrorCode.SYSTEM_ERROR, 'Process crashed'),
+        error: new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Process crashed'),
         exitCode: 137,
       });
 
@@ -1350,7 +1350,7 @@ describe('CLI - Task Completion Lifecycle', () => {
 
       await eventBus.emit<TaskFailedEvent>('TaskFailed', {
         taskId,
-        error: new DelegateError(ErrorCode.SYSTEM_ERROR, 'Unknown failure'),
+        error: new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Unknown failure'),
       });
 
       const exitCode = await promise;
@@ -1376,7 +1376,7 @@ describe('CLI - Task Completion Lifecycle', () => {
 
       await eventBus.emit<TaskTimeoutEvent>('TaskTimeout', {
         taskId,
-        error: new DelegateError(ErrorCode.TASK_TIMEOUT, 'Task exceeded timeout'),
+        error: new BackbeatError(ErrorCode.TASK_TIMEOUT, 'Task exceeded timeout'),
       });
 
       const exitCode = await promise;
@@ -1466,7 +1466,7 @@ describe('CLI - Task Completion Lifecycle', () => {
       });
       await eventBus.emit<TaskFailedEvent>('TaskFailed', {
         taskId,
-        error: new DelegateError(ErrorCode.SYSTEM_ERROR, 'late failure'),
+        error: new BackbeatError(ErrorCode.SYSTEM_ERROR, 'late failure'),
         exitCode: 1,
       });
 
@@ -1729,12 +1729,12 @@ interface DelegateOptions {
 
 function validateDelegateInput(prompt: string, options: DelegateOptions) {
   if (!prompt || prompt.trim().length === 0) {
-    return err(new DelegateError(ErrorCode.INVALID_INPUT, 'Prompt is required', { field: 'prompt' }));
+    return err(new BackbeatError(ErrorCode.INVALID_INPUT, 'Prompt is required', { field: 'prompt' }));
   }
 
   if (options.priority && !['P0', 'P1', 'P2'].includes(options.priority)) {
     return err(
-      new DelegateError(ErrorCode.INVALID_INPUT, 'Priority must be P0, P1, or P2', {
+      new BackbeatError(ErrorCode.INVALID_INPUT, 'Priority must be P0, P1, or P2', {
         field: 'priority',
         value: options.priority,
       }),
@@ -1744,17 +1744,17 @@ function validateDelegateInput(prompt: string, options: DelegateOptions) {
   if (options.workingDirectory) {
     const path = options.workingDirectory;
     if (!path.startsWith('/')) {
-      return err(new DelegateError(ErrorCode.INVALID_DIRECTORY, 'Working directory must be absolute path', { path }));
+      return err(new BackbeatError(ErrorCode.INVALID_DIRECTORY, 'Working directory must be absolute path', { path }));
     }
     if (path.includes('..')) {
-      return err(new DelegateError(ErrorCode.INVALID_DIRECTORY, 'Path traversal not allowed', { path }));
+      return err(new BackbeatError(ErrorCode.INVALID_DIRECTORY, 'Path traversal not allowed', { path }));
     }
   }
 
   if (options.timeout !== undefined) {
     if (typeof options.timeout !== 'number' || options.timeout <= 0 || !isFinite(options.timeout)) {
       return err(
-        new DelegateError(ErrorCode.INVALID_INPUT, 'Timeout must be positive number', {
+        new BackbeatError(ErrorCode.INVALID_INPUT, 'Timeout must be positive number', {
           field: 'timeout',
           value: options.timeout,
         }),
@@ -1766,7 +1766,7 @@ function validateDelegateInput(prompt: string, options: DelegateOptions) {
     const maxAllowed = 1024 * 1024 * 100; // 100MB
     if (options.maxOutputBuffer > maxAllowed) {
       return err(
-        new DelegateError(ErrorCode.INVALID_INPUT, `maxOutputBuffer exceeds limit of ${maxAllowed} bytes`, {
+        new BackbeatError(ErrorCode.INVALID_INPUT, `maxOutputBuffer exceeds limit of ${maxAllowed} bytes`, {
           field: 'maxOutputBuffer',
           value: options.maxOutputBuffer,
         }),
@@ -1819,13 +1819,13 @@ async function simulateRetryCommand(taskManager: MockTaskManager, taskId: string
 function validateScheduleCreateInput(prompt: string, options: { type?: string }) {
   if (!prompt || prompt.trim().length === 0) {
     return err(
-      new DelegateError(ErrorCode.INVALID_INPUT, 'Prompt is required for schedule creation', { field: 'prompt' }),
+      new BackbeatError(ErrorCode.INVALID_INPUT, 'Prompt is required for schedule creation', { field: 'prompt' }),
     );
   }
 
   if (!options.type || !['cron', 'one_time'].includes(options.type)) {
     return err(
-      new DelegateError(ErrorCode.INVALID_INPUT, '--type must be "cron" or "one_time"', {
+      new BackbeatError(ErrorCode.INVALID_INPUT, '--type must be "cron" or "one_time"', {
         field: 'type',
         value: options.type,
       }),
@@ -1878,7 +1878,7 @@ async function simulateScheduleCreate(
 
 function validatePipelineInput(steps: string[]) {
   if (steps.length === 0) {
-    return err(new DelegateError(ErrorCode.INVALID_INPUT, 'No pipeline steps found', { field: 'steps' }));
+    return err(new BackbeatError(ErrorCode.INVALID_INPUT, 'No pipeline steps found', { field: 'steps' }));
   }
   return ok(undefined);
 }

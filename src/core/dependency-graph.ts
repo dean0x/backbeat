@@ -6,7 +6,7 @@
  */
 
 import { TaskId } from './domain.js';
-import { DelegateError, ErrorCode } from './errors.js';
+import { BackbeatError, ErrorCode } from './errors.js';
 import { TaskDependency } from './interfaces.js';
 import { err, ok, Result } from './result.js';
 
@@ -51,7 +51,7 @@ export class DependencyGraph {
   private validateTaskId(taskId: TaskId, paramName: string): Result<void> {
     if (!taskId || (taskId as string).trim() === '') {
       return err(
-        new DelegateError(ErrorCode.INVALID_OPERATION, `Invalid ${paramName}: must be non-empty string`, { taskId }),
+        new BackbeatError(ErrorCode.INVALID_OPERATION, `Invalid ${paramName}: must be non-empty string`, { taskId }),
       );
     }
     return ok(undefined);
@@ -536,7 +536,7 @@ export class DependencyGraph {
 
     if (cycleCheck.value) {
       return err(
-        new DelegateError(ErrorCode.INVALID_OPERATION, 'Cannot perform topological sort: graph contains cycles'),
+        new BackbeatError(ErrorCode.INVALID_OPERATION, 'Cannot perform topological sort: graph contains cycles'),
       );
     }
 

@@ -89,24 +89,24 @@ export enum ErrorCode {
 }
 
 /**
- * Custom error class for Delegate
+ * Custom error class for Backbeat
  * Includes error code and optional context for debugging
  *
  * @example
- * return err(new DelegateError(
+ * return err(new BackbeatError(
  *   ErrorCode.INVALID_INPUT,
  *   'Path traversal detected',
  *   { path: inputPath, base: baseDir }
  * ));
  */
-export class DelegateError extends Error {
+export class BackbeatError extends Error {
   constructor(
     public readonly code: ErrorCode,
     message: string,
     public readonly context?: Record<string, unknown>,
   ) {
     super(message);
-    this.name = 'DelegateError';
+    this.name = 'BackbeatError';
   }
 
   toJSON() {
@@ -122,53 +122,53 @@ export class DelegateError extends Error {
 /**
  * Error factory functions
  */
-export const taskNotFound = (taskId: string): DelegateError =>
-  new DelegateError(ErrorCode.TASK_NOT_FOUND, `Task ${taskId} not found`, { taskId });
+export const taskNotFound = (taskId: string): BackbeatError =>
+  new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Task ${taskId} not found`, { taskId });
 
-export const taskAlreadyRunning = (taskId: string): DelegateError =>
-  new DelegateError(ErrorCode.TASK_ALREADY_RUNNING, `Task ${taskId} is already running`, { taskId });
+export const taskAlreadyRunning = (taskId: string): BackbeatError =>
+  new BackbeatError(ErrorCode.TASK_ALREADY_RUNNING, `Task ${taskId} is already running`, { taskId });
 
-export const taskTimeout = (taskId: string, timeoutMs: number): DelegateError =>
-  new DelegateError(ErrorCode.TASK_TIMEOUT, `Task ${taskId} timed out after ${timeoutMs}ms`, { taskId, timeoutMs });
+export const taskTimeout = (taskId: string, timeoutMs: number): BackbeatError =>
+  new BackbeatError(ErrorCode.TASK_TIMEOUT, `Task ${taskId} timed out after ${timeoutMs}ms`, { taskId, timeoutMs });
 
-export const insufficientResources = (cpuUsage: number, availableMemory: number): DelegateError =>
-  new DelegateError(
+export const insufficientResources = (cpuUsage: number, availableMemory: number): BackbeatError =>
+  new BackbeatError(
     ErrorCode.INSUFFICIENT_RESOURCES,
     `Insufficient resources: CPU ${cpuUsage}%, Memory ${availableMemory} bytes`,
     { cpuUsage, availableMemory },
   );
 
-export const processSpawnFailed = (reason: string): DelegateError =>
-  new DelegateError(ErrorCode.PROCESS_SPAWN_FAILED, `Failed to spawn process: ${reason}`, { reason });
+export const processSpawnFailed = (reason: string): BackbeatError =>
+  new BackbeatError(ErrorCode.PROCESS_SPAWN_FAILED, `Failed to spawn process: ${reason}`, { reason });
 
-export const invalidInput = (field: string, value: unknown): DelegateError =>
-  new DelegateError(ErrorCode.INVALID_INPUT, `Invalid input for field ${field}`, { field, value });
+export const invalidInput = (field: string, value: unknown): BackbeatError =>
+  new BackbeatError(ErrorCode.INVALID_INPUT, `Invalid input for field ${field}`, { field, value });
 
-export const invalidDirectory = (path: string): DelegateError =>
-  new DelegateError(ErrorCode.INVALID_DIRECTORY, `Invalid directory: ${path}`, { path });
+export const invalidDirectory = (path: string): BackbeatError =>
+  new BackbeatError(ErrorCode.INVALID_DIRECTORY, `Invalid directory: ${path}`, { path });
 
-export const systemError = (message: string, originalError?: Error): DelegateError =>
-  new DelegateError(ErrorCode.SYSTEM_ERROR, message, { originalError: originalError?.message });
+export const systemError = (message: string, originalError?: Error): BackbeatError =>
+  new BackbeatError(ErrorCode.SYSTEM_ERROR, message, { originalError: originalError?.message });
 
-export const resourceLimitExceeded = (resourceType: string, limit: number, current: number): DelegateError =>
-  new DelegateError(
+export const resourceLimitExceeded = (resourceType: string, limit: number, current: number): BackbeatError =>
+  new BackbeatError(
     ErrorCode.RESOURCE_LIMIT_EXCEEDED,
     `Resource limit exceeded for ${resourceType}: limit=${limit}, current=${current}`,
     { resourceType, limit, current },
   );
 
 /**
- * Type guard for DelegateError
+ * Type guard for BackbeatError
  */
-export const isDelegateError = (error: unknown): error is DelegateError => {
-  return error instanceof DelegateError;
+export const isBackbeatError = (error: unknown): error is BackbeatError => {
+  return error instanceof BackbeatError;
 };
 
 /**
- * Convert unknown errors to DelegateError
+ * Convert unknown errors to BackbeatError
  */
-export const toDelegateError = (error: unknown): DelegateError => {
-  if (isDelegateError(error)) {
+export const toBackbeatError = (error: unknown): BackbeatError => {
+  if (isBackbeatError(error)) {
     return error;
   }
 
@@ -208,9 +208,9 @@ export const toDelegateError = (error: unknown): DelegateError => {
 export const operationErrorHandler = (
   operation: string,
   context?: Record<string, unknown>,
-): ((error: unknown) => DelegateError) => {
-  return (error: unknown): DelegateError => {
+): ((error: unknown) => BackbeatError) => {
+  return (error: unknown): BackbeatError => {
     const message = error instanceof Error ? error.message : String(error);
-    return new DelegateError(ErrorCode.SYSTEM_ERROR, `Failed to ${operation}: ${message}`, context);
+    return new BackbeatError(ErrorCode.SYSTEM_ERROR, `Failed to ${operation}: ${message}`, context);
   };
 };

@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Task } from '../../../src/core/domain';
 import { TaskId, WorkerId } from '../../../src/core/domain';
-import { DelegateError, ErrorCode } from '../../../src/core/errors';
+import { BackbeatError, ErrorCode } from '../../../src/core/errors';
 import type { EventBus } from '../../../src/core/events/event-bus';
 import type { Logger, OutputCapture, ProcessSpawner, ResourceMonitor } from '../../../src/core/interfaces';
 import { err, ok } from '../../../src/core/result';
@@ -136,12 +136,12 @@ describe('EventDrivenWorkerPool', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.error).toBeInstanceOf(DelegateError);
-      expect((result.error as DelegateError).code).toBe(ErrorCode.INSUFFICIENT_RESOURCES);
+      expect(result.error).toBeInstanceOf(BackbeatError);
+      expect((result.error as BackbeatError).code).toBe(ErrorCode.INSUFFICIENT_RESOURCES);
     });
 
     it('should return error when canSpawnWorker returns err', async () => {
-      const monitorError = new DelegateError(ErrorCode.RESOURCE_MONITORING_FAILED, 'monitor broken');
+      const monitorError = new BackbeatError(ErrorCode.RESOURCE_MONITORING_FAILED, 'monitor broken');
       (monitor.canSpawnWorker as ReturnType<typeof vi.fn>).mockResolvedValue(err(monitorError));
       const task = buildTask();
 
@@ -200,7 +200,7 @@ describe('EventDrivenWorkerPool', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect((result.error as DelegateError).code).toBe(ErrorCode.WORKER_NOT_FOUND);
+      expect((result.error as BackbeatError).code).toBe(ErrorCode.WORKER_NOT_FOUND);
     });
 
     it('should kill process with SIGTERM', async () => {

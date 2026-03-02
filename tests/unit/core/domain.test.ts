@@ -3,7 +3,7 @@ import {
   canCancel,
   comparePriority,
   createTask,
-  type DelegateRequest,
+  type TaskRequest,
   isTerminalState,
   Priority,
   type SystemResources,
@@ -36,7 +36,7 @@ describe('Domain Models - REAL Behavior Tests', () => {
 
   describe('createTask', () => {
     it('should create task with minimum requirements', () => {
-      const request: DelegateRequest = {
+      const request: TaskRequest = {
         prompt: 'echo hello world',
       };
 
@@ -62,7 +62,7 @@ describe('Domain Models - REAL Behavior Tests', () => {
     });
 
     it('should create task with full configuration', () => {
-      const request: DelegateRequest = {
+      const request: TaskRequest = {
         prompt: 'complex task',
         priority: Priority.P0,
         workingDirectory: '/workspace',
