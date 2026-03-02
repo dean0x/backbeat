@@ -24,7 +24,7 @@ What actually happened instead.
 
 **Logs**
 If applicable, add logs from:
-- Delegate server output
+- Backbeat server output
 - Claude Code console
 - Task logs (via TaskLogs tool)
 
@@ -32,7 +32,7 @@ If applicable, add logs from:
  - OS: [e.g. macOS 14.0, Ubuntu 22.04]
  - Node.js version: [e.g. 20.10.0]
  - Claude Code version: [e.g. latest]
- - Delegate version: [e.g. 0.1.0]
+ - Backbeat version: [e.g. 0.5.0]
 
 **Additional context**
 Add any other context about the problem here.
