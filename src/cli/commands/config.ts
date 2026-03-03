@@ -67,7 +67,7 @@ export function configShow() {
 
 export function configSet(key: string | undefined, rawValue: string | undefined) {
   if (!key || rawValue === undefined) {
-    ui.error('Usage: delegate config set <key> <value>');
+    ui.error('Usage: beat config set <key> <value>');
     process.stderr.write(`Valid keys: ${Object.keys(ConfigurationSchema.shape).join(', ')}\n`);
     process.exit(1);
   }
@@ -93,7 +93,7 @@ export function configSet(key: string | undefined, rawValue: string | undefined)
 
 export function configReset(key: string | undefined) {
   if (!key) {
-    ui.error('Usage: delegate config reset <key>');
+    ui.error('Usage: beat config reset <key>');
     process.stderr.write(`Valid keys: ${Object.keys(ConfigurationSchema.shape).join(', ')}\n`);
     process.exit(1);
   }

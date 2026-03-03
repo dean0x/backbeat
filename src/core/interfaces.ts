@@ -5,7 +5,6 @@
 
 import { ChildProcess } from 'child_process';
 import {
-  DelegateRequest,
   ResumeTaskRequest,
   Schedule,
   ScheduleCreateRequest,
@@ -16,10 +15,11 @@ import {
   TaskCheckpoint,
   TaskId,
   TaskOutput,
+  TaskRequest,
   Worker,
   WorkerId,
 } from './domain.js';
-import { BaseEvent, DelegateEvent, EventHandler } from './events/events.js';
+import { BackbeatEvent, BaseEvent, EventHandler } from './events/events.js';
 import { Result } from './result.js';
 
 /**
@@ -380,7 +380,7 @@ export interface TaskEventEmitter {
  * Main task manager orchestrator
  */
 export interface TaskManager {
-  delegate(request: DelegateRequest): Promise<Result<Task>>;
+  delegate(request: TaskRequest): Promise<Result<Task>>;
   getStatus(taskId?: TaskId): Promise<Result<Task | readonly Task[]>>;
   getLogs(taskId: TaskId, tail?: number): Promise<Result<TaskOutput>>;
   cancel(taskId: TaskId, reason?: string): Promise<Result<void>>;

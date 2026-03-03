@@ -5,15 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Configuration } from '../../src/core/configuration.js';
-import {
-  createTask,
-  DelegateRequest,
-  isTerminalState,
-  Priority,
-  Task,
-  TaskId,
-  TaskStatus,
-} from '../../src/core/domain.js';
+import { createTask, isTerminalState, Priority, Task, TaskId, TaskRequest, TaskStatus } from '../../src/core/domain.js';
 import { ErrorCode } from '../../src/core/errors.js';
 import { InMemoryEventBus } from '../../src/core/events/event-bus.js';
 import { err, ok } from '../../src/core/result.js';
@@ -72,7 +64,7 @@ describe('Retry Functionality', () => {
   describe('Task Retry Tracking', () => {
     it('should add retry tracking fields to new retry tasks', async () => {
       // Create original task
-      const request: DelegateRequest = {
+      const request: TaskRequest = {
         prompt: 'original task',
         priority: Priority.P2,
       };
@@ -106,7 +98,7 @@ describe('Retry Functionality', () => {
 
     it('should track multiple retry attempts correctly', async () => {
       // Create original task
-      const request: DelegateRequest = {
+      const request: TaskRequest = {
         prompt: 'task to retry multiple times',
       };
 
@@ -143,7 +135,7 @@ describe('Retry Functionality', () => {
   describe('Retry Validation', () => {
     it('should only allow retry of terminal state tasks', async () => {
       // Create task
-      const request: DelegateRequest = {
+      const request: TaskRequest = {
         prompt: 'task to test retry validation',
       };
 
@@ -195,7 +187,7 @@ describe('Retry Functionality', () => {
   describe('Retry Task Creation', () => {
     it('should preserve all task configuration in retries', async () => {
       // Create task with full configuration
-      const request: DelegateRequest = {
+      const request: TaskRequest = {
         prompt: 'complex task with all options',
         priority: Priority.P0,
         workingDirectory: '/test/dir',
@@ -226,7 +218,7 @@ describe('Retry Functionality', () => {
     });
 
     it('should create a new task ID for retries', async () => {
-      const request: DelegateRequest = {
+      const request: TaskRequest = {
         prompt: 'test new ID generation',
       };
 
@@ -260,7 +252,7 @@ describe('Retry Functionality', () => {
       });
 
       // Create and fail a task
-      const request: DelegateRequest = {
+      const request: TaskRequest = {
         prompt: 'test retry event',
       };
 
@@ -294,7 +286,7 @@ describe('Retry Functionality', () => {
       });
 
       // Create original task
-      const request: DelegateRequest = {
+      const request: TaskRequest = {
         prompt: 'test retry processing',
       };
 
@@ -325,7 +317,7 @@ describe('Retry Functionality', () => {
     });
 
     it('should correctly create tasks with retry fields', () => {
-      const request: DelegateRequest = {
+      const request: TaskRequest = {
         prompt: 'test',
         parentTaskId: TaskId('parent-123'),
         retryCount: 2,

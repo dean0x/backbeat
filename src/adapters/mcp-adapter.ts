@@ -7,7 +7,6 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { z } from 'zod';
 import pkg from '../../package.json' with { type: 'json' };
 import {
-  DelegateRequest,
   Priority,
   ResumeTaskRequest,
   ScheduleCreateRequest,
@@ -16,6 +15,7 @@ import {
   ScheduleType,
   Task,
   TaskId,
+  TaskRequest,
 } from '../core/domain.js';
 import { Logger, ScheduleService, TaskManager } from '../core/interfaces.js';
 import { match } from '../core/result.js';
@@ -122,7 +122,7 @@ export class MCPAdapter {
   ) {
     this.server = new Server(
       {
-        name: 'delegate',
+        name: 'backbeat',
         version: pkg.version,
       },
       {
@@ -546,7 +546,7 @@ export class MCPAdapter {
     }
 
     // Create request with validated paths
-    const request: DelegateRequest = {
+    const request: TaskRequest = {
       prompt: data.prompt,
       priority: data.priority as Priority,
       workingDirectory: validatedWorkingDirectory,

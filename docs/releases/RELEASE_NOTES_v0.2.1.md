@@ -1,15 +1,15 @@
-# 🚀 Delegate v0.2.1 - Event-Driven Architecture & CLI Interface
+# 🚀 Backbeat v0.2.1 - Event-Driven Architecture & CLI Interface
 
 ## Major Features
 
 ### 🖥️ Direct CLI Interface
 No more MCP reconnections needed for testing! New commands:
 ```bash
-delegate delegate "analyze the codebase for security issues"
-delegate status                    # Check all tasks  
-delegate status <task-id>          # Check specific task
-delegate logs <task-id>            # Get task output
-delegate cancel <task-id> "reason" # Cancel with reason
+beat run "analyze the codebase for security issues"
+beat status                    # Check all tasks  
+beat status <task-id>          # Check specific task
+beat logs <task-id>            # Get task output
+beat cancel <task-id> "reason" # Cancel with reason
 ```
 
 ### 🏗️ Complete Event-Driven Architecture Overhaul
@@ -74,11 +74,11 @@ delegate cancel <task-id> "reason" # Cancel with reason
 
 ```bash
 # Global installation (recommended)
-npm install -g @dean0x/delegate@0.2.1
+npm install -g backbeat@0.2.1
 
 # Or from source
 git clone https://github.com/dean0x/delegate.git
-cd delegate
+cd backbeat
 npm install && npm run build
 ```
 

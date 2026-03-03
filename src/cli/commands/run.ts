@@ -4,7 +4,7 @@ import { homedir } from 'os';
 import path from 'path';
 import { bootstrap } from '../../bootstrap.js';
 import type { Container } from '../../core/container.js';
-import type { DelegateRequest } from '../../core/domain.js';
+import type { TaskRequest } from '../../core/domain.js';
 import { Priority, TaskId } from '../../core/domain.js';
 import type { EventBus } from '../../core/events/event-bus.js';
 import type {
@@ -89,17 +89,17 @@ export function waitForTaskCompletion(container: Container, taskId: string): Pro
  * with --foreground so it doesn't recurse back into detach mode.
  * The foreground polls the background's log file to extract and print the task ID, then exits.
  */
-export function handleDetachMode(delegateArgs: string[]): void {
+export function handleDetachMode(runArgs: string[]): void {
   // Validate that at least one non-flag word exists (the prompt)
-  const hasPrompt = delegateArgs.some((arg) => !arg.startsWith('-'));
+  const hasPrompt = runArgs.some((arg) => !arg.startsWith('-'));
   if (!hasPrompt) {
-    ui.error('Usage: delegate delegate "<prompt>" [options]');
+    ui.error('Usage: beat run "<prompt>" [options]');
     process.stderr.write('  A prompt is required to delegate a task\n');
     process.exit(1);
   }
 
   // Create log directory
-  const logDir = path.join(homedir(), '.delegate', 'detach-logs');
+  const logDir = path.join(homedir(), '.backbeat', 'detach-logs');
   try {
     mkdirSync(logDir, { recursive: true });
   } catch (error) {
@@ -120,7 +120,7 @@ export function handleDetachMode(delegateArgs: string[]): void {
   }
 
   // Re-spawn CLI with --foreground as a detached background process
-  const childArgs = [process.argv[1], 'delegate', '--foreground', ...delegateArgs];
+  const childArgs = [process.argv[1], 'run', '--foreground', ...runArgs];
   try {
     const child = spawn(process.argv[0], childArgs, {
       detached: true,
@@ -162,8 +162,8 @@ export function handleDetachMode(delegateArgs: string[]): void {
           clearInterval(pollInterval);
           const taskId = match[1];
           s.stop(`Task delegated: ${taskId}`);
-          ui.info(`Check status: delegate status ${taskId}`);
-          ui.info(`View logs:    delegate logs ${taskId}`);
+          ui.info(`Check status: beat status ${taskId}`);
+          ui.info(`View logs:    beat logs ${taskId}`);
           process.exit(0);
         }
 
@@ -197,7 +197,7 @@ export function handleDetachMode(delegateArgs: string[]): void {
   }
 }
 
-export async function delegateTask(
+export async function runTask(
   prompt: string,
   options?: {
     priority?: 'P0' | 'P1' | 'P2';
@@ -249,7 +249,7 @@ export async function delegateTask(
       if (params.length > 0) ui.info(params.join(' | '));
     }
 
-    const request: DelegateRequest = {
+    const request: TaskRequest = {
       prompt,
       ...options,
       priority: options?.priority ? Priority[options.priority as keyof typeof Priority] : undefined,

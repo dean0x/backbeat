@@ -2,12 +2,12 @@
  * Event spy utility for testing event flow
  */
 
-import { DelegateEvent, EventHandler } from '../../src/core/events/events';
+import { BackbeatEvent, EventHandler } from '../../src/core/events/events';
 import { EventBus } from '../../src/core/interfaces';
 import { ok, Result } from '../../src/core/result';
 
 export interface EventRecord {
-  event: DelegateEvent;
+  event: BackbeatEvent;
   timestamp: number;
 }
 
@@ -20,7 +20,7 @@ export class EventSpy {
    * Capture all events from an EventBus
    */
   captureAll(eventBus: EventBus): void {
-    this.globalHandler = (event: DelegateEvent) => {
+    this.globalHandler = (event: BackbeatEvent) => {
       this.events.push({
         event,
         timestamp: Date.now(),
@@ -34,7 +34,7 @@ export class EventSpy {
    * Capture specific event types
    */
   capture(eventBus: EventBus, eventType: string): void {
-    const handler: EventHandler = (event: DelegateEvent) => {
+    const handler: EventHandler = (event: BackbeatEvent) => {
       this.events.push({
         event,
         timestamp: Date.now(),
@@ -46,13 +46,13 @@ export class EventSpy {
     existing.push(handler);
     this.handlers.set(eventType, existing);
 
-    eventBus.subscribe(eventType as DelegateEvent['type'], handler);
+    eventBus.subscribe(eventType as BackbeatEvent['type'], handler);
   }
 
   /**
    * Get all captured events
    */
-  getEvents(type?: string): DelegateEvent[] {
+  getEvents(type?: string): BackbeatEvent[] {
     if (!type) {
       return this.events.map((r) => r.event);
     }
@@ -75,8 +75,8 @@ export class EventSpy {
   async waitForEvent(
     type: string,
     timeout: number = 5000,
-    predicate?: (event: DelegateEvent) => boolean,
-  ): Promise<DelegateEvent | null> {
+    predicate?: (event: BackbeatEvent) => boolean,
+  ): Promise<BackbeatEvent | null> {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {
@@ -96,7 +96,7 @@ export class EventSpy {
   /**
    * Wait for multiple events of a type
    */
-  async waitForEvents(type: string, count: number, timeout: number = 5000): Promise<DelegateEvent[]> {
+  async waitForEvents(type: string, count: number, timeout: number = 5000): Promise<BackbeatEvent[]> {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {
@@ -201,7 +201,7 @@ export class EventSpy {
   /**
    * Get event payload
    */
-  getEventPayload<T extends DelegateEvent>(type: string, index: number = 0): T | null {
+  getEventPayload<T extends BackbeatEvent>(type: string, index: number = 0): T | null {
     const events = this.getEvents(type);
     return (events[index] as T) || null;
   }

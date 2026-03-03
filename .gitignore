@@ -19,14 +19,14 @@ logs/
 Thumbs.db
 
 # Config files with local paths
-config/delegate-config.json
+config/backbeat-config.json
 config/mcp-config-snippet.json
 config/mcp-config-ready.json
 
 # Runtime directories
 task-outputs/
 data/
-.delegate-patches/
+.backbeat-patches/
 
 # Package files
 *.tgz
@@ -60,7 +60,7 @@ launch/
 .claude/
 .mcp.json
 output/
-.delegate/
+.backbeat/
 
 # Local memory/session files
 .memory/

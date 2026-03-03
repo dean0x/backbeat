@@ -6,7 +6,7 @@
 import { validateConfiguration } from './core/config-validator.js';
 import { Configuration, loadConfiguration } from './core/configuration.js';
 import { Container } from './core/container.js';
-import { DelegateError, ErrorCode } from './core/errors.js';
+import { BackbeatError, ErrorCode } from './core/errors.js';
 import { EventBus, InMemoryEventBus } from './core/events/event-bus.js';
 import {
   CheckpointRepository,
@@ -106,7 +106,7 @@ const getFromContainerSafe = <T>(container: Container, key: string): Result<T> =
   const result = container.get(key);
   if (!result.ok) {
     return err(
-      new DelegateError(ErrorCode.DEPENDENCY_INJECTION_FAILED, `Failed to get ${key} from container`, {
+      new BackbeatError(ErrorCode.DEPENDENCY_INJECTION_FAILED, `Failed to get ${key} from container`, {
         key,
         error: result.error.message,
       }),
@@ -140,7 +140,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
     if (process.env.NODE_ENV === 'production') {
       return new StructuredLogger({}, logLevel);
     } else {
-      return new ConsoleLogger('[Delegate]', true, logLevel);
+      return new ConsoleLogger('[Backbeat]', true, logLevel);
     }
   });
 
@@ -184,7 +184,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
   const loggerResult = container.get<Logger>('logger');
   if (!loggerResult.ok) {
     return err(
-      new DelegateError(ErrorCode.DEPENDENCY_INJECTION_FAILED, 'Failed to create logger', {
+      new BackbeatError(ErrorCode.DEPENDENCY_INJECTION_FAILED, 'Failed to create logger', {
         error: loggerResult.error.message,
       }),
     );
@@ -192,7 +192,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
   const logger = loggerResult.value;
 
   // All logs go to stderr to keep stdout clean for MCP protocol
-  logger.info('Bootstrapping Delegate', { config });
+  logger.info('Bootstrapping Backbeat', { config });
 
   // Register database with structured logging
   container.registerSingleton('database', () => {

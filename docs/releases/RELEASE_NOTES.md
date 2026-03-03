@@ -1,4 +1,4 @@
-# 🚀 Delegate v0.4.0 - Latest Release
+# 🚀 Backbeat v0.4.0 - Latest Release
 
 See [RELEASE_NOTES_v0.4.0.md](./RELEASE_NOTES_v0.4.0.md) for the latest release notes.
 
@@ -9,11 +9,11 @@ See [RELEASE_NOTES_v0.4.0.md](./RELEASE_NOTES_v0.4.0.md) for the latest release 
 
 ---
 
-# 🚀 Delegate v0.1.0 - Initial Release
+# 🚀 Backbeat v0.1.0 - Initial Release
 
-## Introducing Delegate: Your MCP Sidekick for Claude Code
+## Introducing Backbeat: Your MCP Sidekick for Claude Code
 
-Delegate is an MCP (Model Context Protocol) server that enables Claude Code to delegate tasks to background Claude Code instances, allowing for true parallel task execution without context switching.
+Backbeat is an MCP (Model Context Protocol) server that enables Claude Code to delegate tasks to background Claude Code instances, allowing for true parallel task execution without context switching.
 
 ## ✨ Features
 
@@ -33,7 +33,7 @@ Delegate is an MCP (Model Context Protocol) server that enables Claude Code to d
 ```bash
 # Clone the repository
 git clone https://github.com/dean0x/delegate.git
-cd delegate
+cd backbeat
 
 # Install and build
 npm install
@@ -73,9 +73,9 @@ Add to `~/.config/claude/mcp_servers.json`:
 ```json
 {
   "mcpServers": {
-    "delegate": {
+    "backbeat": {
       "command": "node",
-      "args": ["/path/to/delegate/dist/index.js"],
+      "args": ["/path/to/backbeat/dist/index.js"],
       "env": {}
     }
   }
@@ -132,7 +132,7 @@ MIT License - see [LICENSE](./LICENSE) file for details
 
 ## 🎉 Get Started
 
-1. Install Delegate
+1. Install Backbeat
 2. Configure MCP
 3. Start delegating tasks!
 

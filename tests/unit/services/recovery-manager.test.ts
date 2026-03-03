@@ -12,7 +12,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Task } from '../../../src/core/domain';
 import { TaskId, TaskStatus } from '../../../src/core/domain';
-import { DelegateError, ErrorCode } from '../../../src/core/errors';
+import { BackbeatError, ErrorCode } from '../../../src/core/errors';
 import type { EventBus } from '../../../src/core/events/event-bus';
 import type { Logger, TaskQueue, TaskRepository } from '../../../src/core/interfaces';
 import { err, ok } from '../../../src/core/result';
@@ -214,7 +214,7 @@ describe('RecoveryManager', () => {
       const task2 = buildQueuedTask('succeed-enqueue');
       setupFindByStatus([task1, task2], []);
 
-      const enqueueError = new DelegateError(ErrorCode.QUEUE_FULL, 'Queue is full');
+      const enqueueError = new BackbeatError(ErrorCode.QUEUE_FULL, 'Queue is full');
       queue.enqueue.mockReturnValueOnce(err(enqueueError)).mockReturnValueOnce(ok(undefined));
 
       const result = await manager.recover();
@@ -340,7 +340,7 @@ describe('RecoveryManager', () => {
     it('should log error when update fails for stale task', async () => {
       const staleTask = buildStaleRunningTask('stale-update-fail');
       setupFindByStatus([], [staleTask]);
-      const updateError = new DelegateError(ErrorCode.SYSTEM_ERROR, 'DB write failed');
+      const updateError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'DB write failed');
       repo.update.mockResolvedValue(err(updateError));
 
       await manager.recover();
@@ -392,7 +392,7 @@ describe('RecoveryManager', () => {
     it('should log enqueue failure for recent running task but continue', async () => {
       const recentTask = buildRecentRunningTask('recent-enqueue-fail');
       setupFindByStatus([], [recentTask]);
-      const enqueueError = new DelegateError(ErrorCode.QUEUE_FULL, 'Queue full');
+      const enqueueError = new BackbeatError(ErrorCode.QUEUE_FULL, 'Queue full');
       queue.enqueue.mockReturnValue(err(enqueueError));
 
       const result = await manager.recover();
@@ -406,7 +406,7 @@ describe('RecoveryManager', () => {
 
   describe('Error propagation', () => {
     it('should return error when findByStatus for QUEUED tasks fails', async () => {
-      const findError = new DelegateError(ErrorCode.SYSTEM_ERROR, 'DB read failed');
+      const findError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'DB read failed');
       repo.findByStatus.mockResolvedValueOnce(err(findError));
 
       const result = await manager.recover();
@@ -418,7 +418,7 @@ describe('RecoveryManager', () => {
     });
 
     it('should return error when findByStatus for RUNNING tasks fails', async () => {
-      const findError = new DelegateError(ErrorCode.SYSTEM_ERROR, 'DB read failed');
+      const findError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'DB read failed');
       repo.findByStatus
         .mockResolvedValueOnce(ok([])) // QUEUED succeeds
         .mockResolvedValueOnce(err(findError)); // RUNNING fails
@@ -432,7 +432,7 @@ describe('RecoveryManager', () => {
     });
 
     it('should log error when RecoveryStarted emit fails but continue recovery', async () => {
-      const emitError = new DelegateError(ErrorCode.SYSTEM_ERROR, 'Event bus error');
+      const emitError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Event bus error');
       eventBus.emit
         .mockResolvedValueOnce(err(emitError)) // RecoveryStarted fails
         .mockResolvedValue(ok(undefined)); // All subsequent emits succeed
@@ -447,7 +447,7 @@ describe('RecoveryManager', () => {
 
     it('should log error when RecoveryCompleted emit fails', async () => {
       setupFindByStatus([], []);
-      const emitError = new DelegateError(ErrorCode.SYSTEM_ERROR, 'Event bus error');
+      const emitError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Event bus error');
       // RecoveryStarted succeeds, RecoveryCompleted fails
       eventBus.emit
         .mockResolvedValueOnce(ok(undefined)) // RecoveryStarted
@@ -530,7 +530,7 @@ describe('RecoveryManager', () => {
     it('should log TaskQueued event emit failure but still count task as recovered', async () => {
       const task = buildQueuedTask('event-fail');
       setupFindByStatus([task], []);
-      const emitError = new DelegateError(ErrorCode.SYSTEM_ERROR, 'Event bus error');
+      const emitError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Event bus error');
 
       // RecoveryStarted succeeds, TaskQueued fails, RecoveryCompleted succeeds
       eventBus.emit

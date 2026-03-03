@@ -8,15 +8,15 @@
 import SQLite from 'better-sqlite3';
 import { z } from 'zod';
 import {
-  DelegateRequest,
   MissedRunPolicy,
   Schedule,
   ScheduleId,
   ScheduleStatus,
   ScheduleType,
   TaskId,
+  TaskRequest,
 } from '../core/domain.js';
-import { DelegateError, ErrorCode, operationErrorHandler } from '../core/errors.js';
+import { BackbeatError, ErrorCode, operationErrorHandler } from '../core/errors.js';
 import { ScheduleExecution, ScheduleRepository } from '../core/interfaces.js';
 import { err, ok, Result, tryCatchAsync } from '../core/result.js';
 import { Database } from './database.js';
@@ -27,7 +27,7 @@ import { Database } from './database.js';
  */
 const ScheduleRowSchema = z.object({
   id: z.string().min(1),
-  task_template: z.string(), // JSON serialized DelegateRequest
+  task_template: z.string(), // JSON serialized TaskRequest
   schedule_type: z.enum(['cron', 'one_time']),
   cron_expression: z.string().nullable(),
   scheduled_at: z.number().nullable(),
@@ -63,7 +63,7 @@ const ScheduleExecutionRowSchema = z.object({
  * Pattern: Parse, don't validate - ensures type safety at system boundary
  * Hoisted to module level to avoid recreation on every rowToSchedule() call
  */
-const DelegateRequestSchema = z.object({
+const TaskRequestSchema = z.object({
   prompt: z.string().min(1),
   priority: z.enum(['P0', 'P1', 'P2']).optional(),
   workingDirectory: z.string().optional(),
@@ -263,7 +263,7 @@ export class SQLiteScheduleRepository implements ScheduleRepository {
     }
 
     if (!existingResult.value) {
-      return err(new DelegateError(ErrorCode.TASK_NOT_FOUND, `Schedule ${id} not found`));
+      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${id} not found`));
     }
 
     // Merge updates with existing schedule
@@ -459,10 +459,10 @@ export class SQLiteScheduleRepository implements ScheduleRepository {
     const data = ScheduleRowSchema.parse(row);
 
     // Parse and validate taskTemplate JSON at system boundary
-    let taskTemplate: DelegateRequest;
+    let taskTemplate: TaskRequest;
     try {
       const parsed = JSON.parse(data.task_template);
-      taskTemplate = DelegateRequestSchema.parse(parsed) as DelegateRequest;
+      taskTemplate = TaskRequestSchema.parse(parsed) as TaskRequest;
     } catch (e) {
       throw new Error(`Invalid task_template JSON for schedule ${data.id}: ${e}`);
     }

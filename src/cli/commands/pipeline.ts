@@ -4,8 +4,8 @@ import * as ui from '../ui.js';
 
 export async function handlePipelineCommand(pipelineArgs: string[]) {
   if (pipelineArgs.length === 0) {
-    ui.error('Usage: delegate pipeline <prompt> [<prompt>]...');
-    process.stderr.write('Example: delegate pipeline "setup db" "run migrations" "seed data"\n');
+    ui.error('Usage: beat pipeline <prompt> [<prompt>]...');
+    process.stderr.write('Example: beat pipeline "setup db" "run migrations" "seed data"\n');
     process.exit(1);
   }
 

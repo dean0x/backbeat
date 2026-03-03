@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea for Delegate
+about: Suggest an idea for Backbeat
 title: '[FEATURE] '
 labels: enhancement
 assignees: ''

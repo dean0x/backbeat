@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { type DelegateRequest, Priority, type Task, TaskId, TaskStatus } from '../../src/core/domain';
+import { Priority, type Task, TaskId, type TaskRequest, TaskStatus } from '../../src/core/domain';
 
 export const createTestTask = (overrides?: Partial<Task>): Task => ({
   id: overrides?.id || TaskId(`test-task-${randomUUID()}`),
@@ -14,7 +14,7 @@ export const createTestTask = (overrides?: Partial<Task>): Task => ({
   ...overrides,
 });
 
-export const createTestTaskSpec = (overrides?: Partial<DelegateRequest>): DelegateRequest => ({
+export const createTestTaskSpec = (overrides?: Partial<TaskRequest>): TaskRequest => ({
   prompt: 'Test task specification',
   priority: Priority.P1,
   workingDirectory: '/workspace',

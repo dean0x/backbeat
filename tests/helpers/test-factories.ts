@@ -3,7 +3,7 @@
  */
 
 import { expect, vi } from 'vitest';
-import type { DelegateRequest, Task } from '../../src/core/domain';
+import type { Task, TaskRequest } from '../../src/core/domain';
 import { createTask, Priority, TaskId, TaskStatus } from '../../src/core/domain';
 import type { EventBus } from '../../src/core/events/event-bus';
 import type {
@@ -63,8 +63,8 @@ export const TEST_CONSTANTS = {
 
 // Task Factory
 export const TaskFactory = {
-  basic: (overrides: Partial<DelegateRequest> = {}): Task => {
-    const request: DelegateRequest = {
+  basic: (overrides: Partial<TaskRequest> = {}): Task => {
+    const request: TaskRequest = {
       prompt: 'test task',
       priority: Priority.P2,
       ...overrides,

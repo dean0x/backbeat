@@ -3,7 +3,7 @@
  * Responds to system events and emits scaling decisions
  */
 
-import { DelegateError, ErrorCode } from '../core/errors.js';
+import { BackbeatError, ErrorCode } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
 import { SystemResourcesUpdatedEvent, WorkerKilledEvent } from '../core/events/events.js';
 import { BaseEventHandler } from '../core/events/handlers.js';

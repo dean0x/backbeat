@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DelegateError, ErrorCode } from '../../../../src/core/errors.js';
+import { BackbeatError, ErrorCode } from '../../../../src/core/errors.js';
 import { InMemoryEventBus } from '../../../../src/core/events/event-bus.js';
 import { Logger } from '../../../../src/core/interfaces.js';
 import { TEST_COUNTS, TIMEOUTS } from '../../../constants.js';
@@ -48,7 +48,7 @@ describe('EventBus Request-Response Pattern', () => {
       // Set up handler that responds with error
       eventBus.subscribe('TestQuery', async (event: Record<string, unknown>) => {
         if (event.__correlationId) {
-          eventBus.respondError(event.__correlationId, new DelegateError(ErrorCode.SYSTEM_ERROR, 'Test error'));
+          eventBus.respondError(event.__correlationId, new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Test error'));
         }
       });
 
@@ -295,7 +295,7 @@ describe('EventBus Request-Response Pattern', () => {
       }
     });
 
-    it('should convert non-Error throws to DelegateError', async () => {
+    it('should convert non-Error throws to BackbeatError', async () => {
       eventBus.subscribe('TestQuery', async () => {
         throw 'string error';
       });
@@ -304,7 +304,7 @@ describe('EventBus Request-Response Pattern', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error).toBeInstanceOf(DelegateError);
+        expect(result.error).toBeInstanceOf(BackbeatError);
         expect(result.error.message).toContain('string error');
       }
     });

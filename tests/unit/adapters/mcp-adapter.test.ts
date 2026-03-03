@@ -13,8 +13,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MCPAdapter } from '../../../src/adapters/mcp-adapter';
-import type { DelegateRequest, Task } from '../../../src/core/domain';
-import { DelegateError, ErrorCode, taskNotFound } from '../../../src/core/errors';
+import type { Task, TaskRequest } from '../../../src/core/domain';
+import { BackbeatError, ErrorCode, taskNotFound } from '../../../src/core/errors';
 import type { EventBus } from '../../../src/core/events/event-bus';
 import type { Logger, ScheduleRepository, TaskManager } from '../../../src/core/interfaces';
 import { err, ok } from '../../../src/core/result';
@@ -28,7 +28,7 @@ const VALID_TASK_ID = 'task-abc123';
  * Mock TaskManager for MCP adapter testing
  */
 class MockTaskManager implements TaskManager {
-  delegateCalls: DelegateRequest[] = [];
+  delegateCalls: TaskRequest[] = [];
   statusCalls: (string | undefined)[] = [];
   logsCalls: Array<{ taskId: string; tail?: number }> = [];
   cancelCalls: Array<{ taskId: string; reason?: string }> = [];
@@ -38,11 +38,11 @@ class MockTaskManager implements TaskManager {
   private shouldFailDelegate = false;
   private shouldFailStatus = false;
 
-  async delegate(request: DelegateRequest) {
+  async delegate(request: TaskRequest) {
     this.delegateCalls.push(request);
 
     if (this.shouldFailDelegate) {
-      return err(new DelegateError(ErrorCode.SYSTEM_ERROR, 'Failed to delegate task', {}));
+      return err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Failed to delegate task', {}));
     }
 
     const task = new TaskFactory()
@@ -57,7 +57,7 @@ class MockTaskManager implements TaskManager {
     this.statusCalls.push(taskId);
 
     if (this.shouldFailStatus) {
-      return err(new DelegateError(ErrorCode.SYSTEM_ERROR, 'Failed to get status', {}));
+      return err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Failed to get status', {}));
     }
 
     if (taskId) {
@@ -209,7 +209,7 @@ describe('MCPAdapter - Protocol Compliance', () => {
 
       expect(server).toBeTruthy();
       expect(typeof server).toBe('object');
-      // Server should be initialized with delegate name and package version
+      // Server should be initialized with backbeat name and package version
     });
 
     it('should declare tools capability in MCP protocol', () => {
@@ -650,7 +650,7 @@ function errorToMessage(error: unknown): string {
 async function simulateDelegateTask(
   _adapter: MCPAdapter,
   taskManager: MockTaskManager,
-  args: DelegateRequest,
+  args: TaskRequest,
 ): Promise<MCPToolResponse> {
   // Simulate MCP tool call by directly calling the handler
   // In real MCP, this would go through the protocol layer

@@ -12,12 +12,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadConfiguration } from '../../src/core/configuration';
 import type { Container } from '../../src/core/container';
 import type {
-  DelegateRequest,
   ResumeTaskRequest,
   Schedule,
   ScheduleCreateRequest,
   ScheduleExecution,
   Task,
+  TaskRequest,
 } from '../../src/core/domain';
 import {
   createSchedule,
@@ -27,7 +27,7 @@ import {
   ScheduleType,
   TaskId,
 } from '../../src/core/domain';
-import { DelegateError, ErrorCode, taskNotFound } from '../../src/core/errors';
+import { BackbeatError, ErrorCode, taskNotFound } from '../../src/core/errors';
 import { InMemoryEventBus } from '../../src/core/events/event-bus';
 import type {
   OutputCapturedEvent,
@@ -51,7 +51,7 @@ const VALID_WORKING_DIR = '/workspace/test';
  * Simulates TaskManager behavior without full bootstrap overhead
  */
 class MockTaskManager implements TaskManager {
-  delegateCalls: DelegateRequest[] = [];
+  delegateCalls: TaskRequest[] = [];
   statusCalls: (string | undefined)[] = [];
   logsCalls: Array<{ taskId: string; tail?: number }> = [];
   cancelCalls: Array<{ taskId: string; reason?: string }> = [];
@@ -59,7 +59,7 @@ class MockTaskManager implements TaskManager {
 
   private taskStorage = new Map<string, Task>();
 
-  async delegate(request: DelegateRequest) {
+  async delegate(request: TaskRequest) {
     this.delegateCalls.push(request);
     const task = new TaskFactory()
       .withPrompt(request.prompt)
@@ -123,7 +123,7 @@ class MockTaskManager implements TaskManager {
     }
     if (oldTask.status !== 'completed' && oldTask.status !== 'failed' && oldTask.status !== 'cancelled') {
       return err(
-        new DelegateError(
+        new BackbeatError(
           ErrorCode.INVALID_OPERATION,
           `Task ${request.taskId} cannot be resumed in state ${oldTask.status}`,
         ),
@@ -196,7 +196,7 @@ class MockScheduleService implements ScheduleService {
     this.getCalls.push({ scheduleId, includeHistory, historyLimit });
     const schedule = this.scheduleStorage.get(scheduleId);
     if (!schedule) {
-      return err(new DelegateError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
+      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
     }
     const history: ScheduleExecution[] | undefined = includeHistory ? [] : undefined;
     return ok({ schedule, history });
@@ -206,7 +206,7 @@ class MockScheduleService implements ScheduleService {
     this.cancelCalls.push({ scheduleId, reason });
     const schedule = this.scheduleStorage.get(scheduleId);
     if (!schedule) {
-      return err(new DelegateError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
+      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
     }
     return ok(undefined);
   }
@@ -215,7 +215,7 @@ class MockScheduleService implements ScheduleService {
     this.pauseCalls.push({ scheduleId });
     const schedule = this.scheduleStorage.get(scheduleId);
     if (!schedule) {
-      return err(new DelegateError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
+      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
     }
     return ok(undefined);
   }
@@ -224,7 +224,7 @@ class MockScheduleService implements ScheduleService {
     this.resumeCalls.push({ scheduleId });
     const schedule = this.scheduleStorage.get(scheduleId);
     if (!schedule) {
-      return err(new DelegateError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
+      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
     }
     return ok(undefined);
   }
@@ -258,7 +258,7 @@ class MockContainer implements Container {
   get<T>(key: string) {
     const value = this.services.get(key);
     if (!value) {
-      return err(new DelegateError(ErrorCode.DEPENDENCY_INJECTION_FAILED, `Service not found: ${key}`, { key }));
+      return err(new BackbeatError(ErrorCode.DEPENDENCY_INJECTION_FAILED, `Service not found: ${key}`, { key }));
     }
 
     // Handle singleton factories
@@ -311,9 +311,9 @@ describe('CLI - Command Parsing and Validation', () => {
 
       const helpText = getHelpText();
 
-      expect(helpText).toContain('Delegate');
+      expect(helpText).toContain('Backbeat');
       expect(helpText).toContain('mcp start');
-      expect(helpText).toContain('delegate');
+      expect(helpText).toContain('run');
       expect(helpText).toContain('status');
       expect(helpText).toContain('logs');
       expect(helpText).toContain('cancel');
@@ -323,7 +323,7 @@ describe('CLI - Command Parsing and Validation', () => {
       const helpText = getHelpText();
 
       expect(helpText).toContain('Examples:');
-      expect(helpText).toContain('delegate "analyze');
+      expect(helpText).toContain('beat run "analyze');
       expect(helpText).toContain('--priority P0');
       expect(helpText).toContain('status abc123');
     });
@@ -342,7 +342,7 @@ describe('CLI - Command Parsing and Validation', () => {
       const configText = getConfigText();
 
       expect(configText).toContain('mcpServers');
-      expect(configText).toContain('delegate');
+      expect(configText).toContain('backbeat');
       expect(configText).toContain('npx');
       expect(configText).toContain('mcp');
       expect(configText).toContain('start');
@@ -361,13 +361,13 @@ describe('CLI - Command Parsing and Validation', () => {
 
       expect(configText).toContain('global installation');
       expect(configText).toContain('local development');
-      expect(configText).toContain('/path/to/delegate');
+      expect(configText).toContain('/path/to/backbeat');
     });
   });
 
-  describe('Delegate Command - Input Validation', () => {
+  describe('Run Command - Input Validation', () => {
     it('should reject empty prompt with validation error', () => {
-      const result = validateDelegateInput('', {});
+      const result = validateRunInput('', {});
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -377,8 +377,8 @@ describe('CLI - Command Parsing and Validation', () => {
     });
 
     it('should reject invalid priority values', () => {
-      const result = validateDelegateInput(VALID_PROMPT, {
-        priority: 'P5' as DelegateOptions['priority'],
+      const result = validateRunInput(VALID_PROMPT, {
+        priority: 'P5' as RunOptions['priority'],
       });
 
       expect(result.ok).toBe(false);
@@ -392,7 +392,7 @@ describe('CLI - Command Parsing and Validation', () => {
       const priorities = ['P0', 'P1', 'P2'] as const;
 
       for (const priority of priorities) {
-        const result = validateDelegateInput(VALID_PROMPT, { priority });
+        const result = validateRunInput(VALID_PROMPT, { priority });
         expect(result.ok).toBe(true);
       }
     });
@@ -405,7 +405,7 @@ describe('CLI - Command Parsing and Validation', () => {
       ];
 
       for (const workingDirectory of invalidPaths) {
-        const result = validateDelegateInput(VALID_PROMPT, { workingDirectory });
+        const result = validateRunInput(VALID_PROMPT, { workingDirectory });
         expect(result.ok).toBe(false);
         if (!result.ok) {
           expect(result.error.code).toBe(ErrorCode.INVALID_DIRECTORY);
@@ -417,13 +417,13 @@ describe('CLI - Command Parsing and Validation', () => {
       const invalidTimeouts = [-100, 0, NaN, Infinity];
 
       for (const timeout of invalidTimeouts) {
-        const result = validateDelegateInput(VALID_PROMPT, { timeout });
+        const result = validateRunInput(VALID_PROMPT, { timeout });
         expect(result.ok).toBe(false);
       }
     });
 
     it('should validate maxOutputBuffer is within limits', () => {
-      const result = validateDelegateInput(VALID_PROMPT, {
+      const result = validateRunInput(VALID_PROMPT, {
         maxOutputBuffer: 1024 * 1024 * 1024 * 10, // 10GB - too large
       });
 
@@ -434,9 +434,9 @@ describe('CLI - Command Parsing and Validation', () => {
     });
   });
 
-  describe('Delegate Command - Task Creation', () => {
+  describe('Run Command - Task Creation', () => {
     it('should create task with prompt and default priority P2', async () => {
-      await simulateDelegateCommand(mockTaskManager, VALID_PROMPT);
+      await simulateRunCommand(mockTaskManager, VALID_PROMPT);
 
       expect(mockTaskManager.delegateCalls).toHaveLength(1);
       expect(mockTaskManager.delegateCalls[0].prompt).toBe(VALID_PROMPT);
@@ -444,7 +444,7 @@ describe('CLI - Command Parsing and Validation', () => {
     });
 
     it('should create task with custom priority when specified', async () => {
-      await simulateDelegateCommand(mockTaskManager, VALID_PROMPT, {
+      await simulateRunCommand(mockTaskManager, VALID_PROMPT, {
         priority: VALID_PRIORITY,
       });
 
@@ -453,7 +453,7 @@ describe('CLI - Command Parsing and Validation', () => {
     });
 
     it('should use current directory as default working directory', async () => {
-      await simulateDelegateCommand(mockTaskManager, VALID_PROMPT);
+      await simulateRunCommand(mockTaskManager, VALID_PROMPT);
 
       const call = mockTaskManager.delegateCalls[0];
       expect(call.workingDirectory).toBeTruthy();
@@ -461,7 +461,7 @@ describe('CLI - Command Parsing and Validation', () => {
     });
 
     it('should use custom working directory when provided', async () => {
-      await simulateDelegateCommand(mockTaskManager, VALID_PROMPT, {
+      await simulateRunCommand(mockTaskManager, VALID_PROMPT, {
         workingDirectory: VALID_WORKING_DIR,
       });
 
@@ -469,7 +469,7 @@ describe('CLI - Command Parsing and Validation', () => {
     });
 
     it('should return task ID after successful delegation', async () => {
-      const result = await simulateDelegateCommand(mockTaskManager, VALID_PROMPT);
+      const result = await simulateRunCommand(mockTaskManager, VALID_PROMPT);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -479,9 +479,9 @@ describe('CLI - Command Parsing and Validation', () => {
     });
   });
 
-  describe('Delegate Command - continueFrom Option', () => {
+  describe('Run Command - continueFrom Option', () => {
     it('should pass continueFrom when --continue-from is provided', async () => {
-      await simulateDelegateCommand(mockTaskManager, VALID_PROMPT, {
+      await simulateRunCommand(mockTaskManager, VALID_PROMPT, {
         continueFrom: 'task-parent-abc',
         dependsOn: ['task-parent-abc'],
       });
@@ -492,7 +492,7 @@ describe('CLI - Command Parsing and Validation', () => {
     });
 
     it('should not include continueFrom when --continue-from is not provided', async () => {
-      await simulateDelegateCommand(mockTaskManager, VALID_PROMPT);
+      await simulateRunCommand(mockTaskManager, VALID_PROMPT);
 
       const call = mockTaskManager.delegateCalls[0];
       expect(call.continueFrom).toBeUndefined();
@@ -501,9 +501,9 @@ describe('CLI - Command Parsing and Validation', () => {
 
   describe('Flag Aliases', () => {
     it('should recognize --continue and -c as aliases for --continue-from', () => {
-      const longForm = parseDelegateArgs(['--continue-from', 'task-123', 'do work']);
-      const shortName = parseDelegateArgs(['--continue', 'task-123', 'do work']);
-      const shortFlag = parseDelegateArgs(['-c', 'task-123', 'do work']);
+      const longForm = parseRunArgs(['--continue-from', 'task-123', 'do work']);
+      const shortName = parseRunArgs(['--continue', 'task-123', 'do work']);
+      const shortFlag = parseRunArgs(['-c', 'task-123', 'do work']);
 
       expect(longForm.continueFrom).toBe('task-123');
       expect(shortName.continueFrom).toBe('task-123');
@@ -511,17 +511,17 @@ describe('CLI - Command Parsing and Validation', () => {
     });
 
     it('should recognize --deps as alias for --depends-on', () => {
-      const longForm = parseDelegateArgs(['--depends-on', 'task-1,task-2', 'do work']);
-      const shortForm = parseDelegateArgs(['--deps', 'task-1,task-2', 'do work']);
+      const longForm = parseRunArgs(['--depends-on', 'task-1,task-2', 'do work']);
+      const shortForm = parseRunArgs(['--deps', 'task-1,task-2', 'do work']);
 
       expect(longForm.dependsOn).toEqual(['task-1', 'task-2']);
       expect(shortForm.dependsOn).toEqual(['task-1', 'task-2']);
     });
 
     it('should recognize -b and --buffer as aliases for --max-output-buffer', () => {
-      const longForm = parseDelegateArgs(['--max-output-buffer', '5242880', 'do work']);
-      const shortName = parseDelegateArgs(['--buffer', '5242880', 'do work']);
-      const shortFlag = parseDelegateArgs(['-b', '5242880', 'do work']);
+      const longForm = parseRunArgs(['--max-output-buffer', '5242880', 'do work']);
+      const shortName = parseRunArgs(['--buffer', '5242880', 'do work']);
+      const shortFlag = parseRunArgs(['-b', '5242880', 'do work']);
 
       expect(longForm.maxOutputBuffer).toBe(5242880);
       expect(shortName.maxOutputBuffer).toBe(5242880);
@@ -532,11 +532,11 @@ describe('CLI - Command Parsing and Validation', () => {
   describe('Status Command - Single Task', () => {
     it('should fetch status for specific task ID', async () => {
       // First delegate a task
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, VALID_PROMPT);
-      expect(delegateResult.ok).toBe(true);
+      const runResult = await simulateRunCommand(mockTaskManager, VALID_PROMPT);
+      expect(runResult.ok).toBe(true);
 
-      if (!delegateResult.ok) return;
-      const taskId = delegateResult.value.id;
+      if (!runResult.ok) return;
+      const taskId = runResult.value.id;
 
       // Then get status
       const statusResult = await simulateStatusCommand(mockTaskManager, taskId);
@@ -547,11 +547,11 @@ describe('CLI - Command Parsing and Validation', () => {
     });
 
     it('should return task with all status fields', async () => {
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, VALID_PROMPT);
-      expect(delegateResult.ok).toBe(true);
+      const runResult = await simulateRunCommand(mockTaskManager, VALID_PROMPT);
+      expect(runResult.ok).toBe(true);
 
-      if (!delegateResult.ok) return;
-      const taskId = delegateResult.value.id;
+      if (!runResult.ok) return;
+      const taskId = runResult.value.id;
 
       const statusResult = await simulateStatusCommand(mockTaskManager, taskId);
 
@@ -575,11 +575,11 @@ describe('CLI - Command Parsing and Validation', () => {
     });
 
     it('should handle task status transitions correctly', async () => {
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, VALID_PROMPT);
-      expect(delegateResult.ok).toBe(true);
+      const runResult = await simulateRunCommand(mockTaskManager, VALID_PROMPT);
+      expect(runResult.ok).toBe(true);
 
-      if (!delegateResult.ok) return;
-      const taskId = delegateResult.value.id;
+      if (!runResult.ok) return;
+      const taskId = runResult.value.id;
 
       // Initial status should be queued
       const statusResult = await simulateStatusCommand(mockTaskManager, taskId);
@@ -593,9 +593,9 @@ describe('CLI - Command Parsing and Validation', () => {
   describe('Status Command - All Tasks', () => {
     it('should list all tasks when no task ID provided', async () => {
       // Delegate multiple tasks
-      await simulateDelegateCommand(mockTaskManager, 'task 1');
-      await simulateDelegateCommand(mockTaskManager, 'task 2');
-      await simulateDelegateCommand(mockTaskManager, 'task 3');
+      await simulateRunCommand(mockTaskManager, 'task 1');
+      await simulateRunCommand(mockTaskManager, 'task 2');
+      await simulateRunCommand(mockTaskManager, 'task 3');
 
       const result = await simulateStatusCommand(mockTaskManager);
 
@@ -617,8 +617,8 @@ describe('CLI - Command Parsing and Validation', () => {
     });
 
     it('should include tasks with different statuses in listing', async () => {
-      await simulateDelegateCommand(mockTaskManager, 'task 1');
-      await simulateDelegateCommand(mockTaskManager, 'task 2');
+      await simulateRunCommand(mockTaskManager, 'task 1');
+      await simulateRunCommand(mockTaskManager, 'task 2');
 
       const result = await simulateStatusCommand(mockTaskManager);
 
@@ -634,11 +634,11 @@ describe('CLI - Command Parsing and Validation', () => {
 
   describe('Logs Command', () => {
     it('should fetch logs for specific task ID', async () => {
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, VALID_PROMPT);
-      expect(delegateResult.ok).toBe(true);
+      const runResult = await simulateRunCommand(mockTaskManager, VALID_PROMPT);
+      expect(runResult.ok).toBe(true);
 
-      if (!delegateResult.ok) return;
-      const taskId = delegateResult.value.id;
+      if (!runResult.ok) return;
+      const taskId = runResult.value.id;
 
       const logsResult = await simulateLogsCommand(mockTaskManager, taskId);
 
@@ -648,11 +648,11 @@ describe('CLI - Command Parsing and Validation', () => {
     });
 
     it('should return stdout and stderr arrays', async () => {
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, VALID_PROMPT);
-      expect(delegateResult.ok).toBe(true);
+      const runResult = await simulateRunCommand(mockTaskManager, VALID_PROMPT);
+      expect(runResult.ok).toBe(true);
 
-      if (!delegateResult.ok) return;
-      const taskId = delegateResult.value.id;
+      if (!runResult.ok) return;
+      const taskId = runResult.value.id;
 
       const logsResult = await simulateLogsCommand(mockTaskManager, taskId);
 
@@ -665,11 +665,11 @@ describe('CLI - Command Parsing and Validation', () => {
     });
 
     it('should support tail option to limit output lines', async () => {
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, VALID_PROMPT);
-      expect(delegateResult.ok).toBe(true);
+      const runResult = await simulateRunCommand(mockTaskManager, VALID_PROMPT);
+      expect(runResult.ok).toBe(true);
 
-      if (!delegateResult.ok) return;
-      const taskId = delegateResult.value.id;
+      if (!runResult.ok) return;
+      const taskId = runResult.value.id;
 
       const tailCount = 100;
       await simulateLogsCommand(mockTaskManager, taskId, tailCount);
@@ -687,11 +687,11 @@ describe('CLI - Command Parsing and Validation', () => {
     });
 
     it('should handle tasks with no output gracefully', async () => {
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, VALID_PROMPT);
-      expect(delegateResult.ok).toBe(true);
+      const runResult = await simulateRunCommand(mockTaskManager, VALID_PROMPT);
+      expect(runResult.ok).toBe(true);
 
-      if (!delegateResult.ok) return;
-      const taskId = delegateResult.value.id;
+      if (!runResult.ok) return;
+      const taskId = runResult.value.id;
 
       const logsResult = await simulateLogsCommand(mockTaskManager, taskId);
 
@@ -705,11 +705,11 @@ describe('CLI - Command Parsing and Validation', () => {
 
   describe('Cancel Command', () => {
     it('should cancel task with provided task ID', async () => {
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, VALID_PROMPT);
-      expect(delegateResult.ok).toBe(true);
+      const runResult = await simulateRunCommand(mockTaskManager, VALID_PROMPT);
+      expect(runResult.ok).toBe(true);
 
-      if (!delegateResult.ok) return;
-      const taskId = delegateResult.value.id;
+      if (!runResult.ok) return;
+      const taskId = runResult.value.id;
 
       const cancelResult = await simulateCancelCommand(mockTaskManager, taskId);
 
@@ -719,11 +719,11 @@ describe('CLI - Command Parsing and Validation', () => {
     });
 
     it('should accept optional cancellation reason', async () => {
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, VALID_PROMPT);
-      expect(delegateResult.ok).toBe(true);
+      const runResult = await simulateRunCommand(mockTaskManager, VALID_PROMPT);
+      expect(runResult.ok).toBe(true);
 
-      if (!delegateResult.ok) return;
-      const taskId = delegateResult.value.id;
+      if (!runResult.ok) return;
+      const taskId = runResult.value.id;
       const reason = 'User requested cancellation';
 
       await simulateCancelCommand(mockTaskManager, taskId, reason);
@@ -741,11 +741,11 @@ describe('CLI - Command Parsing and Validation', () => {
     });
 
     it('should update task status to cancelled after cancellation', async () => {
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, VALID_PROMPT);
-      expect(delegateResult.ok).toBe(true);
+      const runResult = await simulateRunCommand(mockTaskManager, VALID_PROMPT);
+      expect(runResult.ok).toBe(true);
 
-      if (!delegateResult.ok) return;
-      const taskId = delegateResult.value.id;
+      if (!runResult.ok) return;
+      const taskId = runResult.value.id;
 
       await simulateCancelCommand(mockTaskManager, taskId);
 
@@ -759,11 +759,11 @@ describe('CLI - Command Parsing and Validation', () => {
 
   describe('Retry Command', () => {
     it('should retry task with provided task ID', async () => {
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, VALID_PROMPT);
-      expect(delegateResult.ok).toBe(true);
+      const runResult = await simulateRunCommand(mockTaskManager, VALID_PROMPT);
+      expect(runResult.ok).toBe(true);
 
-      if (!delegateResult.ok) return;
-      const taskId = delegateResult.value.id;
+      if (!runResult.ok) return;
+      const taskId = runResult.value.id;
 
       const retryResult = await simulateRetryCommand(mockTaskManager, taskId);
 
@@ -774,11 +774,11 @@ describe('CLI - Command Parsing and Validation', () => {
 
     it('should create new task with same prompt as original', async () => {
       const originalPrompt = 'original task prompt';
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, originalPrompt);
-      expect(delegateResult.ok).toBe(true);
+      const runResult = await simulateRunCommand(mockTaskManager, originalPrompt);
+      expect(runResult.ok).toBe(true);
 
-      if (!delegateResult.ok) return;
-      const taskId = delegateResult.value.id;
+      if (!runResult.ok) return;
+      const taskId = runResult.value.id;
 
       const retryResult = await simulateRetryCommand(mockTaskManager, taskId);
 
@@ -799,11 +799,11 @@ describe('CLI - Command Parsing and Validation', () => {
     });
 
     it('should return new task ID after successful retry', async () => {
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, VALID_PROMPT);
-      expect(delegateResult.ok).toBe(true);
+      const runResult = await simulateRunCommand(mockTaskManager, VALID_PROMPT);
+      expect(runResult.ok).toBe(true);
 
-      if (!delegateResult.ok) return;
-      const originalTaskId = delegateResult.value.id;
+      if (!runResult.ok) return;
+      const originalTaskId = runResult.value.id;
 
       const retryResult = await simulateRetryCommand(mockTaskManager, originalTaskId);
 
@@ -1090,11 +1090,11 @@ describe('CLI - Resume Command', () => {
   describe('resume', () => {
     it('should resume a failed task', async () => {
       // Create and fail a task first
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, 'original task');
-      expect(delegateResult.ok).toBe(true);
-      if (!delegateResult.ok) return;
+      const runResult = await simulateRunCommand(mockTaskManager, 'original task');
+      expect(runResult.ok).toBe(true);
+      if (!runResult.ok) return;
 
-      const taskId = delegateResult.value.id;
+      const taskId = runResult.value.id;
       // Manually set task as failed
       const task = mockTaskManager['taskStorage'].get(taskId);
       task.status = 'failed';
@@ -1107,11 +1107,11 @@ describe('CLI - Resume Command', () => {
     });
 
     it('should pass additional context to resume', async () => {
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, 'original');
-      expect(delegateResult.ok).toBe(true);
-      if (!delegateResult.ok) return;
+      const runResult = await simulateRunCommand(mockTaskManager, 'original');
+      expect(runResult.ok).toBe(true);
+      if (!runResult.ok) return;
 
-      const taskId = delegateResult.value.id;
+      const taskId = runResult.value.id;
       const task = mockTaskManager['taskStorage'].get(taskId);
       task.status = 'completed';
 
@@ -1122,11 +1122,11 @@ describe('CLI - Resume Command', () => {
     });
 
     it('should return new task with retry metadata', async () => {
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, 'original');
-      expect(delegateResult.ok).toBe(true);
-      if (!delegateResult.ok) return;
+      const runResult = await simulateRunCommand(mockTaskManager, 'original');
+      expect(runResult.ok).toBe(true);
+      if (!runResult.ok) return;
 
-      const taskId = delegateResult.value.id;
+      const taskId = runResult.value.id;
       const task = mockTaskManager['taskStorage'].get(taskId);
       task.status = 'failed';
 
@@ -1150,11 +1150,11 @@ describe('CLI - Resume Command', () => {
     });
 
     it('should reject resume for non-terminal task', async () => {
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, 'original');
-      expect(delegateResult.ok).toBe(true);
-      if (!delegateResult.ok) return;
+      const runResult = await simulateRunCommand(mockTaskManager, 'original');
+      expect(runResult.ok).toBe(true);
+      if (!runResult.ok) return;
 
-      const taskId = delegateResult.value.id;
+      const taskId = runResult.value.id;
       // Task is still in 'queued' status (non-terminal)
 
       const result = await simulateResumeCommand(mockTaskManager, taskId);
@@ -1336,7 +1336,7 @@ describe('CLI - Task Completion Lifecycle', () => {
 
       await eventBus.emit<TaskFailedEvent>('TaskFailed', {
         taskId,
-        error: new DelegateError(ErrorCode.SYSTEM_ERROR, 'Process crashed'),
+        error: new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Process crashed'),
         exitCode: 137,
       });
 
@@ -1350,7 +1350,7 @@ describe('CLI - Task Completion Lifecycle', () => {
 
       await eventBus.emit<TaskFailedEvent>('TaskFailed', {
         taskId,
-        error: new DelegateError(ErrorCode.SYSTEM_ERROR, 'Unknown failure'),
+        error: new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Unknown failure'),
       });
 
       const exitCode = await promise;
@@ -1376,7 +1376,7 @@ describe('CLI - Task Completion Lifecycle', () => {
 
       await eventBus.emit<TaskTimeoutEvent>('TaskTimeout', {
         taskId,
-        error: new DelegateError(ErrorCode.TASK_TIMEOUT, 'Task exceeded timeout'),
+        error: new BackbeatError(ErrorCode.TASK_TIMEOUT, 'Task exceeded timeout'),
       });
 
       const exitCode = await promise;
@@ -1466,7 +1466,7 @@ describe('CLI - Task Completion Lifecycle', () => {
       });
       await eventBus.emit<TaskFailedEvent>('TaskFailed', {
         taskId,
-        error: new DelegateError(ErrorCode.SYSTEM_ERROR, 'late failure'),
+        error: new BackbeatError(ErrorCode.SYSTEM_ERROR, 'late failure'),
         exitCode: 1,
       });
 
@@ -1476,24 +1476,24 @@ describe('CLI - Task Completion Lifecycle', () => {
   });
 
   describe('--foreground flag', () => {
-    it('should be recognized as a valid delegate option', () => {
-      const options = parseDelegateArgs(['--foreground', 'analyze codebase']);
+    it('should be recognized as a valid run option', () => {
+      const options = parseRunArgs(['--foreground', 'analyze codebase']);
       expect(options.foreground).toBe(true);
       expect(options.prompt).toBe('analyze codebase');
     });
 
     it('should support short form -f', () => {
-      const options = parseDelegateArgs(['-f', 'analyze codebase']);
+      const options = parseRunArgs(['-f', 'analyze codebase']);
       expect(options.foreground).toBe(true);
     });
 
     it('should default foreground to undefined when not specified', () => {
-      const options = parseDelegateArgs(['analyze codebase']);
+      const options = parseRunArgs(['analyze codebase']);
       expect(options.foreground).toBeUndefined();
     });
 
     it('should combine with other flags', () => {
-      const options = parseDelegateArgs(['--foreground', '--priority', 'P0', 'run tests']);
+      const options = parseRunArgs(['--foreground', '--priority', 'P0', 'run tests']);
       expect(options.foreground).toBe(true);
       expect(options.priority).toBe('P0');
       expect(options.prompt).toBe('run tests');
@@ -1532,7 +1532,7 @@ describe('CLI - Task Completion Lifecycle', () => {
   describe('Detach mode - task ID extraction', () => {
     it('should extract task ID from typical log output', () => {
       const logContent = [
-        '🚀 Bootstrapping Delegate...',
+        '🚀 Bootstrapping Backbeat...',
         '📝 Delegating task: analyze codebase',
         '✅ Task delegated successfully!',
         '📋 Task ID: task-abc123def456',
@@ -1552,7 +1552,7 @@ describe('CLI - Task Completion Lifecycle', () => {
     });
 
     it('should not match task ID in non-matching output', () => {
-      const logContent = '🚀 Bootstrapping Delegate...\nStill loading...';
+      const logContent = '🚀 Bootstrapping Backbeat...\nStill loading...';
       const taskIdPattern = /Task ID:\s+(task-\S+)/;
       expect(logContent.match(taskIdPattern)).toBeNull();
     });
@@ -1571,16 +1571,16 @@ describe('CLI - Task Completion Lifecycle', () => {
 
   describe('Detach mode - child args construction', () => {
     it('should construct child args with --foreground for background process', () => {
-      const delegateArgs = ['analyze', '--priority', 'P0'];
-      const childArgs = ['path/to/cli.js', 'delegate', '--foreground', ...delegateArgs];
+      const runArgs = ['analyze', '--priority', 'P0'];
+      const childArgs = ['path/to/cli.js', 'run', '--foreground', ...runArgs];
 
-      expect(childArgs).toEqual(['path/to/cli.js', 'delegate', '--foreground', 'analyze', '--priority', 'P0']);
+      expect(childArgs).toEqual(['path/to/cli.js', 'run', '--foreground', 'analyze', '--priority', 'P0']);
       expect(childArgs).toContain('--foreground');
     });
 
     it('should preserve all flags in child args', () => {
-      const delegateArgs = ['run tests', '-p', 'P0', '-w', '/workspace', '-t', '60000'];
-      const childArgs = ['delegate', '--foreground', ...delegateArgs];
+      const runArgs = ['run tests', '-p', 'P0', '-w', '/workspace', '-t', '60000'];
+      const childArgs = ['run', '--foreground', ...runArgs];
 
       expect(childArgs).toContain('--foreground');
       expect(childArgs).toContain('-p');
@@ -1592,14 +1592,14 @@ describe('CLI - Task Completion Lifecycle', () => {
     });
 
     it('should detect missing prompt in args', () => {
-      const delegateArgs: string[] = [];
-      const hasPrompt = delegateArgs.some((arg) => !arg.startsWith('-'));
+      const runArgs: string[] = [];
+      const hasPrompt = runArgs.some((arg) => !arg.startsWith('-'));
       expect(hasPrompt).toBe(false);
     });
 
     it('should detect prompt present in args', () => {
-      const delegateArgs = ['analyze code', '-p', 'P0'];
-      const hasPrompt = delegateArgs.some((arg) => !arg.startsWith('-'));
+      const runArgs = ['analyze code', '-p', 'P0'];
+      const hasPrompt = runArgs.some((arg) => !arg.startsWith('-'));
       expect(hasPrompt).toBe(true);
     });
   });
@@ -1607,11 +1607,11 @@ describe('CLI - Task Completion Lifecycle', () => {
   describe('SIGINT handling', () => {
     it('should cancel task when SIGINT is received', async () => {
       const mockTaskManager = new MockTaskManager();
-      const delegateResult = await simulateDelegateCommand(mockTaskManager, 'long running task');
-      expect(delegateResult.ok).toBe(true);
-      if (!delegateResult.ok) return;
+      const runResult = await simulateRunCommand(mockTaskManager, 'long running task');
+      expect(runResult.ok).toBe(true);
+      if (!runResult.ok) return;
 
-      const taskId = delegateResult.value.id;
+      const taskId = runResult.value.id;
 
       // Simulate SIGINT cancel flow
       await mockTaskManager.cancel(taskId, 'User interrupted (SIGINT)');
@@ -1630,16 +1630,16 @@ describe('CLI - Task Completion Lifecycle', () => {
 function getHelpText(): string {
   // Simulate help text extraction - must match actual showHelp() output
   return `
-🤖 Delegate - MCP Server for Task Delegation
+🤖 Backbeat - MCP Server for Task Delegation
 
 Usage:
-  delegate <command> [options...]
+  beat <command> [options...]
 
 MCP Server Commands:
   mcp start              Start the MCP server
 
 Task Commands:
-  delegate <prompt> [options]  Delegate a task (fire-and-forget by default)
+  run <prompt> [options]       Delegate a task (fire-and-forget by default)
     -f, --foreground           Stream output and wait for task completion
     -p, --priority P0|P1|P2    Task priority
     --deps TASK_IDS            Comma-separated task IDs (alias: --depends-on)
@@ -1673,27 +1673,27 @@ Configuration:
   config path                Print config file location
 
 Examples:
-  delegate "analyze codebase" --foreground
-  delegate status abc123
-  delegate list
-  delegate schedule create "run tests" --cron "0 9 * * 1-5"
-  delegate pipeline "setup db" "run migrations" "seed data"
-  delegate resume <task-id> --context "Try a different approach"
-  delegate config set timeout 300000
+  beat run "analyze codebase" --foreground
+  beat status abc123
+  beat list
+  beat schedule create "run tests" --cron "0 9 * * 1-5"
+  beat pipeline "setup db" "run migrations" "seed data"
+  beat resume <task-id> --context "Try a different approach"
+  beat config set timeout 300000
 `;
 }
 
 function getConfigText(): string {
   return `
-📋 MCP Configuration for Delegate
+📋 MCP Configuration for Backbeat
 
 Add this to your MCP configuration file:
 
 {
   "mcpServers": {
-    "delegate": {
+    "backbeat": {
       "command": "npx",
-      "args": ["-y", "@dean0x/delegate", "mcp", "start"]
+      "args": ["-y", "backbeat", "mcp", "start"]
     }
   }
 }
@@ -1706,18 +1706,18 @@ Configuration file locations:
 For global installation, use:
 {
   "mcpServers": {
-    "delegate": {
-      "command": "delegate",
+    "backbeat": {
+      "command": "beat",
       "args": ["mcp", "start"]
     }
   }
 }
 
-For local development, use /path/to/delegate/dist/index.js
+For local development, use /path/to/backbeat/dist/index.js
 `;
 }
 
-interface DelegateOptions {
+interface RunOptions {
   priority?: string;
   workingDirectory?: string;
   timeout?: number;
@@ -1727,14 +1727,14 @@ interface DelegateOptions {
   foreground?: boolean;
 }
 
-function validateDelegateInput(prompt: string, options: DelegateOptions) {
+function validateRunInput(prompt: string, options: RunOptions) {
   if (!prompt || prompt.trim().length === 0) {
-    return err(new DelegateError(ErrorCode.INVALID_INPUT, 'Prompt is required', { field: 'prompt' }));
+    return err(new BackbeatError(ErrorCode.INVALID_INPUT, 'Prompt is required', { field: 'prompt' }));
   }
 
   if (options.priority && !['P0', 'P1', 'P2'].includes(options.priority)) {
     return err(
-      new DelegateError(ErrorCode.INVALID_INPUT, 'Priority must be P0, P1, or P2', {
+      new BackbeatError(ErrorCode.INVALID_INPUT, 'Priority must be P0, P1, or P2', {
         field: 'priority',
         value: options.priority,
       }),
@@ -1744,17 +1744,17 @@ function validateDelegateInput(prompt: string, options: DelegateOptions) {
   if (options.workingDirectory) {
     const path = options.workingDirectory;
     if (!path.startsWith('/')) {
-      return err(new DelegateError(ErrorCode.INVALID_DIRECTORY, 'Working directory must be absolute path', { path }));
+      return err(new BackbeatError(ErrorCode.INVALID_DIRECTORY, 'Working directory must be absolute path', { path }));
     }
     if (path.includes('..')) {
-      return err(new DelegateError(ErrorCode.INVALID_DIRECTORY, 'Path traversal not allowed', { path }));
+      return err(new BackbeatError(ErrorCode.INVALID_DIRECTORY, 'Path traversal not allowed', { path }));
     }
   }
 
   if (options.timeout !== undefined) {
     if (typeof options.timeout !== 'number' || options.timeout <= 0 || !isFinite(options.timeout)) {
       return err(
-        new DelegateError(ErrorCode.INVALID_INPUT, 'Timeout must be positive number', {
+        new BackbeatError(ErrorCode.INVALID_INPUT, 'Timeout must be positive number', {
           field: 'timeout',
           value: options.timeout,
         }),
@@ -1766,7 +1766,7 @@ function validateDelegateInput(prompt: string, options: DelegateOptions) {
     const maxAllowed = 1024 * 1024 * 100; // 100MB
     if (options.maxOutputBuffer > maxAllowed) {
       return err(
-        new DelegateError(ErrorCode.INVALID_INPUT, `maxOutputBuffer exceeds limit of ${maxAllowed} bytes`, {
+        new BackbeatError(ErrorCode.INVALID_INPUT, `maxOutputBuffer exceeds limit of ${maxAllowed} bytes`, {
           field: 'maxOutputBuffer',
           value: options.maxOutputBuffer,
         }),
@@ -1777,8 +1777,8 @@ function validateDelegateInput(prompt: string, options: DelegateOptions) {
   return ok(undefined);
 }
 
-async function simulateDelegateCommand(taskManager: MockTaskManager, prompt: string, options?: DelegateOptions) {
-  const validation = validateDelegateInput(prompt, options || {});
+async function simulateRunCommand(taskManager: MockTaskManager, prompt: string, options?: RunOptions) {
+  const validation = validateRunInput(prompt, options || {});
   if (!validation.ok) {
     return validation;
   }
@@ -1819,13 +1819,13 @@ async function simulateRetryCommand(taskManager: MockTaskManager, taskId: string
 function validateScheduleCreateInput(prompt: string, options: { type?: string }) {
   if (!prompt || prompt.trim().length === 0) {
     return err(
-      new DelegateError(ErrorCode.INVALID_INPUT, 'Prompt is required for schedule creation', { field: 'prompt' }),
+      new BackbeatError(ErrorCode.INVALID_INPUT, 'Prompt is required for schedule creation', { field: 'prompt' }),
     );
   }
 
   if (!options.type || !['cron', 'one_time'].includes(options.type)) {
     return err(
-      new DelegateError(ErrorCode.INVALID_INPUT, '--type must be "cron" or "one_time"', {
+      new BackbeatError(ErrorCode.INVALID_INPUT, '--type must be "cron" or "one_time"', {
         field: 'type',
         value: options.type,
       }),
@@ -1878,7 +1878,7 @@ async function simulateScheduleCreate(
 
 function validatePipelineInput(steps: string[]) {
   if (steps.length === 0) {
-    return err(new DelegateError(ErrorCode.INVALID_INPUT, 'No pipeline steps found', { field: 'steps' }));
+    return err(new BackbeatError(ErrorCode.INVALID_INPUT, 'No pipeline steps found', { field: 'steps' }));
   }
   return ok(undefined);
 }
@@ -1976,11 +1976,11 @@ function waitForCompletion(eventBus: InMemoryEventBus, taskId: string): Promise<
 }
 
 /**
- * Parse delegate command args — mirrors the option parsing loop in cli.ts
+ * Parse run command args — mirrors the option parsing loop in cli.ts
  * for testing flag recognition without running the full CLI.
  */
-function parseDelegateArgs(args: string[]): DelegateOptions & { prompt: string } {
-  const options: DelegateOptions & { prompt: string } = { prompt: '' };
+function parseRunArgs(args: string[]): RunOptions & { prompt: string } {
+  const options: RunOptions & { prompt: string } = { prompt: '' };
   const promptWords: string[] = [];
 
   for (let i = 0; i < args.length; i++) {
@@ -1988,7 +1988,7 @@ function parseDelegateArgs(args: string[]): DelegateOptions & { prompt: string }
     const next = args[i + 1];
 
     if (arg === '--foreground' || arg === '-f') {
-      (options as DelegateOptions & { foreground?: boolean }).foreground = true;
+      (options as RunOptions & { foreground?: boolean }).foreground = true;
     } else if ((arg === '--priority' || arg === '-p') && next) {
       options.priority = next;
       i++;

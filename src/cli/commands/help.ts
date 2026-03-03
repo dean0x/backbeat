@@ -12,10 +12,10 @@ export function showHelp(dirname: string) {
   const pkg = JSON.parse(readFileSync(path.join(dirname, '..', 'package.json'), 'utf-8'));
   const v = pkg.version ?? '0.0.0';
 
-  stdout(`${bold(`Delegate v${v}`)} ${cyan('Task Delegation MCP Server')}
+  stdout(`${bold(`Backbeat v${v}`)} ${cyan('Task Delegation MCP Server')}
 
 ${bold('Usage:')}
-  delegate <command> [options...]
+  beat <command> [options...]
 
 ${bold('MCP Server Commands:')}
   ${cyan('mcp start')}              Start the MCP server
@@ -23,7 +23,7 @@ ${bold('MCP Server Commands:')}
   ${cyan('mcp config')}             Show MCP configuration for Claude
 
 ${bold('Task Commands:')}
-  ${cyan('delegate')} <prompt> [options]  Delegate a task (fire-and-forget; runs in current directory)
+  ${cyan('run')} <prompt> [options]       Delegate a task (fire-and-forget; runs in current directory)
     -f, --foreground           Stream output and wait for task completion
     -p, --priority P0|P1|P2    Task priority (P0=critical, P1=high, P2=normal)
     -w, --working-directory D  Working directory for task execution
@@ -66,35 +66,35 @@ ${bold('Pipeline Commands:')}
 
 ${bold('Configuration:')}
   ${cyan('config show')}                Show current configuration (resolved values)
-  ${cyan('config set')} <key> <value>   Set a config value (persisted to ~/.delegate/config.json)
+  ${cyan('config set')} <key> <value>   Set a config value (persisted to ~/.backbeat/config.json)
   ${cyan('config reset')} <key>         Remove a key from config file (revert to default)
   ${cyan('config path')}                Print config file location
 
   ${cyan('help')}                       Show this help message
 
 ${bold('Examples:')}
-  delegate mcp start                                    # Start MCP server
-  delegate delegate "analyze this codebase"            # Fire-and-forget (default)
-  delegate delegate "fix the bug" --foreground         # Stream output, wait
-  delegate delegate "run tests" --deps task-abc123     # Wait for dependency
-  delegate list                                        # List all tasks
+  beat mcp start                                      # Start MCP server
+  beat run "analyze this codebase"                    # Fire-and-forget (default)
+  beat run "fix the bug" --foreground                 # Stream output, wait
+  beat run "run tests" --deps task-abc123             # Wait for dependency
+  beat list                                           # List all tasks
 
   # Scheduling
-  delegate schedule create "run tests" --cron "0 9 * * 1-5"
-  delegate schedule create "deploy" --at "2025-03-01T09:00:00Z"
-  delegate schedule list --status active
-  delegate schedule pause <id>
+  beat schedule create "run tests" --cron "0 9 * * 1-5"
+  beat schedule create "deploy" --at "2025-03-01T09:00:00Z"
+  beat schedule list --status active
+  beat schedule pause <id>
 
   # Pipeline (sequential chained tasks)
-  delegate pipeline "setup db" "run migrations" "seed data"
+  beat pipeline "setup db" "run migrations" "seed data"
 
   # Resume failed task with context
-  delegate resume <task-id> --context "Try a different approach"
+  beat resume <task-id> --context "Try a different approach"
 
   # Configuration
-  delegate config show
-  delegate config set timeout 300000
-  delegate config reset timeout
+  beat config show
+  beat config set timeout 300000
+  beat config reset timeout
 
 Repository: https://github.com/dean0x/delegate`);
 }

@@ -7,7 +7,7 @@
 
 import { DependencyGraph } from '../../core/dependency-graph.js';
 import { type TaskCheckpoint, TaskId } from '../../core/domain.js';
-import { DelegateError, ErrorCode } from '../../core/errors.js';
+import { BackbeatError, ErrorCode } from '../../core/errors.js';
 import { EventBus } from '../../core/events/event-bus.js';
 import {
   CheckpointCreatedEvent,
@@ -183,7 +183,7 @@ export class DependencyHandler extends BaseEventHandler {
     if (cycleCheck.value) {
       return {
         depId,
-        error: new DelegateError(
+        error: new BackbeatError(
           ErrorCode.INVALID_OPERATION,
           `Cannot add dependency: would create cycle (${taskId} -> ${depId})`,
           { taskId, dependsOnTaskId: depId },
@@ -198,7 +198,7 @@ export class DependencyHandler extends BaseEventHandler {
     if (resultingDepth > this.maxChainDepth) {
       return {
         depId,
-        error: new DelegateError(
+        error: new BackbeatError(
           ErrorCode.INVALID_OPERATION,
           `Cannot add dependency: would create chain depth of ${resultingDepth} (max ${this.maxChainDepth})`,
           { taskId, dependsOnTaskId: depId, depth: resultingDepth },

@@ -1,20 +1,20 @@
 #!/usr/bin/env node
 
 // Set process title for easy identification in ps/pgrep/pkill
-process.title = 'delegate-cli';
+process.title = 'beat-cli';
 
 import { readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { cancelTask } from './cli/commands/cancel.js';
 import { configPath, configReset, configSet, configShow } from './cli/commands/config.js';
-import { delegateTask, handleDetachMode } from './cli/commands/delegate.js';
 import { showHelp } from './cli/commands/help.js';
 import { getTaskLogs } from './cli/commands/logs.js';
 import { handleMcpStart, handleMcpTest, showConfig } from './cli/commands/mcp.js';
 import { handlePipelineCommand } from './cli/commands/pipeline.js';
 import { handleResumeCommand } from './cli/commands/resume.js';
 import { retryTask } from './cli/commands/retry.js';
+import { handleDetachMode, runTask } from './cli/commands/run.js';
 import { handleScheduleCommand } from './cli/commands/schedule.js';
 import { getTaskStatus } from './cli/commands/status.js';
 import * as ui from './cli/ui.js';
@@ -40,14 +40,14 @@ if (mainCommand === 'mcp') {
     process.stderr.write('Valid subcommands: start, test, config\n');
     process.exit(1);
   }
-} else if (mainCommand === 'delegate') {
-  const delegateArgs = args.slice(1);
-  const hasForeground = delegateArgs.includes('--foreground') || delegateArgs.includes('-f');
+} else if (mainCommand === 'run') {
+  const runArgs = args.slice(1);
+  const hasForeground = runArgs.includes('--foreground') || runArgs.includes('-f');
 
   if (!hasForeground) {
-    handleDetachMode(delegateArgs);
+    handleDetachMode(runArgs);
   } else {
-    const foregroundArgs = delegateArgs.filter((arg) => arg !== '--foreground' && arg !== '-f');
+    const foregroundArgs = runArgs.filter((arg) => arg !== '--foreground' && arg !== '-f');
 
     const options: {
       priority?: 'P0' | 'P1' | 'P2';
@@ -142,7 +142,7 @@ if (mainCommand === 'mcp') {
 
     const prompt = promptWords.join(' ');
     if (!prompt) {
-      ui.error('Usage: delegate "<prompt>" [options]');
+      ui.error('Usage: beat run "<prompt>" [options]');
       process.stderr.write(
         [
           'Options:',
@@ -153,15 +153,15 @@ if (mainCommand === 'mcp') {
           '  --max-output-buffer BYTES     Maximum output buffer size',
           '',
           'Examples:',
-          '  delegate "refactor auth"                     # Fire-and-forget (default)',
-          '  delegate "quick fix" --foreground            # Stream output, wait',
+          '  beat run "refactor auth"                     # Fire-and-forget (default)',
+          '  beat run "quick fix" --foreground            # Stream output, wait',
           '',
         ].join('\n'),
       );
       process.exit(1);
     }
 
-    await delegateTask(prompt, Object.keys(options).length > 0 ? options : undefined);
+    await runTask(prompt, Object.keys(options).length > 0 ? options : undefined);
   }
 } else if (mainCommand === 'status') {
   let taskId: string | undefined;
@@ -177,8 +177,8 @@ if (mainCommand === 'mcp') {
 } else if (mainCommand === 'logs') {
   const taskId = args[1];
   if (!taskId) {
-    ui.error('Usage: delegate logs <task-id> [--tail N]');
-    process.stderr.write(['Example: delegate logs abc123', '         delegate logs abc123 --tail 50', ''].join('\n'));
+    ui.error('Usage: beat logs <task-id> [--tail N]');
+    process.stderr.write(['Example: beat logs abc123', '         beat logs abc123 --tail 50', ''].join('\n'));
     process.exit(1);
   }
 
@@ -197,7 +197,7 @@ if (mainCommand === 'mcp') {
 } else if (mainCommand === 'cancel') {
   const taskId = args[1];
   if (!taskId) {
-    ui.error('Usage: delegate cancel <task-id> [reason]');
+    ui.error('Usage: beat cancel <task-id> [reason]');
     process.exit(1);
   }
 
@@ -206,7 +206,7 @@ if (mainCommand === 'mcp') {
 } else if (mainCommand === 'retry') {
   const taskId = args[1];
   if (!taskId) {
-    ui.error('Usage: delegate retry <task-id>');
+    ui.error('Usage: beat retry <task-id>');
     process.exit(1);
   }
 
@@ -220,7 +220,7 @@ if (mainCommand === 'mcp') {
 } else if (mainCommand === 'resume') {
   const taskId = args[1];
   if (!taskId) {
-    ui.error('Usage: delegate resume <task-id> [--context "additional instructions"]');
+    ui.error('Usage: beat resume <task-id> [--context "additional instructions"]');
     process.exit(1);
   }
 
@@ -241,7 +241,7 @@ if (mainCommand === 'mcp') {
   } else if (subCommand === 'path') {
     configPath();
   } else {
-    ui.error('Usage: delegate config <show|set|reset|path>');
+    ui.error('Usage: beat config <show|set|reset|path>');
     process.exit(1);
   }
 } else if (mainCommand === 'help' || mainCommand === '--help' || mainCommand === '-h' || !mainCommand) {

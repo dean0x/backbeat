@@ -6,7 +6,7 @@
 import { ChildProcess } from 'child_process';
 
 import { Task, TaskId, Worker, WorkerId } from '../core/domain.js';
-import { DelegateError, ErrorCode, taskTimeout } from '../core/errors.js';
+import { BackbeatError, ErrorCode, taskTimeout } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
 import { Logger, OutputCapture, ProcessSpawner, ResourceMonitor, WorkerPool } from '../core/interfaces.js';
 import { err, ok, Result } from '../core/result.js';
@@ -47,7 +47,7 @@ export class EventDrivenWorkerPool implements WorkerPool {
     }
 
     if (!canSpawnResult.value) {
-      return err(new DelegateError(ErrorCode.INSUFFICIENT_RESOURCES, 'Insufficient resources to spawn worker'));
+      return err(new BackbeatError(ErrorCode.INSUFFICIENT_RESOURCES, 'Insufficient resources to spawn worker'));
     }
 
     const finalWorkingDirectory = task.workingDirectory || process.cwd();
@@ -57,7 +57,7 @@ export class EventDrivenWorkerPool implements WorkerPool {
 
     if (!spawnResult.ok) {
       return err(
-        new DelegateError(ErrorCode.WORKER_SPAWN_FAILED, `Failed to spawn worker: ${spawnResult.error.message}`),
+        new BackbeatError(ErrorCode.WORKER_SPAWN_FAILED, `Failed to spawn worker: ${spawnResult.error.message}`),
       );
     }
 
@@ -103,7 +103,7 @@ export class EventDrivenWorkerPool implements WorkerPool {
     const worker = this.workers.get(workerId);
 
     if (!worker) {
-      return err(new DelegateError(ErrorCode.WORKER_NOT_FOUND, `Worker ${workerId} not found`));
+      return err(new BackbeatError(ErrorCode.WORKER_NOT_FOUND, `Worker ${workerId} not found`));
     }
 
     this.logger.info('Killing worker', {
@@ -144,7 +144,7 @@ export class EventDrivenWorkerPool implements WorkerPool {
 
       return ok(undefined);
     } catch (error) {
-      return err(new DelegateError(ErrorCode.WORKER_KILL_FAILED, `Failed to kill worker: ${error}`));
+      return err(new BackbeatError(ErrorCode.WORKER_KILL_FAILED, `Failed to kill worker: ${error}`));
     }
   }
 
@@ -271,7 +271,7 @@ export class EventDrivenWorkerPool implements WorkerPool {
       await this.eventBus.emit('TaskFailed', {
         taskId,
         exitCode,
-        error: new DelegateError(ErrorCode.TASK_EXECUTION_FAILED, `Task failed with exit code ${exitCode}`),
+        error: new BackbeatError(ErrorCode.TASK_EXECUTION_FAILED, `Task failed with exit code ${exitCode}`),
       });
     }
 
@@ -328,7 +328,7 @@ export class EventDrivenWorkerPool implements WorkerPool {
     await this.eventBus.emit('TaskFailed', {
       taskId,
       exitCode: 1,
-      error: new DelegateError(ErrorCode.TASK_EXECUTION_FAILED, `Worker process error: ${error.message}`),
+      error: new BackbeatError(ErrorCode.TASK_EXECUTION_FAILED, `Worker process error: ${error.message}`),
     });
   }
 }

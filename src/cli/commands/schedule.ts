@@ -6,7 +6,7 @@ import * as ui from '../ui.js';
 
 export async function handleScheduleCommand(subCmd: string | undefined, scheduleArgs: string[]) {
   if (!subCmd) {
-    ui.error('Usage: delegate schedule <create|list|get|cancel|pause|resume>');
+    ui.error('Usage: beat schedule <create|list|get|cancel|pause|resume>');
     process.exit(1);
   }
 
@@ -120,7 +120,7 @@ async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]) 
 
   const prompt = promptWords.join(' ');
   if (!prompt) {
-    ui.error('Usage: delegate schedule create <prompt> --cron "..." | --at "..." [options]');
+    ui.error('Usage: beat schedule create <prompt> --cron "..." | --at "..." [options]');
     process.exit(1);
   }
 
@@ -224,7 +224,7 @@ async function scheduleList(service: ScheduleService, scheduleArgs: string[]) {
 async function scheduleGet(service: ScheduleService, scheduleArgs: string[]) {
   const scheduleId = scheduleArgs[0];
   if (!scheduleId) {
-    ui.error('Usage: delegate schedule get <schedule-id> [--history] [--history-limit N]');
+    ui.error('Usage: beat schedule get <schedule-id> [--history] [--history-limit N]');
     process.exit(1);
   }
 
@@ -278,7 +278,7 @@ async function scheduleGet(service: ScheduleService, scheduleArgs: string[]) {
 async function scheduleCancel(service: ScheduleService, scheduleArgs: string[]) {
   const scheduleId = scheduleArgs[0];
   if (!scheduleId) {
-    ui.error('Usage: delegate schedule cancel <schedule-id> [reason]');
+    ui.error('Usage: beat schedule cancel <schedule-id> [reason]');
     process.exit(1);
   }
   const reason = scheduleArgs.slice(1).join(' ') || undefined;
@@ -296,7 +296,7 @@ async function scheduleCancel(service: ScheduleService, scheduleArgs: string[]) 
 async function schedulePause(service: ScheduleService, scheduleArgs: string[]) {
   const scheduleId = scheduleArgs[0];
   if (!scheduleId) {
-    ui.error('Usage: delegate schedule pause <schedule-id>');
+    ui.error('Usage: beat schedule pause <schedule-id>');
     process.exit(1);
   }
 
@@ -312,7 +312,7 @@ async function schedulePause(service: ScheduleService, scheduleArgs: string[]) {
 async function scheduleResume(service: ScheduleService, scheduleArgs: string[]) {
   const scheduleId = scheduleArgs[0];
   if (!scheduleId) {
-    ui.error('Usage: delegate schedule resume <schedule-id>');
+    ui.error('Usage: beat schedule resume <schedule-id>');
     process.exit(1);
   }
 

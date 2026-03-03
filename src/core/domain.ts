@@ -3,7 +3,7 @@
  * All types are immutable (readonly)
  */
 
-import { DelegateError } from './errors.js';
+import { BackbeatError } from './errors.js';
 
 export type TaskId = string & { readonly __brand: 'TaskId' };
 export type WorkerId = string & { readonly __brand: 'WorkerId' };
@@ -103,7 +103,7 @@ export interface Task {
   readonly workerId?: WorkerId;
   readonly exitCode?: number;
   readonly duration?: number;
-  readonly error?: Error | DelegateError;
+  readonly error?: Error | BackbeatError;
 }
 
 export interface Worker {
@@ -130,7 +130,7 @@ export interface TaskOutput {
   readonly totalSize: number;
 }
 
-export interface DelegateRequest {
+export interface TaskRequest {
   readonly prompt: string;
   readonly priority?: Priority;
   readonly workingDirectory?: string;
@@ -161,7 +161,7 @@ export interface TaskUpdate {
   readonly completedAt?: number;
   readonly exitCode?: number;
   readonly duration?: number;
-  readonly error?: Error | DelegateError;
+  readonly error?: Error | BackbeatError;
 }
 
 /**
@@ -176,7 +176,7 @@ export const updateTask = (task: Task, update: TaskUpdate): Task => ({
 /**
  * Create a new task
  */
-export const createTask = (request: DelegateRequest): Task => {
+export const createTask = (request: TaskRequest): Task => {
   const now = Date.now(); // Capture once to ensure createdAt === updatedAt
   return Object.freeze({
     id: TaskId(`task-${crypto.randomUUID()}`),
@@ -235,7 +235,7 @@ export const comparePriority = (a: Priority, b: Priority): number => {
  */
 export interface Schedule {
   readonly id: ScheduleId;
-  readonly taskTemplate: DelegateRequest; // What to run when schedule triggers
+  readonly taskTemplate: TaskRequest; // What to run when schedule triggers
   readonly scheduleType: ScheduleType;
   readonly cronExpression?: string; // For CRON type: standard 5-field expression (minute hour day month weekday)
   readonly scheduledAt?: number; // For ONE_TIME type: epoch milliseconds
@@ -257,7 +257,7 @@ export interface Schedule {
  * ARCHITECTURE: Subset of Schedule fields that caller provides
  */
 export interface ScheduleRequest {
-  readonly taskTemplate: DelegateRequest;
+  readonly taskTemplate: TaskRequest;
   readonly scheduleType: ScheduleType;
   readonly cronExpression?: string; // Required for CRON type
   readonly scheduledAt?: number; // Required for ONE_TIME type

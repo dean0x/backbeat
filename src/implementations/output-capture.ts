@@ -4,7 +4,7 @@
  */
 
 import { TaskId, TaskOutput } from '../core/domain.js';
-import { DelegateError, ErrorCode } from '../core/errors.js';
+import { BackbeatError, ErrorCode } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
 import { OutputCapture } from '../core/interfaces.js';
 import { err, ok, Result } from '../core/result.js';
@@ -52,7 +52,7 @@ export class BufferedOutputCapture implements OutputCapture {
     // Check if adding this would exceed the limit
     if (buffer.totalSize + dataSize > bufferLimit) {
       return err(
-        new DelegateError(ErrorCode.SYSTEM_ERROR, `Output buffer limit exceeded for task ${taskId}`, {
+        new BackbeatError(ErrorCode.SYSTEM_ERROR, `Output buffer limit exceeded for task ${taskId}`, {
           currentSize: buffer.totalSize,
           maxSize: bufferLimit,
         }),

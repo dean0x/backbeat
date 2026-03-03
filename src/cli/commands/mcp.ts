@@ -6,9 +6,9 @@ import * as ui from '../ui.js';
 export function showConfig() {
   const config = {
     mcpServers: {
-      delegate: {
+      backbeat: {
         command: 'npx',
-        args: ['-y', '@dean0x/delegate', 'mcp', 'start'],
+        args: ['-y', 'backbeat', 'mcp', 'start'],
       },
     },
   };
@@ -26,9 +26,9 @@ Configuration file locations:
 For local development:
 {
   "mcpServers": {
-    "delegate": {
+    "backbeat": {
       "command": "node",
-      "args": ["/path/to/delegate/dist/index.js"]
+      "args": ["/path/to/backbeat/dist/index.js"]
     }
   }
 }
@@ -36,8 +36,8 @@ For local development:
 For global installation:
 {
   "mcpServers": {
-    "delegate": {
-      "command": "delegate",
+    "backbeat": {
+      "command": "beat",
       "args": ["mcp", "start"]
     }
   }
@@ -101,7 +101,7 @@ export function handleMcpTest(dirname: string) {
   });
 
   setTimeout(() => {
-    if (output.includes('Starting Delegate MCP Server') && !hasError) {
+    if (output.includes('Starting Backbeat MCP Server') && !hasError) {
       s.stop('Server started successfully');
       ui.success('Bootstrap completed without errors');
       mcp.kill();
