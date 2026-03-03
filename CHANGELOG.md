@@ -6,16 +6,58 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+Nothing yet.
+
+---
+
+## [0.4.0] - 2026-03-03
+
+First release as **backbeat** (renamed from `claudine`). 17 commits since v0.3.3, covering scheduling, resumption, architectural simplification, CLI overhaul, and two-phase rename.
+
+### 🚀 Major Features
+- **Task Scheduling**: Cron and one-time schedule support with 6 new MCP tools (`ScheduleTask`, `ListSchedules`, `GetSchedule`, `CancelSchedule`, `PauseSchedule`, `ResumeSchedule`) and 6 CLI commands. Full lifecycle management with pause/resume, missed run policies, timezone support, and execution history
+- **Task Resumption**: Resume failed/completed tasks with auto-checkpoints capturing output summary and git state. New `ResumeTask` MCP tool and `beat resume` CLI command
+- **Session Continuation** (`continueFrom`): Pass checkpoint context through dependency chains — dependent tasks automatically receive output, git state, and errors from predecessors
+- **CLI Detach Mode**: `--detach` flag (now default) re-spawns CLI as background process for fire-and-forget delegation. Use `--no-detach` for foreground mode
+- **CLI UX Overhaul**: Complete output redesign with `@clack/prompts` — spinners, structured output, colored status displays, clean box layouts
+- **Pipeline Command**: `beat pipeline` for sequential tasks with delays between steps
+
+### 🏗️ Architecture
+- **Git/Worktree Removal**: Removed 9 git fields, 5 interfaces, 3 events, 10+ CLI flags, deleted `worktree-manager.ts`, `github-integration.ts`, `worktree-handler.ts`. Major architectural simplification — Backbeat focuses on orchestration, not source control
+- **Handler Setup Extraction**: Extracted handler registration from `bootstrap.ts` into dedicated `handler-setup.ts`
+- **Schedule Service Extraction**: ~375 lines of schedule logic extracted from MCP adapter into `ScheduleManagerService`. CLI reuses same service for full feature parity
+- **CLI Bootstrap Helper**: `withServices()` eliminates 15-line bootstrap boilerplate per command
+
 ### 🚀 Performance Improvements
 - **Pagination for findAll() methods**: Added `limit` and `offset` parameters to `TaskRepository.findAll()` and `DependencyRepository.findAll()` with default limit of 100 records per page
 - **New findAllUnbounded() methods**: Explicit unbounded retrieval for operations that genuinely need all records (e.g., graph initialization)
 - **New count() methods**: Support pagination UI with total record counts without fetching all data
 
-### ⚠️ Breaking Changes
-- **findAll() now returns max 100 results by default**: Existing code calling `findAll()` without parameters will receive paginated results. Use `findAllUnbounded()` if you need all records.
+### 🐛 Bug Fixes
+- **FK Cascade on Task/Schedule Updates**: Separated `save()` from `update()` to prevent `INSERT OR REPLACE` from triggering `ON DELETE CASCADE` on child tables
+- **CJS/ESM Import Compatibility**: Fixed `cron-parser` named import failure in Node.js ESM runtime
+- **5 bug fixes in rename PR #60**: Various fixes discovered during the claudine → delegate migration
 
-### 🏗️ Architecture
-- **Explicit unbounded queries**: `DependencyHandler.create()` now uses `findAllUnbounded()` with architecture comment explaining why graph initialization requires all dependencies
+### 🛠️ Infrastructure
+- **Vitest 3 → 4**: Upgraded to resolve npm audit vulnerabilities (zero test changes)
+- **Biome Linter & Formatter**: Replaced ESLint/Prettier with Biome for launch readiness
+- **Explicit Release Workflow**: Removed auto-publish; releases now require manual GitHub Actions trigger
+- **Prepublish Safety Check**: Ensures `dist/` directory exists before `npm publish`
+- **Test Infrastructure**: Smart test grouping, deterministic synchronization, `npm test` blocked with safety warning, 2GB memory limits
+- **Database Migrations**: v4 (schedules), v5 (checkpoints), v6 (continue_from)
+- **Tech Debt Quick Wins**: Various cleanup from PR #41
+
+### ⚠️ Breaking Changes
+- **Package Rename**: `claudine` → `backbeat` (npm package, CLI binary `beat`, MCP server name, config paths)
+- **Environment Variables**: `CLAUDINE_*` → `BACKBEAT_*`
+- **Data Paths**: `~/.claudine/` → `~/.backbeat/` (no migration — start fresh)
+- **Library API**: `ClaudineError` → `BackbeatError`, `isClaudineError()` → `isBackbeatError()`
+- **findAll() Pagination**: Returns max 100 results by default. Use `findAllUnbounded()` for all records
+- **Git/Worktree Fields Removed**: `useWorktree`, `branchName`, `mergeStrategy` and related CLI flags no longer accepted
+
+### 🧪 Test Coverage
+- 11 new test files (~9,900 lines) covering scheduling, checkpoints, resumption, CLI, and integration
+- 1,200+ tests passing across all groups
 
 ---
 

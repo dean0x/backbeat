@@ -1,4 +1,4 @@
-# Backbeat v0.4.0 - Project Rename + Task Scheduling & Resumption
+# Backbeat v0.4.0 - First Release as Backbeat
 
 ## Project Rename: claudine → backbeat
 
@@ -116,6 +116,55 @@ await DelegateTask({
 beat run "npm test" --depends-on task-abc --continue-from task-abc
 ```
 
+### Git/Worktree Removal
+
+Removed all git and worktree operations from the full stack — a major architectural simplification.
+
+**Removed:**
+- 9 git-related fields (`useWorktree`, `branchName`, `mergeStrategy`, etc.)
+- 5 interfaces (`WorktreeManager`, `GitHubIntegration`, etc.)
+- 3 event types (`WorktreeCreated`, `WorktreeCleaned`, etc.)
+- 4 configuration fields and 10+ CLI flags
+- Deleted files: `worktree-manager.ts`, `github-integration.ts`, `worktree-handler.ts`, 3 test files, 1 dead fixture
+
+**Rationale:** Worktree management added complexity without value — Claude Code instances manage their own git state. Backbeat focuses on orchestration, not source control.
+
+### CLI Detach Mode
+
+Fire-and-forget task delegation with `--detach` flag (now the default).
+
+```bash
+# Default: detached — prints task ID and exits immediately
+beat run "npm test"
+
+# Foreground: attach to output stream
+beat run "npm test" --no-detach
+```
+
+**How it works:** The CLI re-spawns itself as a detached background process. The foreground process polls the log file for the task ID, prints it, and exits. No dangling terminal sessions.
+
+### CLI UX Overhaul
+
+Complete CLI output redesign using `@clack/prompts`:
+- Spinners for long-running operations (bootstrap, task delegation)
+- Structured output with colored status displays
+- Clean task status formatting with box layouts
+- Consistent error presentation across all commands
+
+### Pagination
+
+`findAll()` methods now return paginated results (max 100 by default):
+- `TaskRepository.findAll(limit?, offset?)` — paginated with default limit of 100
+- `DependencyRepository.findAll(limit?, offset?)` — same pagination semantics
+- New `findAllUnbounded()` — explicit unbounded retrieval for graph initialization
+- New `count()` methods — support pagination UI with total record counts
+
+### Project Rename: claudine → delegate → backbeat
+
+Two-phase rename across the full stack (PRs #60, #66):
+1. `claudine` → `delegate` (PR #60): Package name, CLI binary, config paths, error types
+2. `delegate` → `backbeat` (PR #66): Final naming — "the background rhythm driving everything forward"
+
 ---
 
 ## Bug Fixes
@@ -148,6 +197,24 @@ Added `withServices()` helper that eliminates 15-line bootstrap boilerplate repe
 - **v4**: `schedules` and `schedule_executions` tables (cron config, timezone, missed run policy, execution history)
 - **v5**: `task_checkpoints` table (auto-checkpoints with git state, output summary) and `after_schedule_id` column
 - **v6**: `continue_from` column on tasks table (session continuation through dependency chains)
+
+### Handler Setup Extraction
+Extracted handler registration from `bootstrap.ts` into dedicated `handler-setup.ts` module. Cleaner separation of bootstrap orchestration from handler wiring.
+
+### Vitest 3 → 4 Upgrade
+Upgraded Vitest from v3 to v4 to resolve npm audit vulnerabilities. Zero test changes required.
+
+### Explicit Release Workflow
+Removed auto-publish on merge. Releases now require manual trigger from GitHub Actions → Release → Run workflow. Added prepublish safety check ensuring `dist/` directory exists before `npm publish`.
+
+### Biome Linter & Formatter
+Adopted Biome for linting and formatting as part of launch readiness. Replaced ESLint/Prettier with a single, faster tool.
+
+### Test Infrastructure
+- Replaced timing-based test waits with deterministic synchronization
+- Smart test grouping to prevent Vitest worker memory exhaustion
+- `npm test` blocked with safety warning; use `npm run test:all` for full suite
+- Memory limits: 2GB per process, 1GB vmMemoryLimit for worker restart
 
 ---
 
@@ -190,6 +257,14 @@ Added `withServices()` helper that eliminates 15-line bootstrap boilerplate repe
 - `ClaudineError` → `BackbeatError`
 - `isClaudineError()` → `isBackbeatError()`
 - `toClaudineError()` → `toBackbeatError()`
+
+### Pagination Default
+- `findAll()` now returns max 100 results by default
+- Use `findAllUnbounded()` for unbounded retrieval
+
+### Git/Worktree Fields Removed
+- `useWorktree`, `branchName`, `mergeStrategy` and related fields no longer accepted
+- All git-related CLI flags removed
 
 Scheduling and resumption features are additive — existing databases auto-migrate on startup.
 
