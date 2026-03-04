@@ -86,6 +86,12 @@ export enum ErrorCode {
   QUEUE_FULL = 'QUEUE_FULL',
   /** Attempted operation on empty queue */
   QUEUE_EMPTY = 'QUEUE_EMPTY',
+
+  // Agent errors (v0.5.0 Multi-Agent Support)
+  /** Requested agent provider is not registered in the registry */
+  AGENT_NOT_FOUND = 'AGENT_NOT_FOUND',
+  /** Agent adapter exists but is misconfigured (e.g., CLI not installed) */
+  AGENT_MISCONFIGURED = 'AGENT_MISCONFIGURED',
 }
 
 /**
@@ -156,6 +162,19 @@ export const resourceLimitExceeded = (resourceType: string, limit: number, curre
     `Resource limit exceeded for ${resourceType}: limit=${limit}, current=${current}`,
     { resourceType, limit, current },
   );
+
+export const agentNotFound = (provider: string, available: readonly string[]): BackbeatError =>
+  new BackbeatError(
+    ErrorCode.AGENT_NOT_FOUND,
+    `Agent '${provider}' not found. Available agents: ${available.join(', ')}`,
+    { provider, available },
+  );
+
+export const agentMisconfigured = (provider: string, reason: string): BackbeatError =>
+  new BackbeatError(ErrorCode.AGENT_MISCONFIGURED, `Agent '${provider}' is misconfigured: ${reason}`, {
+    provider,
+    reason,
+  });
 
 /**
  * Type guard for BackbeatError
