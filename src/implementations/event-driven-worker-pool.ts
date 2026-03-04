@@ -1,14 +1,18 @@
 /**
  * Event-driven worker pool implementation
  * Eliminates race conditions through event-based coordination
+ *
+ * ARCHITECTURE (v0.5.0): Uses AgentRegistry to resolve the correct agent adapter
+ * per task. Defaults to 'claude' when task.agent is not specified.
  */
 
 import { ChildProcess } from 'child_process';
 
+import { AgentRegistry, DEFAULT_AGENT } from '../core/agents.js';
 import { Task, TaskId, Worker, WorkerId } from '../core/domain.js';
 import { BackbeatError, ErrorCode, taskTimeout } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
-import { Logger, OutputCapture, ProcessSpawner, ResourceMonitor, WorkerPool } from '../core/interfaces.js';
+import { Logger, OutputCapture, ResourceMonitor, WorkerPool } from '../core/interfaces.js';
 import { err, ok, Result } from '../core/result.js';
 import { ProcessConnector } from '../services/process-connector.js';
 
@@ -24,7 +28,7 @@ export class EventDrivenWorkerPool implements WorkerPool {
   private readonly processConnector: ProcessConnector;
 
   constructor(
-    private readonly spawner: ProcessSpawner,
+    private readonly agentRegistry: AgentRegistry,
     private readonly monitor: ResourceMonitor,
     private readonly logger: Logger,
     private readonly eventBus: EventBus,
@@ -37,6 +41,7 @@ export class EventDrivenWorkerPool implements WorkerPool {
     this.logger.debug('Spawning worker for task', {
       taskId: task.id,
       prompt: task.prompt.substring(0, 100),
+      agent: task.agent ?? DEFAULT_AGENT,
     });
 
     // Check if we can spawn based on resources
@@ -50,10 +55,21 @@ export class EventDrivenWorkerPool implements WorkerPool {
       return err(new BackbeatError(ErrorCode.INSUFFICIENT_RESOURCES, 'Insufficient resources to spawn worker'));
     }
 
+    // Resolve the agent adapter for this task
+    const agentProvider = task.agent ?? DEFAULT_AGENT;
+    const adapterResult = this.agentRegistry.get(agentProvider);
+
+    if (!adapterResult.ok) {
+      return err(
+        new BackbeatError(ErrorCode.WORKER_SPAWN_FAILED, `Failed to spawn worker: ${adapterResult.error.message}`),
+      );
+    }
+
+    const adapter = adapterResult.value;
     const finalWorkingDirectory = task.workingDirectory || process.cwd();
 
-    // Spawn the process with task ID for identification
-    const spawnResult = this.spawner.spawn(task.prompt, finalWorkingDirectory, task.id);
+    // Spawn the process using the resolved adapter
+    const spawnResult = adapter.spawn(task.prompt, finalWorkingDirectory, task.id);
 
     if (!spawnResult.ok) {
       return err(
@@ -92,6 +108,7 @@ export class EventDrivenWorkerPool implements WorkerPool {
       taskId: task.id,
       workerId: worker.id,
       pid: worker.pid,
+      agent: agentProvider,
     });
 
     // Note: WorkerSpawned event is emitted by WorkerHandler, not here

@@ -42,7 +42,10 @@ export interface BootstrapOptions {
 
 // Adapter
 import { MCPAdapter } from './adapters/mcp-adapter.js';
+import { AgentRegistry } from './core/agents.js';
+import { InMemoryAgentRegistry } from './implementations/agent-registry.js';
 import { SQLiteCheckpointRepository } from './implementations/checkpoint-repository.js';
+import { ClaudeAdapter } from './implementations/claude-adapter.js';
 import { Database } from './implementations/database.js';
 import { SQLiteDependencyRepository } from './implementations/dependency-repository.js';
 import { EventDrivenWorkerPool } from './implementations/event-driven-worker-pool.js';
@@ -50,6 +53,7 @@ import { ConsoleLogger, LogLevel, StructuredLogger } from './implementations/log
 import { BufferedOutputCapture } from './implementations/output-capture.js';
 import { SQLiteOutputRepository } from './implementations/output-repository.js';
 import { ClaudeProcessSpawner } from './implementations/process-spawner.js';
+import { ProcessSpawnerAdapter } from './implementations/process-spawner-adapter.js';
 import { SystemResourceMonitor } from './implementations/resource-monitor.js';
 import { SQLiteScheduleRepository } from './implementations/schedule-repository.js';
 // Implementations
@@ -260,6 +264,23 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
     return new ClaudeProcessSpawner(configResult.value, 'claude');
   });
 
+  // Register AgentRegistry for multi-agent support (v0.5.0)
+  // ARCHITECTURE: If a custom ProcessSpawner is injected (tests), wrap it in a
+  // compatibility adapter. Otherwise, create the real ClaudeAdapter.
+  // Phase 1: Only Claude is registered. Phase 2 will add Codex, Gemini, Aider.
+  container.registerSingleton('agentRegistry', () => {
+    if (options.processSpawner) {
+      logger.info('Using ProcessSpawnerAdapter for injected ProcessSpawner');
+      const adapter = new ProcessSpawnerAdapter(options.processSpawner);
+      return new InMemoryAgentRegistry([adapter]);
+    }
+
+    const configResult = container.get<Configuration>('config');
+    if (!configResult.ok) throw new Error('Config required for AgentRegistry');
+    const adapters = [new ClaudeAdapter(configResult.value)];
+    return new InMemoryAgentRegistry(adapters);
+  });
+
   container.registerSingleton('resourceMonitor', () => {
     // Use provided resourceMonitor if given (e.g., TestResourceMonitor for tests)
     if (options.resourceMonitor) {
@@ -297,10 +318,10 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
     return new BufferedOutputCapture(config.maxOutputBuffer, eventBus);
   });
 
-  // Register worker pool
+  // Register worker pool (v0.5.0: uses AgentRegistry instead of ProcessSpawner)
   container.registerSingleton('workerPool', () => {
     const pool = new EventDrivenWorkerPool(
-      getFromContainer<ProcessSpawner>(container, 'processSpawner'),
+      getFromContainer<AgentRegistry>(container, 'agentRegistry'),
       getFromContainer<ResourceMonitor>(container, 'resourceMonitor'),
       getFromContainer<Logger>(container, 'logger').child({ module: 'WorkerPool' }),
       getFromContainer<EventBus>(container, 'eventBus'),
