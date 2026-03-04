@@ -8,6 +8,9 @@
 import {
   createSchedule,
   MissedRunPolicy,
+  PipelineCreateRequest,
+  PipelineResult,
+  PipelineStep,
   Priority,
   Schedule,
   ScheduleCreateRequest,
@@ -274,6 +277,64 @@ export class ScheduleManagerService implements ScheduleService {
     }
 
     return ok(undefined);
+  }
+
+  async createPipeline(request: PipelineCreateRequest): Promise<Result<PipelineResult>> {
+    const { steps } = request;
+
+    if (steps.length < 2) {
+      return err(
+        new BackbeatError(ErrorCode.INVALID_INPUT, 'Pipeline requires at least 2 steps', {
+          stepCount: steps.length,
+        }),
+      );
+    }
+
+    if (steps.length > 20) {
+      return err(
+        new BackbeatError(ErrorCode.INVALID_INPUT, 'Pipeline cannot exceed 20 steps', {
+          stepCount: steps.length,
+        }),
+      );
+    }
+
+    // +2s buffer so "now" doesn't become "past" during validation
+    const scheduledAt = new Date(Date.now() + 2000).toISOString();
+    const createdSteps: PipelineStep[] = [];
+    let previousScheduleId: ScheduleId | undefined;
+
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      const result = await this.createSchedule({
+        prompt: step.prompt,
+        scheduleType: ScheduleType.ONE_TIME,
+        scheduledAt,
+        priority: step.priority ?? request.priority,
+        workingDirectory: step.workingDirectory ?? request.workingDirectory,
+        afterScheduleId: previousScheduleId,
+      });
+
+      if (!result.ok) {
+        return err(
+          new BackbeatError(ErrorCode.SYSTEM_ERROR, `Pipeline failed at step ${i + 1}: ${result.error.message}`, {
+            failedAtStep: i + 1,
+            createdSteps,
+          }),
+        );
+      }
+
+      previousScheduleId = result.value.id;
+      createdSteps.push({
+        index: i,
+        scheduleId: result.value.id,
+        prompt: step.prompt.substring(0, 50) + (step.prompt.length > 50 ? '...' : ''),
+      });
+    }
+
+    return ok({
+      pipelineId: createdSteps[0].scheduleId,
+      steps: createdSteps,
+    });
   }
 
   /**
