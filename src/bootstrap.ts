@@ -44,8 +44,11 @@ export interface BootstrapOptions {
 import { MCPAdapter } from './adapters/mcp-adapter.js';
 import { AgentRegistry } from './core/agents.js';
 import { InMemoryAgentRegistry } from './implementations/agent-registry.js';
+import { AiderAdapter } from './implementations/aider-adapter.js';
 import { SQLiteCheckpointRepository } from './implementations/checkpoint-repository.js';
 import { ClaudeAdapter } from './implementations/claude-adapter.js';
+import { CodexAdapter } from './implementations/codex-adapter.js';
+import { GeminiAdapter } from './implementations/gemini-adapter.js';
 import { Database } from './implementations/database.js';
 import { SQLiteDependencyRepository } from './implementations/dependency-repository.js';
 import { EventDrivenWorkerPool } from './implementations/event-driven-worker-pool.js';
@@ -266,8 +269,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
 
   // Register AgentRegistry for multi-agent support (v0.5.0)
   // ARCHITECTURE: If a custom ProcessSpawner is injected (tests), wrap it in a
-  // compatibility adapter. Otherwise, create the real ClaudeAdapter.
-  // Phase 1: Only Claude is registered. Phase 2 will add Codex, Gemini, Aider.
+  // compatibility adapter. Otherwise, register all 4 agent adapters.
   container.registerSingleton('agentRegistry', () => {
     if (options.processSpawner) {
       logger.info('Using ProcessSpawnerAdapter for injected ProcessSpawner');
@@ -277,7 +279,13 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
 
     const configResult = container.get<Configuration>('config');
     if (!configResult.ok) throw new Error('Config required for AgentRegistry');
-    const adapters = [new ClaudeAdapter(configResult.value)];
+    const cfg = configResult.value;
+    const adapters = [
+      new ClaudeAdapter(cfg),
+      new CodexAdapter(cfg),
+      new GeminiAdapter(cfg),
+      new AiderAdapter(cfg),
+    ];
     return new InMemoryAgentRegistry(adapters);
   });
 
@@ -388,6 +396,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
       taskManagerResult.value,
       getFromContainer<Logger>(container, 'logger').child({ module: 'MCP' }),
       getFromContainer<ScheduleService>(container, 'scheduleService'),
+      getFromContainer<AgentRegistry>(container, 'agentRegistry'),
     );
   });
 

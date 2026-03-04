@@ -160,6 +160,7 @@ export class ScheduleManagerService implements ScheduleService {
         prompt: request.prompt,
         priority: request.priority,
         workingDirectory: validatedWorkingDirectory,
+        agent: request.agent,
       },
       scheduleType: request.scheduleType,
       cronExpression: request.cronExpression,
@@ -320,6 +321,7 @@ export class ScheduleManagerService implements ScheduleService {
         priority: step.priority ?? request.priority,
         workingDirectory: step.workingDirectory ?? request.workingDirectory,
         afterScheduleId: previousScheduleId,
+        agent: step.agent,
       });
 
       if (!result.ok) {
