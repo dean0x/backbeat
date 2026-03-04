@@ -12,6 +12,7 @@ import { BufferedOutputCapture } from '../../src/implementations/output-capture.
 import { PriorityTaskQueue } from '../../src/implementations/task-queue.js';
 import { AutoscalingManager } from '../../src/services/autoscaling-manager.js';
 import { createTestConfiguration } from '../fixtures/factories.js';
+import { createAgentRegistryFromSpawner } from '../fixtures/mock-agent.js';
 import { MockProcessSpawner } from '../fixtures/mock-process-spawner.js';
 import { MockResourceMonitor } from '../fixtures/mock-resource-monitor.js';
 import { createTestTask as createTask } from '../fixtures/test-data.js';
@@ -27,8 +28,9 @@ describe('Integration: Worker pool management', () => {
     const outputCapture = new BufferedOutputCapture(10 * 1024 * 1024, eventBus);
     const resourceMonitor = new MockResourceMonitor();
 
+    const agentRegistry = createAgentRegistryFromSpawner(processSpawner);
     const workerPool = new EventDrivenWorkerPool(
-      processSpawner, // spawner
+      agentRegistry, // agentRegistry
       resourceMonitor, // monitor
       logger, // logger
       eventBus, // eventBus
@@ -160,8 +162,9 @@ describe('Integration: Worker pool management', () => {
     const processSpawner = new MockProcessSpawner();
     const outputCapture = new BufferedOutputCapture(10 * 1024 * 1024, eventBus);
 
+    const agentRegistry = createAgentRegistryFromSpawner(processSpawner);
     const workerPool = new EventDrivenWorkerPool(
-      processSpawner, // spawner
+      agentRegistry, // agentRegistry
       resourceMonitor, // monitor
       logger, // logger
       eventBus, // eventBus

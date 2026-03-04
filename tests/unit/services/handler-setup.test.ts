@@ -9,10 +9,12 @@ import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Container } from '../../../src/core/container';
 import { InMemoryEventBus } from '../../../src/core/events/event-bus';
+import { InMemoryAgentRegistry } from '../../../src/implementations/agent-registry';
 import { Database } from '../../../src/implementations/database';
 import { SQLiteDependencyRepository } from '../../../src/implementations/dependency-repository';
 import { EventDrivenWorkerPool } from '../../../src/implementations/event-driven-worker-pool';
 import { BufferedOutputCapture } from '../../../src/implementations/output-capture';
+import { ProcessSpawnerAdapter } from '../../../src/implementations/process-spawner-adapter';
 import { SystemResourceMonitor } from '../../../src/implementations/resource-monitor';
 import { PriorityTaskQueue } from '../../../src/implementations/task-queue';
 import { SQLiteTaskRepository } from '../../../src/implementations/task-repository';
@@ -57,9 +59,12 @@ describe('handler-setup', () => {
     const resourceMonitor = new SystemResourceMonitor(config, eventBus, logger.child({ module: 'ResourceMonitor' }));
     container.registerValue('resourceMonitor', resourceMonitor);
 
-    // Worker pool with test spawner
+    // Worker pool with test spawner wrapped in AgentRegistry
+    const agentRegistry = new InMemoryAgentRegistry([
+      new ProcessSpawnerAdapter(new TestProcessSpawner()),
+    ]);
     const workerPool = new EventDrivenWorkerPool(
-      new TestProcessSpawner(),
+      agentRegistry,
       resourceMonitor,
       logger.child({ module: 'WorkerPool' }),
       eventBus,

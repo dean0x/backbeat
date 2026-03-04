@@ -18,6 +18,7 @@ import { PriorityTaskQueue } from '../../src/implementations/task-queue.js';
 import { SQLiteTaskRepository } from '../../src/implementations/task-repository.js';
 import { TaskManagerService } from '../../src/services/task-manager.js';
 import { createTestConfiguration } from '../fixtures/factories.js';
+import { createAgentRegistryFromSpawner } from '../fixtures/mock-agent.js';
 import { MockProcessSpawner } from '../fixtures/mock-process-spawner.js';
 import { createTestTask as createTask } from '../fixtures/test-data.js';
 import { TestLogger } from '../fixtures/test-doubles.js';
@@ -42,8 +43,9 @@ describe('Integration: Event-driven task delegation flow', () => {
     const processSpawner = new MockProcessSpawner();
     const outputCapture = new BufferedOutputCapture(10 * 1024 * 1024, eventBus);
 
+    const agentRegistry = createAgentRegistryFromSpawner(processSpawner);
     const workerPool = new EventDrivenWorkerPool(
-      processSpawner, // spawner
+      agentRegistry, // agentRegistry
       resourceMonitor, // monitor
       logger, // logger
       eventBus, // eventBus

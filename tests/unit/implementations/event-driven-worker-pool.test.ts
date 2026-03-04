@@ -1,12 +1,15 @@
 import { EventEmitter } from 'events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AgentRegistry } from '../../../src/core/agents';
 import type { Task } from '../../../src/core/domain';
 import { TaskId, WorkerId } from '../../../src/core/domain';
 import { BackbeatError, ErrorCode } from '../../../src/core/errors';
 import type { EventBus } from '../../../src/core/events/event-bus';
 import type { Logger, OutputCapture, ProcessSpawner, ResourceMonitor } from '../../../src/core/interfaces';
 import { err, ok } from '../../../src/core/result';
+import { InMemoryAgentRegistry } from '../../../src/implementations/agent-registry';
 import { EventDrivenWorkerPool } from '../../../src/implementations/event-driven-worker-pool';
+import { ProcessSpawnerAdapter } from '../../../src/implementations/process-spawner-adapter';
 import { TaskFactory } from '../../fixtures/factories';
 import { createMockLogger } from '../../fixtures/mocks';
 
@@ -84,6 +87,7 @@ const buildTask = (configure?: (factory: TaskFactory) => void): Task => {
 describe('EventDrivenWorkerPool', () => {
   let pool: EventDrivenWorkerPool;
   let spawner: ProcessSpawner;
+  let agentRegistry: AgentRegistry;
   let mockProcess: ReturnType<typeof createMockProcess>;
   let monitor: ResourceMonitor;
   let logger: Logger;
@@ -100,7 +104,10 @@ describe('EventDrivenWorkerPool', () => {
     eventBus = createTestEventBus();
     outputCapture = createMockOutputCapture();
 
-    pool = new EventDrivenWorkerPool(spawner, monitor, logger, eventBus, outputCapture);
+    // Wrap ProcessSpawner in AgentRegistry for backward compatibility
+    agentRegistry = new InMemoryAgentRegistry([new ProcessSpawnerAdapter(spawner)]);
+
+    pool = new EventDrivenWorkerPool(agentRegistry, monitor, logger, eventBus, outputCapture);
   });
 
   afterEach(() => {
