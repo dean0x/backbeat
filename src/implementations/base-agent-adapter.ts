@@ -49,7 +49,9 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
       const args = this.buildArgs(finalPrompt);
 
       const cleanEnv = Object.fromEntries(
-        Object.entries(process.env).filter(([key]) => !this.envPrefixesToStrip.some((prefix) => key.startsWith(prefix))),
+        Object.entries(process.env).filter(
+          ([key]) => !this.envPrefixesToStrip.some((prefix) => key.startsWith(prefix)),
+        ),
       );
       const env = {
         ...cleanEnv,

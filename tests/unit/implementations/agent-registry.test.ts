@@ -7,8 +7,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentAdapter, AgentProvider } from '../../../src/core/agents';
-import { InMemoryAgentRegistry } from '../../../src/implementations/agent-registry';
 import { ok } from '../../../src/core/result';
+import { InMemoryAgentRegistry } from '../../../src/implementations/agent-registry';
 
 function createMockAdapter(provider: AgentProvider): AgentAdapter {
   return {

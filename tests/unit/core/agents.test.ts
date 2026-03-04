@@ -6,11 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  AGENT_PROVIDERS,
-  DEFAULT_AGENT,
-  isAgentProvider,
-} from '../../../src/core/agents';
+import { AGENT_PROVIDERS, DEFAULT_AGENT, isAgentProvider } from '../../../src/core/agents';
 
 describe('Agent Types (v0.5.0)', () => {
   describe('AGENT_PROVIDERS constant', () => {

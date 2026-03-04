@@ -1,4 +1,4 @@
-import { isAgentProvider, type AgentProvider } from '../../core/agents.js';
+import { type AgentProvider, isAgentProvider } from '../../core/agents.js';
 import { ScheduleId } from '../../core/domain.js';
 import type { ScheduleService } from '../../core/interfaces.js';
 import { validatePath } from '../../utils/validation.js';

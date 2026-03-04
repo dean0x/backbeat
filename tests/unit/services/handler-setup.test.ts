@@ -60,9 +60,7 @@ describe('handler-setup', () => {
     container.registerValue('resourceMonitor', resourceMonitor);
 
     // Worker pool with test spawner wrapped in AgentRegistry
-    const agentRegistry = new InMemoryAgentRegistry([
-      new ProcessSpawnerAdapter(new TestProcessSpawner()),
-    ]);
+    const agentRegistry = new InMemoryAgentRegistry([new ProcessSpawnerAdapter(new TestProcessSpawner())]);
     const workerPool = new EventDrivenWorkerPool(
       agentRegistry,
       resourceMonitor,

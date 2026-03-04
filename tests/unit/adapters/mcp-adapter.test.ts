@@ -772,12 +772,7 @@ describe('MCPAdapter - Multi-Agent Support (v0.5.0)', () => {
         dispose: vi.fn(),
       };
 
-      const adapterWithRegistry = new MCPAdapter(
-        mockTaskManager,
-        mockLogger,
-        stubScheduleService,
-        mockRegistry,
-      );
+      const adapterWithRegistry = new MCPAdapter(mockTaskManager, mockLogger, stubScheduleService, mockRegistry);
 
       expect(adapterWithRegistry).toBeTruthy();
       expect(adapterWithRegistry.getServer()).toBeTruthy();

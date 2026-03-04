@@ -6,6 +6,7 @@ process.title = 'beat-cli';
 import { readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { listAgents } from './cli/commands/agents.js';
 import { cancelTask } from './cli/commands/cancel.js';
 import { configPath, configReset, configSet, configShow } from './cli/commands/config.js';
 import { showHelp } from './cli/commands/help.js';
@@ -17,9 +18,8 @@ import { retryTask } from './cli/commands/retry.js';
 import { handleDetachMode, runTask } from './cli/commands/run.js';
 import { handleScheduleCommand } from './cli/commands/schedule.js';
 import { getTaskStatus } from './cli/commands/status.js';
-import { listAgents } from './cli/commands/agents.js';
-import { isAgentProvider } from './core/agents.js';
 import * as ui from './cli/ui.js';
+import { isAgentProvider } from './core/agents.js';
 import { validateBufferSize, validatePath, validateTimeout } from './utils/validation.js';
 
 const __filename = fileURLToPath(import.meta.url);

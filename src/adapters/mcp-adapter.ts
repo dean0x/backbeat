@@ -122,10 +122,7 @@ const CreatePipelineSchema = z.object({
         prompt: z.string().min(1).max(4000).describe('Task prompt for this step'),
         priority: z.enum(['P0', 'P1', 'P2']).optional().describe('Priority override for this step'),
         workingDirectory: z.string().optional().describe('Working directory override (absolute path)'),
-        agent: z
-          .enum(['claude', 'codex', 'gemini', 'aider'])
-          .optional()
-          .describe('Agent override for this step'),
+        agent: z.enum(['claude', 'codex', 'gemini', 'aider']).optional().describe('Agent override for this step'),
       }),
     )
     .min(2, 'Pipeline requires at least 2 steps')

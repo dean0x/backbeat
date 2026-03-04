@@ -1,4 +1,4 @@
-import { isAgentProvider, type AgentProvider } from '../../core/agents.js';
+import { type AgentProvider, isAgentProvider } from '../../core/agents.js';
 import { withServices } from '../services.js';
 import * as ui from '../ui.js';
 

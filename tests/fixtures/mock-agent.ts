@@ -7,10 +7,10 @@
 
 import { vi } from 'vitest';
 import type { AgentAdapter, AgentProvider, AgentRegistry } from '../../src/core/agents';
-import { InMemoryAgentRegistry } from '../../src/implementations/agent-registry';
-import { ProcessSpawnerAdapter } from '../../src/implementations/process-spawner-adapter';
 import type { ProcessSpawner } from '../../src/core/interfaces';
 import { ok } from '../../src/core/result';
+import { InMemoryAgentRegistry } from '../../src/implementations/agent-registry';
+import { ProcessSpawnerAdapter } from '../../src/implementations/process-spawner-adapter';
 
 /**
  * Create an AgentRegistry from a ProcessSpawner (backward compatibility)

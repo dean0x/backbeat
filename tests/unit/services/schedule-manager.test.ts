@@ -6,7 +6,14 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { PipelineCreateRequest, ScheduleCreateRequest } from '../../../src/core/domain';
-import { createSchedule, MissedRunPolicy, Priority, ScheduleId, ScheduleStatus, ScheduleType } from '../../../src/core/domain';
+import {
+  createSchedule,
+  MissedRunPolicy,
+  Priority,
+  ScheduleId,
+  ScheduleStatus,
+  ScheduleType,
+} from '../../../src/core/domain';
 import { Database } from '../../../src/implementations/database';
 import { SQLiteScheduleRepository } from '../../../src/implementations/schedule-repository';
 import { ScheduleManagerService, toMissedRunPolicy } from '../../../src/services/schedule-manager';
@@ -497,9 +504,7 @@ describe('ScheduleManagerService - Unit Tests', () => {
     });
 
     it('should use shared priority as default for all steps', async () => {
-      const result = await service.createPipeline(
-        pipelineRequest({ priority: Priority.P0 }),
-      );
+      const result = await service.createPipeline(pipelineRequest({ priority: Priority.P0 }));
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -516,10 +521,7 @@ describe('ScheduleManagerService - Unit Tests', () => {
 
     it('should allow per-step priority override', async () => {
       const result = await service.createPipeline({
-        steps: [
-          { prompt: 'Step one', priority: Priority.P1 },
-          { prompt: 'Step two' },
-        ],
+        steps: [{ prompt: 'Step one', priority: Priority.P1 }, { prompt: 'Step two' }],
         priority: Priority.P2,
       });
 
@@ -533,9 +535,7 @@ describe('ScheduleManagerService - Unit Tests', () => {
 
     it('should use shared workingDirectory as default', async () => {
       const cwd = process.cwd();
-      const result = await service.createPipeline(
-        pipelineRequest({ workingDirectory: cwd }),
-      );
+      const result = await service.createPipeline(pipelineRequest({ workingDirectory: cwd }));
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -550,10 +550,7 @@ describe('ScheduleManagerService - Unit Tests', () => {
       const cwd = process.cwd();
       const overrideDir = `${cwd}/src`;
       const result = await service.createPipeline({
-        steps: [
-          { prompt: 'Step one', workingDirectory: overrideDir },
-          { prompt: 'Step two' },
-        ],
+        steps: [{ prompt: 'Step one', workingDirectory: overrideDir }, { prompt: 'Step two' }],
         workingDirectory: cwd,
       });
 

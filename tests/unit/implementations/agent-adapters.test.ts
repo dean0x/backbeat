@@ -7,13 +7,13 @@
  * Pattern: child_process.spawn is mocked to verify args/env without spawning real processes
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChildProcess } from 'child_process';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Configuration } from '../../../src/core/configuration';
+import { AiderAdapter } from '../../../src/implementations/aider-adapter';
 import { ClaudeAdapter } from '../../../src/implementations/claude-adapter';
 import { CodexAdapter } from '../../../src/implementations/codex-adapter';
 import { GeminiAdapter } from '../../../src/implementations/gemini-adapter';
-import { AiderAdapter } from '../../../src/implementations/aider-adapter';
 
 // Mock child_process.spawn
 vi.mock('child_process', () => ({

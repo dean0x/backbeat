@@ -282,12 +282,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
     const configResult = container.get<Configuration>('config');
     if (!configResult.ok) throw new Error('Config required for AgentRegistry');
     const cfg = configResult.value;
-    const adapters = [
-      new ClaudeAdapter(cfg),
-      new CodexAdapter(cfg),
-      new GeminiAdapter(cfg),
-      new AiderAdapter(cfg),
-    ];
+    const adapters = [new ClaudeAdapter(cfg), new CodexAdapter(cfg), new GeminiAdapter(cfg), new AiderAdapter(cfg)];
     return new InMemoryAgentRegistry(adapters);
   });
 

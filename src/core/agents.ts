@@ -21,12 +21,7 @@ export type AgentProvider = 'claude' | 'codex' | 'gemini' | 'aider';
  * All valid agent providers as a readonly array
  * Used for validation and iteration
  */
-export const AGENT_PROVIDERS: readonly AgentProvider[] = Object.freeze([
-  'claude',
-  'codex',
-  'gemini',
-  'aider',
-] as const);
+export const AGENT_PROVIDERS: readonly AgentProvider[] = Object.freeze(['claude', 'codex', 'gemini', 'aider'] as const);
 
 /**
  * Default agent when none is specified
