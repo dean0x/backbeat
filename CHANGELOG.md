@@ -10,6 +10,20 @@ Nothing yet.
 
 ---
 
+## [0.4.1] - 2026-03-04
+
+### 🚀 Features
+- **CreatePipeline MCP Tool**: New `CreatePipeline` tool for creating sequential task pipelines via MCP (closes CLI/MCP feature parity gap). Accepts 2–20 steps with per-step priority and working directory overrides
+- **Pipeline Service Extraction**: Pipeline creation logic extracted from CLI into `ScheduleManagerService.createPipeline()` — one business logic path shared by MCP and CLI
+
+### 🏗️ Architecture
+- **CLI Pipeline Refactor**: `beat pipeline` command refactored from inline schedule loop to shared service call (68 → 42 lines)
+
+### 🧪 Test Coverage
+- 17 new tests (11 service + 6 adapter) covering pipeline bounds, chaining, priority/workDir inheritance, prompt truncation, and failure propagation
+
+---
+
 ## [0.4.0] - 2026-03-03
 
 First release as **backbeat** (renamed from `claudine`). 17 commits since v0.3.3, covering scheduling, resumption, architectural simplification, CLI overhaul, and two-phase rename.

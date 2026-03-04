@@ -201,6 +201,7 @@ Last Updated: February 2026
 - **CancelSchedule**: Cancel an active schedule with optional reason
 - **PauseSchedule**: Pause an active schedule (can be resumed later)
 - **ResumeSchedule**: Resume a paused schedule
+- **CreatePipeline** (v0.4.1): Create sequential task pipelines with 2–20 steps, per-step delays, priority, and working directory overrides
 
 ### Schedule Types
 - **CRON**: Standard 5-field cron expressions for recurring task execution
@@ -252,6 +253,15 @@ Last Updated: February 2026
 - **REST API**: MCP protocol only
 
 ---
+
+---
+
+## 🆕 What's New in v0.4.1
+
+### CreatePipeline MCP Tool
+- **Pipeline Creation via MCP**: New `CreatePipeline` tool closes the last CLI/MCP feature parity gap
+- **2–20 Steps**: Sequential task pipelines with per-step delays, priority, and working directory overrides
+- **Shared Service**: Both MCP and CLI use `ScheduleManagerService.createPipeline()` — identical behavior
 
 ---
 
