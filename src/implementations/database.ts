@@ -513,6 +513,13 @@ export class Database {
           db.exec(`ALTER TABLE tasks ADD COLUMN continue_from TEXT`);
         },
       },
+      {
+        version: 7,
+        description: 'Add agent column for multi-agent support (v0.5.0)',
+        up: (db) => {
+          db.exec(`ALTER TABLE tasks ADD COLUMN agent TEXT DEFAULT 'claude'`);
+        },
+      },
     ];
   }
 

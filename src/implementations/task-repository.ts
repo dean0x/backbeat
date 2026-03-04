@@ -5,6 +5,7 @@
 
 import SQLite from 'better-sqlite3';
 import { z } from 'zod';
+import { AgentProvider } from '../core/agents.js';
 import { Priority, Task, TaskId, TaskStatus, WorkerId } from '../core/domain.js';
 import { BackbeatError, ErrorCode, operationErrorHandler } from '../core/errors.js';
 import { TaskRepository } from '../core/interfaces.js';
@@ -33,6 +34,7 @@ const TaskRowSchema = z.object({
   exit_code: z.number().nullable(),
   dependencies: z.string().nullable(),
   continue_from: z.string().nullable(),
+  agent: z.string().nullable(),
 });
 
 /**
@@ -57,6 +59,7 @@ interface TaskRow {
   readonly exit_code: number | null;
   readonly dependencies: string | null;
   readonly continue_from: string | null;
+  readonly agent: string | null;
 }
 
 export class SQLiteTaskRepository implements TaskRepository {
@@ -83,12 +86,12 @@ export class SQLiteTaskRepository implements TaskRepository {
         id, prompt, status, priority, working_directory,
         timeout, max_output_buffer,
         created_at, started_at, completed_at, worker_id, exit_code, dependencies,
-        parent_task_id, retry_count, retry_of, continue_from
+        parent_task_id, retry_count, retry_of, continue_from, agent
       ) VALUES (
         @id, @prompt, @status, @priority, @workingDirectory,
         @timeout, @maxOutputBuffer,
         @createdAt, @startedAt, @completedAt, @workerId, @exitCode, @dependencies,
-        @parentTaskId, @retryCount, @retryOf, @continueFrom
+        @parentTaskId, @retryCount, @retryOf, @continueFrom, @agent
       )
     `);
 
@@ -110,7 +113,8 @@ export class SQLiteTaskRepository implements TaskRepository {
         parent_task_id = @parentTaskId,
         retry_count = @retryCount,
         retry_of = @retryOf,
-        continue_from = @continueFrom
+        continue_from = @continueFrom,
+        agent = @agent
       WHERE id = @id
     `);
 
@@ -118,7 +122,7 @@ export class SQLiteTaskRepository implements TaskRepository {
       SELECT id, prompt, status, priority, working_directory,
              timeout, max_output_buffer, parent_task_id, retry_count, retry_of,
              created_at, started_at, completed_at, worker_id, exit_code,
-             dependencies, continue_from
+             dependencies, continue_from, agent
       FROM tasks WHERE id = ?
     `);
 
@@ -126,7 +130,7 @@ export class SQLiteTaskRepository implements TaskRepository {
       SELECT id, prompt, status, priority, working_directory,
              timeout, max_output_buffer, parent_task_id, retry_count, retry_of,
              created_at, started_at, completed_at, worker_id, exit_code,
-             dependencies, continue_from
+             dependencies, continue_from, agent
       FROM tasks ORDER BY created_at DESC
     `);
 
@@ -134,7 +138,7 @@ export class SQLiteTaskRepository implements TaskRepository {
       SELECT id, prompt, status, priority, working_directory,
              timeout, max_output_buffer, parent_task_id, retry_count, retry_of,
              created_at, started_at, completed_at, worker_id, exit_code,
-             dependencies, continue_from
+             dependencies, continue_from, agent
       FROM tasks WHERE status = ? ORDER BY created_at DESC
     `);
 
@@ -146,7 +150,7 @@ export class SQLiteTaskRepository implements TaskRepository {
       SELECT id, prompt, status, priority, working_directory,
              timeout, max_output_buffer, parent_task_id, retry_count, retry_of,
              created_at, started_at, completed_at, worker_id, exit_code,
-             dependencies, continue_from
+             dependencies, continue_from, agent
       FROM tasks ORDER BY created_at DESC LIMIT ? OFFSET ?
     `);
 
@@ -183,6 +187,7 @@ export class SQLiteTaskRepository implements TaskRepository {
           retryCount: task.retryCount || null,
           retryOf: task.retryOf || null,
           continueFrom: task.continueFrom || null,
+          agent: task.agent || null,
         };
 
         this.saveStmt.run(dbTask);
@@ -226,6 +231,7 @@ export class SQLiteTaskRepository implements TaskRepository {
           retryCount: updatedTask.retryCount || null,
           retryOf: updatedTask.retryOf || null,
           continueFrom: updatedTask.continueFrom || null,
+          agent: updatedTask.agent || null,
         });
       },
       operationErrorHandler('update task', { taskId }),
@@ -333,6 +339,7 @@ export class SQLiteTaskRepository implements TaskRepository {
       retryCount: data.retry_count || undefined,
       retryOf: data.retry_of ? (data.retry_of as TaskId) : undefined,
       continueFrom: data.continue_from ? (data.continue_from as TaskId) : undefined,
+      agent: (data.agent as AgentProvider) || undefined,
       createdAt: data.created_at,
       startedAt: data.started_at || undefined,
       completedAt: data.completed_at || undefined,
