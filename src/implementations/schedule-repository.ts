@@ -7,6 +7,7 @@
 
 import SQLite from 'better-sqlite3';
 import { z } from 'zod';
+import { AGENT_PROVIDERS_TUPLE } from '../core/agents.js';
 import {
   MissedRunPolicy,
   Schedule,
@@ -74,7 +75,7 @@ const TaskRequestSchema = z.object({
   retryOf: z.string().optional(),
   dependsOn: z.array(z.string()).optional(),
   continueFrom: z.string().optional(),
-  agent: z.enum(['claude', 'codex', 'gemini']).optional(),
+  agent: z.enum(AGENT_PROVIDERS_TUPLE).optional(),
 });
 
 /**

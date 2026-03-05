@@ -34,6 +34,11 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
   /** Env var prefixes to strip before spawning (prevents nesting issues) */
   protected abstract get envPrefixesToStrip(): readonly string[];
 
+  /** Env var exact names to strip (matched with === instead of startsWith) */
+  protected get envExactMatchesToStrip(): readonly string[] {
+    return [];
+  }
+
   /**
    * Optional prompt transformation before passing to the CLI.
    * Override in subclasses that need prompt preprocessing.
@@ -99,9 +104,12 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
       const finalPrompt = this.transformPrompt(prompt);
       const args = this.buildArgs(finalPrompt);
 
+      const exactMatches = this.envExactMatchesToStrip;
       const cleanEnv = Object.fromEntries(
         Object.entries(process.env).filter(
-          ([key]) => !this.envPrefixesToStrip.some((prefix) => key.startsWith(prefix)),
+          ([key]) =>
+            !this.envPrefixesToStrip.some((prefix) => key.startsWith(prefix)) &&
+            !exactMatches.includes(key),
         ),
       );
       const env = {
@@ -141,7 +149,7 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
           } finally {
             this.killTimeouts.delete(pid);
           }
-        }, this.config.killGracePeriodMs!);
+        }, this.config.killGracePeriodMs ?? 5000);
 
         this.killTimeouts.set(pid, timeoutId);
       },

@@ -18,10 +18,16 @@ import { Result } from './result.js';
 export type AgentProvider = 'claude' | 'codex' | 'gemini';
 
 /**
+ * All valid agent providers as a Zod-compatible tuple
+ * Single source of truth — used by z.enum(), CLI, and iteration
+ */
+export const AGENT_PROVIDERS_TUPLE: [AgentProvider, ...AgentProvider[]] = ['claude', 'codex', 'gemini'];
+
+/**
  * All valid agent providers as a readonly array
  * Used for validation and iteration
  */
-export const AGENT_PROVIDERS: readonly AgentProvider[] = Object.freeze(['claude', 'codex', 'gemini'] as const);
+export const AGENT_PROVIDERS: readonly AgentProvider[] = Object.freeze(AGENT_PROVIDERS_TUPLE);
 
 /**
  * Default agent when none is specified
@@ -91,7 +97,7 @@ export const AGENT_AUTH: Readonly<Record<AgentProvider, AgentAuthConfig>> = Obje
 export interface AgentAuthStatus {
   readonly provider: AgentProvider;
   readonly ready: boolean;
-  readonly method: 'env-var' | 'config-file' | 'cli-login' | 'none';
+  readonly method: 'env-var' | 'config-file' | 'cli-installed' | 'none';
   /** Which env var is set (if method is 'env-var') */
   readonly envVar?: string;
   /** Whether the CLI binary was found in PATH */
@@ -130,7 +136,7 @@ export function checkAgentAuth(
 
   // 3. Check CLI binary in PATH (login-based auth assumed)
   if (isCommandInPath(auth.command)) {
-    return { provider, ready: true, method: 'cli-login', cliFound: true };
+    return { provider, ready: true, method: 'cli-installed', cliFound: true };
   }
 
   // 4. Nothing configured

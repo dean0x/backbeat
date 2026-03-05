@@ -5,10 +5,8 @@
  * AgentRegistry instances from ProcessSpawner (backward compat).
  */
 
-import { vi } from 'vitest';
-import type { AgentAdapter, AgentProvider, AgentRegistry } from '../../src/core/agents';
+import type { AgentRegistry } from '../../src/core/agents';
 import type { ProcessSpawner } from '../../src/core/interfaces';
-import { ok } from '../../src/core/result';
 import { InMemoryAgentRegistry } from '../../src/implementations/agent-registry';
 import { ProcessSpawnerAdapter } from '../../src/implementations/process-spawner-adapter';
 

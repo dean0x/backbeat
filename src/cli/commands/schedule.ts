@@ -1,4 +1,4 @@
-import { type AgentProvider, isAgentProvider } from '../../core/agents.js';
+import { AGENT_PROVIDERS, type AgentProvider, isAgentProvider } from '../../core/agents.js';
 import { ScheduleId } from '../../core/domain.js';
 import type { ScheduleService } from '../../core/interfaces.js';
 import { validatePath } from '../../utils/validation.js';
@@ -114,7 +114,7 @@ async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]) 
       i++;
     } else if ((arg === '--agent' || arg === '-a') && next) {
       if (!isAgentProvider(next)) {
-        ui.error(`Unknown agent: "${next}". Available agents: claude, codex, gemini`);
+        ui.error(`Unknown agent: "${next}". Available agents: ${AGENT_PROVIDERS.join(', ')}`);
         process.exit(1);
       }
       agent = next;

@@ -57,8 +57,8 @@ export async function checkAgents(): Promise<void> {
       case 'config-file':
         authDesc = 'API key stored in config';
         break;
-      case 'cli-login':
-        authDesc = 'logged in (assumed)';
+      case 'cli-installed':
+        authDesc = 'CLI installed (auth not verified)';
         break;
       default:
         authDesc = 'not configured';

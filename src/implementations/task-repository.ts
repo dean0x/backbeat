@@ -5,7 +5,7 @@
 
 import SQLite from 'better-sqlite3';
 import { z } from 'zod';
-import { AgentProvider } from '../core/agents.js';
+import { AGENT_PROVIDERS_TUPLE, AgentProvider } from '../core/agents.js';
 import { Priority, Task, TaskId, TaskStatus, WorkerId } from '../core/domain.js';
 import { BackbeatError, ErrorCode, operationErrorHandler } from '../core/errors.js';
 import { TaskRepository } from '../core/interfaces.js';
@@ -34,7 +34,7 @@ const TaskRowSchema = z.object({
   exit_code: z.number().nullable(),
   dependencies: z.string().nullable(),
   continue_from: z.string().nullable(),
-  agent: z.enum(['claude', 'codex', 'gemini']).nullable(),
+  agent: z.enum(AGENT_PROVIDERS_TUPLE).nullable(),
 });
 
 /**
@@ -339,7 +339,7 @@ export class SQLiteTaskRepository implements TaskRepository {
       retryCount: data.retry_count || undefined,
       retryOf: data.retry_of ? (data.retry_of as TaskId) : undefined,
       continueFrom: data.continue_from ? (data.continue_from as TaskId) : undefined,
-      agent: (data.agent as AgentProvider) || undefined,
+      agent: data.agent ?? undefined,
       createdAt: data.created_at,
       startedAt: data.started_at || undefined,
       completedAt: data.completed_at || undefined,

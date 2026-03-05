@@ -9,6 +9,7 @@ import pkg from '../../package.json' with { type: 'json' };
 import {
   AGENT_DESCRIPTIONS,
   AGENT_PROVIDERS,
+  AGENT_PROVIDERS_TUPLE,
   AgentProvider,
   AgentRegistry,
   checkAgentAuth,
@@ -48,7 +49,7 @@ const DelegateTaskSchema = z.object({
     .describe(
       'Task ID to continue from — receives checkpoint context from this dependency (must be in dependsOn list)',
     ),
-  agent: z.enum(['claude', 'codex', 'gemini']).optional().describe('AI agent to execute the task (default: claude)'),
+  agent: z.enum(AGENT_PROVIDERS_TUPLE).optional().describe('AI agent to execute the task (default: claude)'),
 });
 
 const TaskStatusSchema = z.object({
@@ -90,7 +91,7 @@ const ScheduleTaskSchema = z.object({
     .string()
     .optional()
     .describe("Schedule ID to chain after (new tasks depend on this schedule's latest task)"),
-  agent: z.enum(['claude', 'codex', 'gemini']).optional().describe('AI agent to execute the task (default: claude)'),
+  agent: z.enum(AGENT_PROVIDERS_TUPLE).optional().describe('AI agent to execute the task (default: claude)'),
 });
 
 const ListSchedulesSchema = z.object({
@@ -125,7 +126,7 @@ const CreatePipelineSchema = z.object({
         prompt: z.string().min(1).max(4000).describe('Task prompt for this step'),
         priority: z.enum(['P0', 'P1', 'P2']).optional().describe('Priority override for this step'),
         workingDirectory: z.string().optional().describe('Working directory override (absolute path)'),
-        agent: z.enum(['claude', 'codex', 'gemini']).optional().describe('Agent override for this step'),
+        agent: z.enum(AGENT_PROVIDERS_TUPLE).optional().describe('Agent override for this step'),
       }),
     )
     .min(2, 'Pipeline requires at least 2 steps')
@@ -140,13 +141,13 @@ const CreatePipelineSchema = z.object({
     .optional()
     .describe('Default working directory for all steps (individual steps can override)'),
   agent: z
-    .enum(['claude', 'codex', 'gemini'])
+    .enum(AGENT_PROVIDERS_TUPLE)
     .optional()
     .describe('Default agent for all steps (individual steps can override)'),
 });
 
 const ConfigureAgentSchema = z.object({
-  agent: z.enum(['claude', 'codex', 'gemini']).describe('Agent provider to configure'),
+  agent: z.enum(AGENT_PROVIDERS_TUPLE).describe('Agent provider to configure'),
   action: z
     .enum(['set', 'check', 'reset'])
     .default('check')
@@ -323,7 +324,7 @@ export class MCPAdapter {
                   },
                   agent: {
                     type: 'string',
-                    enum: ['claude', 'codex', 'gemini'],
+                    enum: [...AGENT_PROVIDERS],
                     description: 'AI agent to execute the task (default: claude)',
                   },
                 },
@@ -477,7 +478,7 @@ export class MCPAdapter {
                   },
                   agent: {
                     type: 'string',
-                    enum: ['claude', 'codex', 'gemini'],
+                    enum: [...AGENT_PROVIDERS],
                     description: 'AI agent to execute the task (default: claude)',
                   },
                 },
@@ -599,7 +600,7 @@ export class MCPAdapter {
                         },
                         agent: {
                           type: 'string',
-                          enum: ['claude', 'codex', 'gemini'],
+                          enum: [...AGENT_PROVIDERS],
                           description: 'Agent override for this step',
                         },
                       },
@@ -619,7 +620,7 @@ export class MCPAdapter {
                   },
                   agent: {
                     type: 'string',
-                    enum: ['claude', 'codex', 'gemini'],
+                    enum: [...AGENT_PROVIDERS],
                     description: 'Default agent for all steps (individual steps can override)',
                   },
                 },
@@ -643,7 +644,7 @@ export class MCPAdapter {
                 properties: {
                   agent: {
                     type: 'string',
-                    enum: ['claude', 'codex', 'gemini'],
+                    enum: [...AGENT_PROVIDERS],
                     description: 'Agent provider to configure',
                   },
                   action: {

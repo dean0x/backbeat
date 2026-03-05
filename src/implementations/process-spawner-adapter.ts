@@ -14,9 +14,14 @@ import { ProcessSpawner } from '../core/interfaces.js';
 import { Result } from '../core/result.js';
 
 export class ProcessSpawnerAdapter implements AgentAdapter {
-  readonly provider: AgentProvider = 'claude';
+  readonly provider: AgentProvider;
 
-  constructor(private readonly spawner: ProcessSpawner) {}
+  constructor(
+    private readonly spawner: ProcessSpawner,
+    provider: AgentProvider = 'claude',
+  ) {
+    this.provider = provider;
+  }
 
   spawn(prompt: string, workingDirectory: string, taskId?: string): Result<{ process: ChildProcess; pid: number }> {
     return this.spawner.spawn(prompt, workingDirectory, taskId);

@@ -1,4 +1,4 @@
-import { type AgentProvider, isAgentProvider } from '../../core/agents.js';
+import { AGENT_PROVIDERS, type AgentProvider, isAgentProvider } from '../../core/agents.js';
 import { withServices } from '../services.js';
 import * as ui from '../ui.js';
 
@@ -13,7 +13,7 @@ export async function handlePipelineCommand(pipelineArgs: string[]) {
 
     if ((arg === '--agent' || arg === '-a') && next) {
       if (!isAgentProvider(next)) {
-        ui.error(`Unknown agent: "${next}". Available agents: claude, codex, gemini`);
+        ui.error(`Unknown agent: "${next}". Available agents: ${AGENT_PROVIDERS.join(', ')}`);
         process.exit(1);
       }
       agent = next;

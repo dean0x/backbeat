@@ -321,7 +321,7 @@ export class ScheduleManagerService implements ScheduleService {
         priority: step.priority ?? request.priority,
         workingDirectory: step.workingDirectory ?? request.workingDirectory,
         afterScheduleId: previousScheduleId,
-        agent: step.agent,
+        agent: step.agent ?? request.agent,
       });
 
       if (!result.ok) {

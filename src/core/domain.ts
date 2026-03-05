@@ -380,6 +380,7 @@ export interface PipelineCreateRequest {
   readonly steps: readonly PipelineStepRequest[];
   readonly priority?: Priority; // shared default for all steps
   readonly workingDirectory?: string; // shared default for all steps
+  readonly agent?: AgentProvider; // shared default for all steps
 }
 
 export interface PipelineStep {

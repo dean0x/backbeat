@@ -24,28 +24,13 @@ export class ClaudeAdapter extends BaseAgentAdapter {
   }
 
   protected get envPrefixesToStrip(): readonly string[] {
-    // CRITICAL: Strip all Claude Code nesting indicators to prevent rejection
-    // Workers are independent Claude Code instances, not nested sessions
-    return ['CLAUDECODE', 'CLAUDE_CODE_'];
+    // Strip CLAUDE_CODE_* prefix vars (e.g., CLAUDE_CODE_ENTRYPOINT)
+    return ['CLAUDE_CODE_'];
   }
 
-  /**
-   * Make prompt more explicit if it looks like a simple command.
-   * Short prompts without action verbs are ambiguous to Claude Code.
-   */
-  protected transformPrompt(prompt: string): string {
-    const lower = prompt.toLowerCase();
-    const hasActionVerb =
-      lower.includes('run') ||
-      lower.includes('execute') ||
-      lower.includes('perform') ||
-      lower.includes('bash') ||
-      lower.includes('command');
-
-    if (!hasActionVerb && prompt.split(' ').length <= 3) {
-      return `Execute the following bash command: ${prompt}`;
-    }
-
-    return prompt;
+  protected get envExactMatchesToStrip(): readonly string[] {
+    // Exact match for CLAUDECODE — avoids over-stripping CLAUDECODE_SESSION etc.
+    return ['CLAUDECODE'];
   }
+
 }
