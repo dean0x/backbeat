@@ -179,6 +179,7 @@ async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]) 
     if (result.value.nextRunAt) details.push(`Next run: ${new Date(result.value.nextRunAt).toISOString()}`);
     if (result.value.cronExpression) details.push(`Cron: ${result.value.cronExpression}`);
     if (result.value.afterScheduleId) details.push(`After: ${result.value.afterScheduleId}`);
+    if (agent) details.push(`Agent: ${agent}`);
     ui.info(details.join(' | '));
     process.exit(0);
   } else {
@@ -266,6 +267,7 @@ async function scheduleGet(service: ScheduleService, scheduleArgs: string[]) {
     lines.push(
       `Prompt:      ${schedule.taskTemplate.prompt.substring(0, 100)}${schedule.taskTemplate.prompt.length > 100 ? '...' : ''}`,
     );
+    if (schedule.taskTemplate.agent) lines.push(`Agent:       ${schedule.taskTemplate.agent}`);
 
     ui.note(lines.join('\n'), 'Schedule Details');
 

@@ -228,7 +228,7 @@ describe('GeminiAdapter', () => {
     expect(adapter.provider).toBe('gemini');
   });
 
-  it('should spawn with -sandbox false flag', () => {
+  it('should spawn with --yolo --prompt flags for non-interactive auto-accept mode', () => {
     const mockChild = createMockChildProcess(1234);
     mockSpawn.mockReturnValue(mockChild);
 
@@ -237,8 +237,8 @@ describe('GeminiAdapter', () => {
     expect(result.ok).toBe(true);
     const [command, args] = mockSpawn.mock.calls[0];
     expect(command).toBe('gemini');
-    expect(args).toContain('-sandbox');
-    expect(args).toContain('false');
+    expect(args).toContain('--yolo');
+    expect(args).toContain('--prompt');
     expect(args).toContain('test prompt');
   });
 
@@ -279,41 +279,36 @@ describe('Pre-spawn auth validation', () => {
     rmSync(testDir, { recursive: true, force: true });
   });
 
-  it('should fail spawn when no auth configured and CLI not in PATH', () => {
-    // CLI not found
+  it('should fail spawn when CLI not in PATH', () => {
+    // CLI not found — pre-spawn binary check fails before auth
     mockIsCommandInPath.mockReturnValue(false);
 
-    // Ensure no env vars satisfy auth
-    const savedOpenAI = process.env.OPENAI_API_KEY;
-    delete process.env.OPENAI_API_KEY;
+    const adapter = new CodexAdapter(testConfig, 'codex');
+    const result = adapter.spawn('test prompt', '/workspace');
 
-    try {
-      const adapter = new CodexAdapter(testConfig, 'codex');
-      const result = adapter.spawn('test prompt', '/workspace');
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe(ErrorCode.AGENT_MISCONFIGURED);
-        expect(result.error.message).toContain('codex');
-        expect(result.error.message).toContain('Not configured');
-      }
-
-      adapter.dispose();
-    } finally {
-      if (savedOpenAI !== undefined) process.env.OPENAI_API_KEY = savedOpenAI;
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe(ErrorCode.AGENT_MISCONFIGURED);
+      expect(result.error.message).toContain('codex');
+      expect(result.error.message).toContain('not found in PATH');
     }
+
+    adapter.dispose();
   });
 
-  it('should pass auth when env var is set even if CLI not in PATH', () => {
+  it('should fail spawn when CLI not in PATH even if env var is set', () => {
     mockIsCommandInPath.mockReturnValue(false);
-    const mockChild = createMockChildProcess(1234);
-    mockSpawn.mockReturnValue(mockChild);
 
     process.env.OPENAI_API_KEY = 'sk-test-key';
     try {
       const adapter = new CodexAdapter(testConfig, 'codex');
       const result = adapter.spawn('test prompt', '/workspace');
-      expect(result.ok).toBe(true);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe(ErrorCode.AGENT_MISCONFIGURED);
+        expect(result.error.message).toContain('codex');
+        expect(result.error.message).toContain('not found in PATH');
+      }
       adapter.dispose();
     } finally {
       delete process.env.OPENAI_API_KEY;
@@ -321,8 +316,8 @@ describe('Pre-spawn auth validation', () => {
   });
 
   it('should inject stored API key from config into spawn env', () => {
-    // CLI not in PATH, but config has key
-    mockIsCommandInPath.mockReturnValue(false);
+    // CLI in PATH, config has key
+    mockIsCommandInPath.mockReturnValue(true);
     const mockChild = createMockChildProcess(1234);
     mockSpawn.mockReturnValue(mockChild);
 
@@ -353,31 +348,24 @@ describe('Pre-spawn auth validation', () => {
     adapter.dispose();
   });
 
-  it('should include actionable hints in AGENT_MISCONFIGURED error', () => {
+  it('should include actionable hints when CLI not in PATH', () => {
     mockIsCommandInPath.mockReturnValue(false);
 
-    const savedGemini = process.env.GEMINI_API_KEY;
-    delete process.env.GEMINI_API_KEY;
+    const adapter = new GeminiAdapter(testConfig, 'gemini');
+    const result = adapter.spawn('test prompt', '/workspace');
 
-    try {
-      const adapter = new GeminiAdapter(testConfig, 'gemini');
-      const result = adapter.spawn('test prompt', '/workspace');
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.message).toContain('gcloud auth');
-        expect(result.error.message).toContain('GEMINI_API_KEY');
-        expect(result.error.message).toContain('beat agents config set');
-      }
-
-      adapter.dispose();
-    } finally {
-      if (savedGemini !== undefined) process.env.GEMINI_API_KEY = savedGemini;
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe(ErrorCode.AGENT_MISCONFIGURED);
+      expect(result.error.message).toContain('gemini');
+      expect(result.error.message).toContain('not found in PATH');
     }
+
+    adapter.dispose();
   });
 
   it('should prefer env var over config file API key', () => {
-    mockIsCommandInPath.mockReturnValue(false);
+    mockIsCommandInPath.mockReturnValue(true);
     const mockChild = createMockChildProcess(1234);
     mockSpawn.mockReturnValue(mockChild);
 

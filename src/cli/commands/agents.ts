@@ -19,15 +19,13 @@ import { loadAgentConfig, resetAgentConfig, saveAgentConfig } from '../../core/c
 import * as ui from '../ui.js';
 
 export async function listAgents(): Promise<void> {
-  ui.step('Available Agents');
-
-  ui.info(`${'Name'.padEnd(10)} Description`);
+  const lines: string[] = [];
   for (const provider of AGENT_PROVIDERS) {
     const suffix = provider === DEFAULT_AGENT ? ' [default]' : '';
-    process.stderr.write(`  ${provider.padEnd(10)} ${AGENT_DESCRIPTIONS[provider]}${suffix}\n`);
+    lines.push(`${provider.padEnd(10)} ${AGENT_DESCRIPTIONS[provider]}${suffix}`);
   }
+  ui.note(lines.join('\n'), 'Available Agents');
 
-  ui.info('');
   ui.info('Usage: beat run "prompt" --agent <name>');
   process.exit(0);
 }
@@ -65,12 +63,12 @@ export async function checkAgents(): Promise<void> {
     }
 
     const badge = status.ready ? ui.cyan('[ready]') : '[action needed]';
-    process.stderr.write(`  ${provider.padEnd(10)} ${cliStatus.padEnd(8)} ${authDesc.padEnd(40)} ${badge}\n`);
+    ui.step(`${provider.padEnd(10)} ${cliStatus.padEnd(8)} ${authDesc.padEnd(40)} ${badge}`);
 
     if (!status.ready && status.hint) {
       const hintLines = status.hint.split('\n').slice(1); // Skip the first "not configured" line
       for (const line of hintLines) {
-        process.stderr.write(`            ${ui.dim(line)}\n`);
+        ui.info(`  ${ui.dim(line)}`);
       }
     }
   }
@@ -111,6 +109,7 @@ export async function agentsConfigSet(
  */
 export async function agentsConfigShow(agent?: string): Promise<void> {
   const providers = agent ? [agent] : [...AGENT_PROVIDERS];
+  const lines: string[] = [];
 
   for (const p of providers) {
     if (!isAgentProvider(p)) {
@@ -122,12 +121,13 @@ export async function agentsConfigShow(agent?: string): Promise<void> {
     const auth = AGENT_AUTH[p as AgentProvider];
 
     if (config.apiKey) {
-      process.stderr.write(`  ${p.padEnd(10)} apiKey: ${maskApiKey(config.apiKey)} (env var: ${auth.envVars[0]})\n`);
+      lines.push(`${p.padEnd(10)} apiKey: ${maskApiKey(config.apiKey)} (env var: ${auth.envVars[0]})`);
     } else {
-      process.stderr.write(`  ${p.padEnd(10)} ${ui.dim('(no stored key)')}\n`);
+      lines.push(`${p.padEnd(10)} ${ui.dim('(no stored key)')}`);
     }
   }
 
+  ui.note(lines.join('\n'), 'Agent Configuration');
   process.exit(0);
 }
 

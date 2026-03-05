@@ -2,7 +2,7 @@
  * Google Gemini CLI agent adapter implementation
  *
  * ARCHITECTURE: Gemini-specific CLI flags on top of BaseAgentAdapter.
- * Uses -sandbox false for auto-accept mode.
+ * Uses --prompt for non-interactive (headless) mode and --yolo for auto-accept.
  */
 
 import { AgentProvider } from '../core/agents.js';
@@ -17,7 +17,7 @@ export class GeminiAdapter extends BaseAgentAdapter {
   }
 
   protected buildArgs(prompt: string): readonly string[] {
-    return ['-sandbox', 'false', prompt];
+    return ['--yolo', '--prompt', prompt];
   }
 
   protected get envPrefixesToStrip(): readonly string[] {

@@ -54,6 +54,7 @@ export async function handlePipelineCommand(pipelineArgs: string[]) {
   s.stop('Pipeline created');
 
   // Show pipeline visualization
+  const pipelineTitle = agent ? `Pipeline Steps (agent: ${agent})` : 'Pipeline Steps';
   const lines: string[] = [];
   for (let i = 0; i < result.value.steps.length; i++) {
     const step = result.value.steps[i];
@@ -62,7 +63,7 @@ export async function handlePipelineCommand(pipelineArgs: string[]) {
       lines.push('   ↓');
     }
   }
-  ui.note(lines.join('\n'), 'Pipeline Steps');
+  ui.note(lines.join('\n'), pipelineTitle);
 
   process.exit(0);
 }

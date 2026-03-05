@@ -97,6 +97,19 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
 
   spawn(prompt: string, workingDirectory: string, taskId?: string): Result<{ process: ChildProcess; pid: number }> {
     try {
+      // Pre-spawn: verify CLI binary exists before anything else
+      if (!isCommandInPath(this.command)) {
+        return err(
+          agentMisconfigured(
+            this.provider,
+            [
+              `CLI binary '${this.command}' not found in PATH.`,
+              `  Install: ${this.authConfig.loginHint}`,
+            ].join('\n'),
+          ),
+        );
+      }
+
       // Pre-spawn auth validation
       const authResult = this.resolveAuth();
       if (!authResult.ok) return authResult;

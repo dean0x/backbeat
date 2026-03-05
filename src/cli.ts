@@ -25,7 +25,7 @@ import { handleDetachMode, runTask } from './cli/commands/run.js';
 import { handleScheduleCommand } from './cli/commands/schedule.js';
 import { getTaskStatus } from './cli/commands/status.js';
 import * as ui from './cli/ui.js';
-import { isAgentProvider } from './core/agents.js';
+import { AGENT_PROVIDERS, isAgentProvider } from './core/agents.js';
 import { validateBufferSize, validatePath, validateTimeout } from './utils/validation.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -145,13 +145,13 @@ if (mainCommand === 'mcp') {
         const next = foregroundArgs[i + 1];
         if (next && !next.startsWith('-')) {
           if (!isAgentProvider(next)) {
-            ui.error(`Unknown agent: "${next}". Available agents: claude, codex, gemini`);
+            ui.error(`Unknown agent: "${next}". Available agents: ${AGENT_PROVIDERS.join(', ')}`);
             process.exit(1);
           }
           options.agent = next;
           i++;
         } else {
-          ui.error('--agent requires an agent name (claude, codex, gemini)');
+          ui.error(`--agent requires an agent name (${AGENT_PROVIDERS.join(', ')})`);
           process.exit(1);
         }
       } else if (arg.startsWith('-')) {
