@@ -8,7 +8,7 @@ const isStdoutTTY = process.stdout.isTTY === true;
 const bold = (s: string): string => (isStdoutTTY ? pc.bold(s) : s);
 const cyan = (s: string): string => (isStdoutTTY ? pc.cyan(s) : s);
 
-export function showHelp(dirname: string) {
+export function showHelp(dirname: string): void {
   const pkg = JSON.parse(readFileSync(path.join(dirname, '..', 'package.json'), 'utf-8'));
   const v = pkg.version ?? '0.0.0';
 

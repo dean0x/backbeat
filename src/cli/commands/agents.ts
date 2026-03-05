@@ -9,7 +9,6 @@ import {
   AGENT_AUTH,
   AGENT_DESCRIPTIONS,
   AGENT_PROVIDERS,
-  AgentProvider,
   checkAgentAuth,
   DEFAULT_AGENT,
   isAgentProvider,
@@ -106,7 +105,7 @@ export async function agentsConfigSet(
     process.exit(1);
   }
 
-  const result = saveAgentConfig(agent as AgentProvider, key, value);
+  const result = saveAgentConfig(agent, key, value);
   if (!result.ok) {
     ui.error(result.error);
     process.exit(1);
@@ -129,8 +128,8 @@ export async function agentsConfigShow(agent?: string): Promise<void> {
       process.exit(1);
     }
 
-    const config = loadAgentConfig(p as AgentProvider);
-    const auth = AGENT_AUTH[p as AgentProvider];
+    const config = loadAgentConfig(p);
+    const auth = AGENT_AUTH[p];
 
     if (config.apiKey) {
       lines.push(`${p.padEnd(10)} apiKey: ${maskApiKey(config.apiKey)} (env var: ${auth.envVars[0]})`);
@@ -157,7 +156,7 @@ export async function agentsConfigReset(agent: string | undefined): Promise<void
     process.exit(1);
   }
 
-  const result = resetAgentConfig(agent as AgentProvider);
+  const result = resetAgentConfig(agent);
   if (!result.ok) {
     ui.error(result.error);
     process.exit(1);

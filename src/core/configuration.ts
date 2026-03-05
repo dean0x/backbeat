@@ -167,6 +167,8 @@ export function loadConfiguration(): Configuration {
 // Config File Persistence (~/.backbeat/config.json)
 // ============================================================================
 
+type ConfigWriteResult = { ok: true } | { ok: false; error: string };
+
 // Display path for CLI (always shows real home path)
 export const CONFIG_FILE_PATH = path.join(homedir(), '.backbeat', 'config.json');
 
@@ -186,6 +188,17 @@ export function _testSetConfigDir(dir: string): () => void {
   };
 }
 
+/** Write config object to disk with secure permissions (dir 0o700, file 0o600) */
+function writeConfigFile(data: Record<string, unknown>): ConfigWriteResult {
+  try {
+    mkdirSync(_configDir, { recursive: true, mode: 0o700 });
+    writeFileSync(_configFilePath, JSON.stringify(data, null, 2) + '\n', { encoding: 'utf-8', mode: 0o600 });
+    return { ok: true };
+  } catch {
+    return { ok: false, error: `Failed to write config file at ${_configFilePath}` };
+  }
+}
+
 export function loadConfigFile(): Record<string, unknown> {
   try {
     if (!existsSync(_configFilePath)) return {};
@@ -199,7 +212,7 @@ export function loadConfigFile(): Record<string, unknown> {
   }
 }
 
-export function saveConfigValue(key: string, value: unknown): { ok: true } | { ok: false; error: string } {
+export function saveConfigValue(key: string, value: unknown): ConfigWriteResult {
   // Validate key exists in schema
   const schemaShape = ConfigurationSchema.shape;
   if (!(key in schemaShape)) {
@@ -218,17 +231,10 @@ export function saveConfigValue(key: string, value: unknown): { ok: true } | { o
   // Load existing, merge, write
   const existing = loadConfigFile();
   existing[key] = fieldResult.data;
-
-  try {
-    mkdirSync(_configDir, { recursive: true, mode: 0o700 });
-    writeFileSync(_configFilePath, JSON.stringify(existing, null, 2) + '\n', { encoding: 'utf-8', mode: 0o600 });
-    return { ok: true };
-  } catch {
-    return { ok: false, error: `Failed to write config file at ${_configFilePath}` };
-  }
+  return writeConfigFile(existing);
 }
 
-export function resetConfigValue(key: string): { ok: true } | { ok: false; error: string } {
+export function resetConfigValue(key: string): ConfigWriteResult {
   const schemaShape = ConfigurationSchema.shape;
   if (!(key in schemaShape)) {
     const validKeys = Object.keys(schemaShape).join(', ');
@@ -241,14 +247,7 @@ export function resetConfigValue(key: string): { ok: true } | { ok: false; error
   }
 
   delete existing[key];
-
-  try {
-    mkdirSync(_configDir, { recursive: true, mode: 0o700 });
-    writeFileSync(_configFilePath, JSON.stringify(existing, null, 2) + '\n', { encoding: 'utf-8', mode: 0o600 });
-    return { ok: true };
-  } catch {
-    return { ok: false, error: `Failed to write config file at ${_configFilePath}` };
-  }
+  return writeConfigFile(existing);
 }
 
 // ============================================================================
@@ -277,11 +276,7 @@ export function loadAgentConfig(provider: AgentProvider): AgentConfig {
 /**
  * Save a key-value pair under the `agents.<provider>` section of config.json
  */
-export function saveAgentConfig(
-  provider: AgentProvider,
-  key: 'apiKey',
-  value: string,
-): { ok: true } | { ok: false; error: string } {
+export function saveAgentConfig(provider: AgentProvider, key: 'apiKey', value: string): ConfigWriteResult {
   const existing = loadConfigFile();
   const agents = (
     existing.agents && typeof existing.agents === 'object' && !Array.isArray(existing.agents) ? existing.agents : {}
@@ -293,20 +288,13 @@ export function saveAgentConfig(
   section[key] = value;
   agents[provider] = section;
   existing.agents = agents;
-
-  try {
-    mkdirSync(_configDir, { recursive: true, mode: 0o700 });
-    writeFileSync(_configFilePath, JSON.stringify(existing, null, 2) + '\n', { encoding: 'utf-8', mode: 0o600 });
-    return { ok: true };
-  } catch {
-    return { ok: false, error: `Failed to write config file at ${_configFilePath}` };
-  }
+  return writeConfigFile(existing);
 }
 
 /**
  * Remove all stored config for a specific agent provider
  */
-export function resetAgentConfig(provider: AgentProvider): { ok: true } | { ok: false; error: string } {
+export function resetAgentConfig(provider: AgentProvider): ConfigWriteResult {
   const existing = loadConfigFile();
   const agents = existing.agents;
   if (!agents || typeof agents !== 'object' || Array.isArray(agents)) {
@@ -326,11 +314,5 @@ export function resetAgentConfig(provider: AgentProvider): { ok: true } | { ok: 
     existing.agents = agentsRecord;
   }
 
-  try {
-    mkdirSync(_configDir, { recursive: true, mode: 0o700 });
-    writeFileSync(_configFilePath, JSON.stringify(existing, null, 2) + '\n', { encoding: 'utf-8', mode: 0o600 });
-    return { ok: true };
-  } catch {
-    return { ok: false, error: `Failed to write config file at ${_configFilePath}` };
-  }
+  return writeConfigFile(existing);
 }
