@@ -55,7 +55,10 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
 
   /**
    * Resolve authentication before spawn.
-   * Resolution order: env var → config file → CLI in PATH → error
+   * Resolution order: env var → config file → CLI login (assumed)
+   *
+   * NOTE: spawn() verifies CLI binary exists before calling resolveAuth(),
+   * so step 3 safely assumes login-based auth if no explicit key is configured.
    *
    * @returns Additional env vars to inject (e.g., stored API key), or error
    */
@@ -76,23 +79,13 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
       return ok({ injectedEnv: { [auth.envVars[0]]: agentConfig.apiKey } });
     }
 
-    // 3. Check CLI binary in PATH (login-based auth assumed)
-    if (isCommandInPath(this.command)) {
-      return ok({ injectedEnv: {} });
-    }
+    // 3. CLI binary already verified in spawn() — assume login-based auth
+    return ok({ injectedEnv: {} });
+  }
 
-    // 4. Nothing configured — fail fast with actionable message
-    return err(
-      agentMisconfigured(
-        this.provider,
-        [
-          'Not configured. Either:',
-          `  1. Log in: ${auth.loginHint}`,
-          `  2. Set API key: ${auth.apiKeyHint}`,
-          `  3. Store key: beat agents config set ${this.provider} apiKey <key>`,
-        ].join('\n'),
-      ),
-    );
+  /** Additional env vars to inject into the spawned process (override in subclasses) */
+  protected get additionalEnv(): Record<string, string> {
+    return {};
   }
 
   spawn(prompt: string, workingDirectory: string, taskId?: string): Result<{ process: ChildProcess; pid: number }> {
@@ -122,6 +115,7 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
       );
       const env = {
         ...cleanEnv,
+        ...this.additionalEnv,
         ...authResult.value.injectedEnv,
         BACKBEAT_WORKER: 'true',
         ...(taskId && { BACKBEAT_TASK_ID: taskId }),

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import path from 'path';
 import { z } from 'zod';
@@ -193,6 +193,7 @@ function writeConfigFile(data: Record<string, unknown>): ConfigWriteResult {
   try {
     mkdirSync(_configDir, { recursive: true, mode: 0o700 });
     writeFileSync(_configFilePath, JSON.stringify(data, null, 2) + '\n', { encoding: 'utf-8', mode: 0o600 });
+    chmodSync(_configFilePath, 0o600); // Ensure permissions on pre-existing files (writeFileSync mode only applies on creation)
     return { ok: true };
   } catch {
     return { ok: false, error: `Failed to write config file at ${_configFilePath}` };

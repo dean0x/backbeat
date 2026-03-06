@@ -17,7 +17,7 @@ export class CodexAdapter extends BaseAgentAdapter {
   }
 
   protected buildArgs(prompt: string): readonly string[] {
-    return ['--quiet', '--full-auto', prompt];
+    return ['--quiet', '--full-auto', '--', prompt];
   }
 
   protected get envPrefixesToStrip(): readonly string[] {

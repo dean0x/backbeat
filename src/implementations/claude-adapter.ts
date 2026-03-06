@@ -20,7 +20,7 @@ export class ClaudeAdapter extends BaseAgentAdapter {
   }
 
   protected buildArgs(prompt: string): readonly string[] {
-    return [...this.baseArgs, prompt];
+    return [...this.baseArgs, '--', prompt];
   }
 
   protected get envPrefixesToStrip(): readonly string[] {

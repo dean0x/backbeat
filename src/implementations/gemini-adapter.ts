@@ -20,6 +20,12 @@ export class GeminiAdapter extends BaseAgentAdapter {
     return ['--yolo', '--prompt', prompt];
   }
 
+  protected get additionalEnv(): Record<string, string> {
+    // --yolo enables Docker sandbox by default; disable it so Docker/Podman isn't required.
+    // Users who want sandbox can set GEMINI_SANDBOX=true in their environment.
+    return { GEMINI_SANDBOX: 'false' };
+  }
+
   protected get envPrefixesToStrip(): readonly string[] {
     // ARCHITECTURE: No known Gemini CLI nesting indicators.
     // IMPORTANT: Must NOT strip GEMINI_API_KEY — required for authentication.
