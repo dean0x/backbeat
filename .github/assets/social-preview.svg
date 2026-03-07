@@ -21,17 +21,17 @@
   <rect x="0" y="636" width="1280" height="4" fill="url(#accent)" opacity="0.3" />
 
   <!-- Badge -->
-  <rect x="100" y="130" width="210" height="32" rx="16" fill="none" stroke="#1e1e2e" stroke-width="1" />
-  <text x="132" y="152" font-family="'SF Mono', 'Fira Code', monospace" font-size="14" fill="#a0a0b8">v0.4.0 — TypeScript</text>
+  <rect x="100" y="130" width="200" height="32" rx="16" fill="none" stroke="#1e1e2e" stroke-width="1" />
+  <text x="132" y="152" font-family="'SF Mono', 'Fira Code', monospace" font-size="14" fill="#a0a0b8">v0.4.1 — TypeScript</text>
 
-  <!-- Title: "Orchestrate Claude Code," in white -->
-  <text x="100" y="230" font-family="system-ui, -apple-system, sans-serif" font-size="56" font-weight="800" fill="#e8e8f0" letter-spacing="-2">Orchestrate Claude Code,</text>
+  <!-- Title: "Background agents," in white -->
+  <text x="100" y="230" font-family="system-ui, -apple-system, sans-serif" font-size="56" font-weight="800" fill="#e8e8f0" letter-spacing="-2">Background agents,</text>
 
-  <!-- Title accent: "at scale." in gradient -->
-  <text x="100" y="296" font-family="system-ui, -apple-system, sans-serif" font-size="56" font-weight="800" fill="url(#accent-135)" letter-spacing="-2">at scale.</text>
+  <!-- Title accent: "orchestrated." in gradient -->
+  <text x="100" y="296" font-family="system-ui, -apple-system, sans-serif" font-size="56" font-weight="800" fill="url(#accent-135)" letter-spacing="-2">orchestrated.</text>
 
   <!-- Subtitle -->
-  <text x="100" y="355" font-family="system-ui, -apple-system, sans-serif" font-size="22" fill="#a0a0b8">Delegate tasks to background Claude Code instances,</text>
+  <text x="100" y="355" font-family="system-ui, -apple-system, sans-serif" font-size="22" fill="#a0a0b8">Delegate tasks to Claude, Codex, or Gemini —</text>
   <text x="100" y="385" font-family="system-ui, -apple-system, sans-serif" font-size="22" fill="#a0a0b8">manage dependencies, schedule, and resume from checkpoints.</text>
 
   <!-- Install block -->
@@ -43,14 +43,14 @@
   <rect x="100" y="500" width="118" height="30" rx="6" fill="#14141f" stroke="#1e1e2e" stroke-width="1" />
   <text x="116" y="520" font-family="'SF Mono', 'Fira Code', monospace" font-size="13" fill="#6366f1">TypeScript</text>
 
-  <rect x="230" y="500" width="60" height="30" rx="6" fill="#14141f" stroke="#1e1e2e" stroke-width="1" />
-  <text x="246" y="520" font-family="'SF Mono', 'Fira Code', monospace" font-size="13" fill="#6366f1">DAG</text>
+  <rect x="230" y="500" width="118" height="30" rx="6" fill="#14141f" stroke="#1e1e2e" stroke-width="1" />
+  <text x="246" y="520" font-family="'SF Mono', 'Fira Code', monospace" font-size="13" fill="#6366f1">Multi-Agent</text>
 
-  <rect x="302" y="500" width="116" height="30" rx="6" fill="#14141f" stroke="#1e1e2e" stroke-width="1" />
-  <text x="318" y="520" font-family="'SF Mono', 'Fira Code', monospace" font-size="13" fill="#6366f1">MCP Tools</text>
+  <rect x="360" y="500" width="116" height="30" rx="6" fill="#14141f" stroke="#1e1e2e" stroke-width="1" />
+  <text x="376" y="520" font-family="'SF Mono', 'Fira Code', monospace" font-size="13" fill="#6366f1">MCP Tools</text>
 
-  <rect x="430" y="500" width="134" height="30" rx="6" fill="#14141f" stroke="#1e1e2e" stroke-width="1" />
-  <text x="446" y="520" font-family="'SF Mono', 'Fira Code', monospace" font-size="13" fill="#6366f1">Event-Driven</text>
+  <rect x="488" y="500" width="134" height="30" rx="6" fill="#14141f" stroke="#1e1e2e" stroke-width="1" />
+  <text x="504" y="520" font-family="'SF Mono', 'Fira Code', monospace" font-size="13" fill="#6366f1">Event-Driven</text>
 
   <!-- Command list on the right -->
   <rect x="720" y="130" width="440" height="400" rx="16" fill="#14141f" stroke="#1e1e2e" stroke-width="1" />
@@ -83,12 +83,12 @@
   <text x="748" y="362" font-family="'SF Mono', 'Fira Code', monospace" font-size="15" fill="#6366f1">beat schedule</text>
   <text x="880" y="362" font-family="'SF Mono', 'Fira Code', monospace" font-size="14" fill="#606078">Create scheduled tasks</text>
 
-  <text x="748" y="394" font-family="'SF Mono', 'Fira Code', monospace" font-size="15" fill="#6366f1">beat pipeline</text>
-  <text x="880" y="394" font-family="'SF Mono', 'Fira Code', monospace" font-size="14" fill="#606078">Chain with dependencies</text>
+  <text x="748" y="394" font-family="'SF Mono', 'Fira Code', monospace" font-size="15" fill="#6366f1">beat agents</text>
+  <text x="880" y="394" font-family="'SF Mono', 'Fira Code', monospace" font-size="14" fill="#606078">List and configure agents</text>
 
   <!-- Separator -->
   <line x1="748" y1="420" x2="1132" y2="420" stroke="#1e1e2e" stroke-width="1" />
 
   <!-- Summary -->
-  <text x="748" y="450" font-family="'SF Mono', 'Fira Code', monospace" font-size="13" fill="#606078">7 commands  ·  DAG dependencies  ·  MCP compatible</text>
+  <text x="748" y="450" font-family="'SF Mono', 'Fira Code', monospace" font-size="13" fill="#606078">7 commands · 3 agents · MCP compatible</text>
 </svg>
