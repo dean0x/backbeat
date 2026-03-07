@@ -1,10 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+<svg width="1280" height="640" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#1e293b;stop-opacity:1" />
+      <stop offset="0%" style="stop-color:#0a0a0f;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#12121a;stop-opacity:1" />
     </linearGradient>
     <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="accent-135" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
       <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
     </linearGradient>
@@ -13,100 +17,78 @@
   <!-- Background -->
   <rect width="1280" height="640" fill="url(#bg)" />
 
-  <!-- Subtle grid pattern -->
-  <g opacity="0.05" stroke="#94a3b8" stroke-width="1">
-    <line x1="0" y1="80" x2="1280" y2="80" />
-    <line x1="0" y1="160" x2="1280" y2="160" />
-    <line x1="0" y1="240" x2="1280" y2="240" />
-    <line x1="0" y1="320" x2="1280" y2="320" />
-    <line x1="0" y1="400" x2="1280" y2="400" />
-    <line x1="0" y1="480" x2="1280" y2="480" />
-    <line x1="0" y1="560" x2="1280" y2="560" />
-    <line x1="160" y1="0" x2="160" y2="640" />
-    <line x1="320" y1="0" x2="320" y2="640" />
-    <line x1="480" y1="0" x2="480" y2="640" />
-    <line x1="640" y1="0" x2="640" y2="640" />
-    <line x1="800" y1="0" x2="800" y2="640" />
-    <line x1="960" y1="0" x2="960" y2="640" />
-    <line x1="1120" y1="0" x2="1120" y2="640" />
-  </g>
+  <!-- Subtle border line at bottom -->
+  <rect x="0" y="636" width="1280" height="4" fill="url(#accent)" opacity="0.3" />
 
-  <!-- Decorative node graph (right side) -->
-  <g opacity="0.15">
-    <!-- Nodes -->
-    <circle cx="880" cy="180" r="8" fill="#6366f1" />
-    <circle cx="1020" cy="140" r="6" fill="#8b5cf6" />
-    <circle cx="1100" cy="220" r="7" fill="#6366f1" />
-    <circle cx="960" cy="280" r="5" fill="#a78bfa" />
-    <circle cx="1060" cy="340" r="8" fill="#6366f1" />
-    <circle cx="880" cy="380" r="6" fill="#8b5cf6" />
-    <circle cx="1140" cy="400" r="5" fill="#a78bfa" />
-    <circle cx="1000" cy="440" r="7" fill="#6366f1" />
-    <!-- Edges -->
-    <line x1="880" y1="180" x2="1020" y2="140" stroke="#6366f1" stroke-width="1" />
-    <line x1="1020" y1="140" x2="1100" y2="220" stroke="#6366f1" stroke-width="1" />
-    <line x1="880" y1="180" x2="960" y2="280" stroke="#8b5cf6" stroke-width="1" />
-    <line x1="960" y1="280" x2="1060" y2="340" stroke="#6366f1" stroke-width="1" />
-    <line x1="1100" y1="220" x2="1060" y2="340" stroke="#8b5cf6" stroke-width="1" />
-    <line x1="880" y1="380" x2="1060" y2="340" stroke="#a78bfa" stroke-width="1" />
-    <line x1="1060" y1="340" x2="1140" y2="400" stroke="#6366f1" stroke-width="1" />
-    <line x1="880" y1="380" x2="1000" y2="440" stroke="#8b5cf6" stroke-width="1" />
-    <line x1="1000" y1="440" x2="1140" y2="400" stroke="#a78bfa" stroke-width="1" />
-  </g>
+  <!-- Badge -->
+  <rect x="100" y="130" width="210" height="32" rx="16" fill="none" stroke="#1e1e2e" stroke-width="1" />
+  <text x="132" y="152" font-family="'SF Mono', 'Fira Code', monospace" font-size="14" fill="#a0a0b8">v0.4.0 — TypeScript</text>
 
-  <!-- Accent bar (top) -->
-  <rect x="0" y="0" width="1280" height="4" fill="url(#accent)" />
+  <!-- Title: "Orchestrate Claude Code," in white -->
+  <text x="100" y="230" font-family="system-ui, -apple-system, sans-serif" font-size="56" font-weight="800" fill="#e8e8f0" letter-spacing="-2">Orchestrate Claude Code,</text>
 
-  <!-- Project name -->
-  <text x="100" y="260" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="72" font-weight="700" fill="#f8fafc" letter-spacing="-1">
-    Backbeat
-  </text>
+  <!-- Title accent: "at scale." in gradient -->
+  <text x="100" y="296" font-family="system-ui, -apple-system, sans-serif" font-size="56" font-weight="800" fill="url(#accent-135)" letter-spacing="-2">at scale.</text>
 
-  <!-- Tagline -->
-  <text x="100" y="320" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="28" font-weight="400" fill="#94a3b8">
-    Orchestrate multiple Claude Code instances
-  </text>
-  <text x="100" y="360" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="28" font-weight="400" fill="#94a3b8">
-    through a single session
-  </text>
+  <!-- Subtitle -->
+  <text x="100" y="355" font-family="system-ui, -apple-system, sans-serif" font-size="22" fill="#a0a0b8">Delegate tasks to background Claude Code instances,</text>
+  <text x="100" y="385" font-family="system-ui, -apple-system, sans-serif" font-size="22" fill="#a0a0b8">manage dependencies, schedule, and resume from checkpoints.</text>
+
+  <!-- Install block -->
+  <rect x="100" y="420" width="380" height="48" rx="10" fill="#14141f" stroke="#1e1e2e" stroke-width="1" />
+  <text x="120" y="451" font-family="'SF Mono', 'Fira Code', monospace" font-size="18" fill="#6366f1">$</text>
+  <text x="142" y="451" font-family="'SF Mono', 'Fira Code', monospace" font-size="18" fill="#e8e8f0">npx -y backbeat mcp start</text>
 
   <!-- Feature pills -->
-  <g font-family="ui-monospace, 'SF Mono', monospace" font-size="14" fill="#cbd5e1">
-    <rect x="100" y="400" width="130" height="32" rx="16" fill="#1e293b" stroke="#334155" stroke-width="1" />
-    <text x="165" y="421" text-anchor="middle">Event-Driven</text>
+  <rect x="100" y="500" width="118" height="30" rx="6" fill="#14141f" stroke="#1e1e2e" stroke-width="1" />
+  <text x="116" y="520" font-family="'SF Mono', 'Fira Code', monospace" font-size="13" fill="#6366f1">TypeScript</text>
 
-    <rect x="245" y="400" width="155" height="32" rx="16" fill="#1e293b" stroke="#334155" stroke-width="1" />
-    <text x="322" y="421" text-anchor="middle">DAG Dependencies</text>
+  <rect x="230" y="500" width="60" height="30" rx="6" fill="#14141f" stroke="#1e1e2e" stroke-width="1" />
+  <text x="246" y="520" font-family="'SF Mono', 'Fira Code', monospace" font-size="13" fill="#6366f1">DAG</text>
 
-    <rect x="415" y="400" width="115" height="32" rx="16" fill="#1e293b" stroke="#334155" stroke-width="1" />
-    <text x="472" y="421" text-anchor="middle">Scheduling</text>
+  <rect x="302" y="500" width="116" height="30" rx="6" fill="#14141f" stroke="#1e1e2e" stroke-width="1" />
+  <text x="318" y="520" font-family="'SF Mono', 'Fira Code', monospace" font-size="13" fill="#6366f1">MCP Tools</text>
 
-    <rect x="545" y="400" width="80" height="32" rx="16" fill="#1e293b" stroke="#334155" stroke-width="1" />
-    <text x="585" y="421" text-anchor="middle">SQLite</text>
-  </g>
+  <rect x="430" y="500" width="134" height="30" rx="6" fill="#14141f" stroke="#1e1e2e" stroke-width="1" />
+  <text x="446" y="520" font-family="'SF Mono', 'Fira Code', monospace" font-size="13" fill="#6366f1">Event-Driven</text>
 
-  <!-- Install command -->
-  <g>
-    <rect x="100" y="470" width="420" height="44" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1" />
-    <text x="120" y="498" font-family="ui-monospace, 'SF Mono', monospace" font-size="16" fill="#64748b">$</text>
-    <text x="140" y="498" font-family="ui-monospace, 'SF Mono', monospace" font-size="16" fill="#e2e8f0">npx backbeat mcp start</text>
-  </g>
+  <!-- Command list on the right -->
+  <rect x="720" y="130" width="440" height="400" rx="16" fill="#14141f" stroke="#1e1e2e" stroke-width="1" />
 
-  <!-- MCP badge -->
-  <g>
-    <rect x="100" y="540" width="130" height="28" rx="6" fill="#6366f1" opacity="0.2" />
-    <text x="165" y="559" font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#a5b4fc" text-anchor="middle">MCP Compatible</text>
-  </g>
+  <!-- Code block header with dots -->
+  <rect x="720" y="130" width="440" height="40" rx="0" fill="rgba(255,255,255,0.02)" />
+  <rect x="720" y="130" width="440" height="40" rx="16" fill="none" />
+  <circle cx="744" cy="150" r="5" fill="#ff5f57" />
+  <circle cx="762" cy="150" r="5" fill="#febc2e" />
+  <circle cx="780" cy="150" r="5" fill="#28c840" />
+  <text x="810" y="155" font-family="'SF Mono', 'Fira Code', monospace" font-size="12" fill="#606078">commands</text>
+  <line x1="720" y1="170" x2="1160" y2="170" stroke="#1e1e2e" stroke-width="1" />
 
-  <!-- MIT badge -->
-  <g>
-    <rect x="245" y="540" width="90" height="28" rx="6" fill="#10b981" opacity="0.2" />
-    <text x="290" y="559" font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#6ee7b7" text-anchor="middle">MIT License</text>
-  </g>
+  <!-- Commands -->
+  <text x="748" y="202" font-family="'SF Mono', 'Fira Code', monospace" font-size="15" fill="#6366f1">beat run</text>
+  <text x="880" y="202" font-family="'SF Mono', 'Fira Code', monospace" font-size="14" fill="#606078">Submit task to background</text>
 
-  <!-- TypeScript badge -->
-  <g>
-    <rect x="350" y="540" width="110" height="28" rx="6" fill="#3b82f6" opacity="0.2" />
-    <text x="405" y="559" font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#93c5fd" text-anchor="middle">TypeScript</text>
-  </g>
+  <text x="748" y="234" font-family="'SF Mono', 'Fira Code', monospace" font-size="15" fill="#6366f1">beat list</text>
+  <text x="880" y="234" font-family="'SF Mono', 'Fira Code', monospace" font-size="14" fill="#606078">List tasks with status</text>
+
+  <text x="748" y="266" font-family="'SF Mono', 'Fira Code', monospace" font-size="15" fill="#6366f1">beat logs</text>
+  <text x="880" y="266" font-family="'SF Mono', 'Fira Code', monospace" font-size="14" fill="#606078">View execution logs</text>
+
+  <text x="748" y="298" font-family="'SF Mono', 'Fira Code', monospace" font-size="15" fill="#6366f1">beat cancel</text>
+  <text x="880" y="298" font-family="'SF Mono', 'Fira Code', monospace" font-size="14" fill="#606078">Cancel a running task</text>
+
+  <text x="748" y="330" font-family="'SF Mono', 'Fira Code', monospace" font-size="15" fill="#6366f1">beat resume</text>
+  <text x="880" y="330" font-family="'SF Mono', 'Fira Code', monospace" font-size="14" fill="#606078">Resume from checkpoint</text>
+
+  <text x="748" y="362" font-family="'SF Mono', 'Fira Code', monospace" font-size="15" fill="#6366f1">beat schedule</text>
+  <text x="880" y="362" font-family="'SF Mono', 'Fira Code', monospace" font-size="14" fill="#606078">Create scheduled tasks</text>
+
+  <text x="748" y="394" font-family="'SF Mono', 'Fira Code', monospace" font-size="15" fill="#6366f1">beat pipeline</text>
+  <text x="880" y="394" font-family="'SF Mono', 'Fira Code', monospace" font-size="14" fill="#606078">Chain with dependencies</text>
+
+  <!-- Separator -->
+  <line x1="748" y1="420" x2="1132" y2="420" stroke="#1e1e2e" stroke-width="1" />
+
+  <!-- Summary -->
+  <text x="748" y="450" font-family="'SF Mono', 'Fira Code', monospace" font-size="13" fill="#606078">7 commands  ·  DAG dependencies  ·  MCP compatible</text>
 </svg>
