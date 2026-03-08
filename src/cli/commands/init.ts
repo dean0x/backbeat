@@ -203,7 +203,7 @@ export async function initCommand(args: readonly string[]): Promise<void> {
   if ('agent' in result) {
     if (isInteractive) {
       const status = deps.checkAuth(result.agent);
-      if (status.hint && !status.ready) {
+      if (status.hint) {
         ui.info(status.hint);
       }
       ui.outro(`Default agent set to '${result.agent}'. Config: ${CONFIG_FILE_PATH}`);

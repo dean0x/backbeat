@@ -6,10 +6,10 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { AgentAuthStatus, AgentProvider } from '../../src/core/agents';
-import { AGENT_PROVIDERS } from '../../src/core/agents';
 import type { InitDeps, InitOptions } from '../../src/cli/commands/init';
 import { parseInitArgs, runInit } from '../../src/cli/commands/init';
+import type { AgentAuthStatus, AgentProvider } from '../../src/core/agents';
+import { AGENT_PROVIDERS } from '../../src/core/agents';
 
 // ============================================================================
 // Test Helpers
