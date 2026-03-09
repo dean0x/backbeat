@@ -84,7 +84,7 @@ describe('captureGitState', () => {
     mockExecFileSequence([
       { stdout: 'feature-branch\n' },
       { stdout: 'deadbeef\n' },
-      { stdout: '?? new-file.txt\n M src/foo.ts\nAM staged.ts\n' },
+      { stdout: ' M src/foo.ts\n?? new-file.txt\nAM staged.ts\n' },
     ]);
 
     const result = await captureGitState('/workspace');
@@ -92,9 +92,16 @@ describe('captureGitState', () => {
     if (!result.ok) return;
     expect(result.value).not.toBeNull();
     expect(result.value!.branch).toBe('feature-branch');
-    // Note: leading space on first line of stdout is stripped by .trim()
-    // so we put a non-space-prefixed line first to match real behavior
-    expect(result.value!.dirtyFiles).toEqual(['new-file.txt', 'src/foo.ts', 'staged.ts']);
+    expect(result.value!.dirtyFiles).toEqual(['src/foo.ts', 'new-file.txt', 'staged.ts']);
+  });
+
+  it('should preserve filenames when first porcelain line has leading-space status', async () => {
+    mockExecFileSequence([{ stdout: 'main\n' }, { stdout: 'abc123\n' }, { stdout: ' M src/only-modified.ts\n' }]);
+
+    const result = await captureGitState('/workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value!.dirtyFiles).toEqual(['src/only-modified.ts']);
   });
 
   it('should return empty dirtyFiles when status command fails', async () => {

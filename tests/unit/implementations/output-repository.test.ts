@@ -6,6 +6,7 @@
  * Note: task_output has FK to tasks — must insert task rows first
  */
 
+import fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type Configuration, ConfigurationSchema } from '../../../src/core/configuration.js';
 import { TaskId } from '../../../src/core/domain.js';
@@ -34,6 +35,8 @@ describe('SQLiteOutputRepository', () => {
 
   afterEach(() => {
     database.close();
+    // Clean up ./output/ directory created by file-backed storage with :memory: DB
+    fs.rmSync('output', { recursive: true, force: true });
   });
 
   describe('save and get', () => {

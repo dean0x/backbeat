@@ -55,10 +55,9 @@ export async function captureGitState(workingDirectory: string): Promise<Result<
       const statusResult = await execFileAsync('git', ['status', '--porcelain'], execOpts);
       if (statusResult.stdout.trim()) {
         dirtyFiles = statusResult.stdout
-          .trim()
           .split('\n')
-          .map((line) => line.substring(3).trim()) // Remove status prefix (e.g., " M ", "?? ")
-          .filter((file) => file.length > 0);
+          .filter((line) => line.length > 0)
+          .map((line) => line.substring(3).trim()); // Remove status prefix (e.g., " M ", "?? ")
       }
     } catch {
       // Status failed - continue with empty dirty files
