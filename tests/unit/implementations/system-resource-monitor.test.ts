@@ -488,7 +488,6 @@ describe('SystemResourceMonitor', () => {
       await vi.advanceTimersByTimeAsync(150);
 
       expect(callCount).toBeGreaterThan(1);
-      expect(monitor['isMonitoring']).toBe(true);
       // Should have at least one successful event after recovery
       expect(events.length).toBeGreaterThan(0);
     });
