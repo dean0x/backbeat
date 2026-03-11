@@ -776,6 +776,39 @@ describe('ScheduleHandler - Behavioral Tests', () => {
       expect(historyResult.value[0].status).toBe('failed');
     });
 
+    it('should record execution with lastTaskId for afterScheduleId chaining', async () => {
+      // Arrange: a pipeline with 3 steps
+      const schedule = createPipelineSchedule();
+      await saveSchedule({ ...schedule, status: ScheduleStatus.ACTIVE });
+
+      // Act
+      await triggerSchedule(schedule.id);
+
+      // Assert: execution record should point to the LAST task, not the first
+      const historyResult = await scheduleRepo.getExecutionHistory(schedule.id, 1);
+      expect(historyResult.ok).toBe(true);
+      if (!historyResult.ok) return;
+      expect(historyResult.value).toHaveLength(1);
+
+      const execution = historyResult.value[0];
+
+      // Get all tasks to identify first and last
+      const allTasksResult = await taskRepo.findAll();
+      expect(allTasksResult.ok).toBe(true);
+      if (!allTasksResult.ok) return;
+      expect(allTasksResult.value).toHaveLength(3);
+
+      // Last task is the 'deploy' step (step 2, no dependents)
+      const lastTask = allTasksResult.value.find((t) => t.prompt === 'deploy');
+      const firstTask = allTasksResult.value.find((t) => t.prompt === 'lint code');
+      expect(lastTask).toBeDefined();
+      expect(firstTask).toBeDefined();
+
+      // execution.taskId must be lastTaskId (for correct afterScheduleId chaining)
+      expect(execution.taskId).toBe(lastTask!.id);
+      expect(execution.taskId).not.toBe(firstTask!.id);
+    });
+
     it('should update schedule state after pipeline trigger', async () => {
       // Arrange: ONE_TIME pipeline schedule
       const schedule = createPipelineSchedule({

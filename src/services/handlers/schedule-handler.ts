@@ -398,10 +398,12 @@ export class ScheduleHandler extends BaseEventHandler {
     const firstTaskId = savedTasks[0].id;
     const lastTaskId = savedTasks[savedTasks.length - 1].id;
 
-    // Record execution with all pipeline task IDs
+    // Record execution with lastTaskId — chained schedules (afterScheduleId) resolve
+    // the predecessor's execution.taskId to check if it's terminal. Using lastTaskId
+    // ensures the chain fires when the FULL pipeline completes, not just step 1.
     await this.recordTriggeredExecution(
       scheduleId,
-      firstTaskId,
+      lastTaskId,
       schedule.nextRunAt ?? triggeredAt,
       triggeredAt,
       allTaskIds,
