@@ -583,9 +583,7 @@ export class DependencyHandler extends BaseEventHandler {
         // If so, cascade cancellation instead of unblocking
         const depsResult = await this.dependencyRepo.getDependencies(dep.taskId);
         if (depsResult.ok) {
-          const failedDep = depsResult.value.find(
-            (d) => d.resolution === 'failed' || d.resolution === 'cancelled',
-          );
+          const failedDep = depsResult.value.find((d) => d.resolution === 'failed' || d.resolution === 'cancelled');
           if (failedDep) {
             this.logger.info('Dependency resolved as failed/cancelled — cascading cancellation', {
               taskId: dep.taskId,

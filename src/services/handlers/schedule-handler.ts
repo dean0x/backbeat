@@ -6,7 +6,15 @@
  */
 
 import type { Schedule, ScheduleId, Task } from '../../core/domain.js';
-import { createTask, isTerminalState, ScheduleStatus, ScheduleType, TaskId, TaskStatus, updateSchedule } from '../../core/domain.js';
+import {
+  createTask,
+  isTerminalState,
+  ScheduleStatus,
+  ScheduleType,
+  TaskId,
+  TaskStatus,
+  updateSchedule,
+} from '../../core/domain.js';
 import { BackbeatError, ErrorCode } from '../../core/errors.js';
 import { EventBus } from '../../core/events/event-bus.js';
 import {
@@ -268,7 +276,12 @@ export class ScheduleHandler extends BaseEventHandler {
     const task = createTask(taskTemplate);
     const taskSaveResult = await this.taskRepo.save(task);
     if (!taskSaveResult.ok) {
-      await this.recordFailedExecution(scheduleId, schedule.nextRunAt ?? triggeredAt, triggeredAt, taskSaveResult.error.message);
+      await this.recordFailedExecution(
+        scheduleId,
+        schedule.nextRunAt ?? triggeredAt,
+        triggeredAt,
+        taskSaveResult.error.message,
+      );
       return taskSaveResult;
     }
 

@@ -16,9 +16,9 @@ import {
   Priority,
   Schedule,
   ScheduleCreateRequest,
+  ScheduledPipelineCreateRequest,
   ScheduleId,
   ScheduleStatus,
-  ScheduledPipelineCreateRequest,
   ScheduleType,
 } from '../core/domain.js';
 import { BackbeatError, ErrorCode } from '../core/errors.js';
@@ -382,7 +382,9 @@ export class ScheduleManagerService implements ScheduleService {
     if (!agentResult.ok) return agentResult;
 
     // Build synthetic prompt for display/taskTemplate
-    const stepSummary = steps.map((s, i) => `Step ${i + 1}: ${s.prompt.substring(0, 40)}${s.prompt.length > 40 ? '...' : ''}`).join(' → ');
+    const stepSummary = steps
+      .map((s, i) => `Step ${i + 1}: ${s.prompt.substring(0, 40)}${s.prompt.length > 40 ? '...' : ''}`)
+      .join(' → ');
     const syntheticPrompt = `Pipeline (${steps.length} steps): ${stepSummary}`;
 
     // Create schedule with pipelineSteps

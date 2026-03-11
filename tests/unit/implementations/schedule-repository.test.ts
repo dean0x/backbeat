@@ -6,7 +6,14 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Schedule } from '../../../src/core/domain.js';
-import { createSchedule, MissedRunPolicy, ScheduleId, ScheduleStatus, ScheduleType, TaskId } from '../../../src/core/domain.js';
+import {
+  createSchedule,
+  MissedRunPolicy,
+  ScheduleId,
+  ScheduleStatus,
+  ScheduleType,
+  TaskId,
+} from '../../../src/core/domain.js';
 import { Database } from '../../../src/implementations/database.js';
 import { SQLiteScheduleRepository } from '../../../src/implementations/schedule-repository.js';
 
@@ -552,10 +559,7 @@ describe('SQLiteScheduleRepository - Unit Tests', () => {
   describe('pipeline_steps round-trip', () => {
     it('should save and retrieve schedule with pipelineSteps', async () => {
       const schedule = createTestSchedule({
-        pipelineSteps: [
-          { prompt: 'lint the codebase' },
-          { prompt: 'run the tests' },
-        ],
+        pipelineSteps: [{ prompt: 'lint the codebase' }, { prompt: 'run the tests' }],
       });
 
       await repo.save(schedule);
@@ -629,11 +633,7 @@ describe('SQLiteScheduleRepository - Unit Tests', () => {
       expect(initialResult.value!.pipelineSteps).toBeUndefined();
 
       // Update to add pipeline steps
-      const steps = [
-        { prompt: 'step one' },
-        { prompt: 'step two' },
-        { prompt: 'step three' },
-      ];
+      const steps = [{ prompt: 'step one' }, { prompt: 'step two' }, { prompt: 'step three' }];
       await repo.update(schedule.id, { pipelineSteps: steps });
 
       // Verify pipeline steps persisted

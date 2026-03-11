@@ -645,14 +645,12 @@ describe('ScheduleHandler - Behavioral Tests', () => {
 
     it('should emit ScheduleExecuted with lastTaskId for concurrency tracking', async () => {
       // Arrange
-      const twoSteps: readonly PipelineStepRequest[] = [
-        { prompt: 'build' },
-        { prompt: 'push' },
-      ];
+      const twoSteps: readonly PipelineStepRequest[] = [{ prompt: 'build' }, { prompt: 'push' }];
       const schedule = createPipelineSchedule({ pipelineSteps: twoSteps });
       await saveSchedule({ ...schedule, status: ScheduleStatus.ACTIVE });
 
-      const executedEvents: Array<{ scheduleId: ReturnType<typeof ScheduleId>; taskId: ReturnType<typeof TaskId> }> = [];
+      const executedEvents: Array<{ scheduleId: ReturnType<typeof ScheduleId>; taskId: ReturnType<typeof TaskId> }> =
+        [];
       eventBus.subscribe('ScheduleExecuted', async (e) => {
         executedEvents.push({ scheduleId: e.scheduleId, taskId: e.taskId });
       });
@@ -705,10 +703,7 @@ describe('ScheduleHandler - Behavioral Tests', () => {
       });
 
       // Create pipeline schedule chained after predecessor
-      const twoSteps: readonly PipelineStepRequest[] = [
-        { prompt: 'step-0' },
-        { prompt: 'step-1' },
-      ];
+      const twoSteps: readonly PipelineStepRequest[] = [{ prompt: 'step-0' }, { prompt: 'step-1' }];
       const pipelineSchedule = createPipelineSchedule({
         afterScheduleId: predecessor.id,
         pipelineSteps: twoSteps,

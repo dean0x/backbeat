@@ -5,7 +5,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { PipelineCreateRequest, ScheduleCreateRequest, ScheduledPipelineCreateRequest } from '../../../src/core/domain';
+import type {
+  PipelineCreateRequest,
+  ScheduleCreateRequest,
+  ScheduledPipelineCreateRequest,
+} from '../../../src/core/domain';
 import {
   createSchedule,
   MissedRunPolicy,

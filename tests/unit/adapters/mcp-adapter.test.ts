@@ -982,7 +982,16 @@ class MockScheduleService {
   createScheduledPipelineCalls: ScheduledPipelineCreateRequest[] = [];
   cancelScheduleCalls: Array<{ scheduleId: string; reason?: string; cancelTasks?: boolean }> = [];
   listSchedulesResult: Schedule[] = [];
-  getScheduleResult: { schedule: Schedule; history?: readonly { scheduledFor: number; executedAt?: number; status: string; taskId?: string; errorMessage?: string }[] } | null = null;
+  getScheduleResult: {
+    schedule: Schedule;
+    history?: readonly {
+      scheduledFor: number;
+      executedAt?: number;
+      status: string;
+      taskId?: string;
+      errorMessage?: string;
+    }[];
+  } | null = null;
   shouldFailPipeline = false;
   shouldFailScheduledPipeline = false;
   shouldFailCancelSchedule = false;
@@ -1000,7 +1009,22 @@ class MockScheduleService {
     return ok(this.listSchedulesResult);
   }
 
-  async getSchedule(scheduleId: ScheduleId, _includeHistory?: boolean, _historyLimit?: number): Promise<Result<{ schedule: Schedule; history?: readonly { scheduledFor: number; executedAt?: number; status: string; taskId?: string; errorMessage?: string }[] }>> {
+  async getSchedule(
+    scheduleId: ScheduleId,
+    _includeHistory?: boolean,
+    _historyLimit?: number,
+  ): Promise<
+    Result<{
+      schedule: Schedule;
+      history?: readonly {
+        scheduledFor: number;
+        executedAt?: number;
+        status: string;
+        taskId?: string;
+        errorMessage?: string;
+      }[];
+    }>
+  > {
     if (this.shouldFailGetSchedule) {
       return err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Failed to get schedule', {}));
     }
@@ -1050,24 +1074,26 @@ class MockScheduleService {
     }
 
     const now = Date.now();
-    return ok(Object.freeze({
-      id: ScheduleId('schedule-mock-pipeline'),
-      taskTemplate: {
-        prompt: request.steps[0].prompt,
-        priority: request.priority,
-        workingDirectory: request.workingDirectory,
-      },
-      scheduleType: request.scheduleType,
-      cronExpression: request.cronExpression,
-      timezone: request.timezone ?? 'UTC',
-      missedRunPolicy: request.missedRunPolicy ?? MissedRunPolicy.SKIP,
-      status: ScheduleStatus.ACTIVE,
-      runCount: 0,
-      nextRunAt: now + 60000,
-      pipelineSteps: request.steps,
-      createdAt: now,
-      updatedAt: now,
-    }));
+    return ok(
+      Object.freeze({
+        id: ScheduleId('schedule-mock-pipeline'),
+        taskTemplate: {
+          prompt: request.steps[0].prompt,
+          priority: request.priority,
+          workingDirectory: request.workingDirectory,
+        },
+        scheduleType: request.scheduleType,
+        cronExpression: request.cronExpression,
+        timezone: request.timezone ?? 'UTC',
+        missedRunPolicy: request.missedRunPolicy ?? MissedRunPolicy.SKIP,
+        status: ScheduleStatus.ACTIVE,
+        runCount: 0,
+        nextRunAt: now + 60000,
+        pipelineSteps: request.steps,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
   }
 }
 
@@ -1464,11 +1490,7 @@ async function simulateCancelSchedule(
 ): Promise<MCPToolResponse> {
   const { scheduleId, reason, cancelTasks } = args;
 
-  const result = await scheduleService.cancelSchedule(
-    ScheduleId(scheduleId),
-    reason,
-    cancelTasks,
-  );
+  const result = await scheduleService.cancelSchedule(ScheduleId(scheduleId), reason, cancelTasks);
 
   if (!result.ok) {
     return {
@@ -1538,11 +1560,7 @@ async function simulateGetSchedule(
   scheduleService: MockScheduleService,
   args: { scheduleId: string; includeHistory?: boolean; historyLimit?: number },
 ): Promise<MCPToolResponse> {
-  const result = await scheduleService.getSchedule(
-    ScheduleId(args.scheduleId),
-    args.includeHistory,
-    args.historyLimit,
-  );
+  const result = await scheduleService.getSchedule(ScheduleId(args.scheduleId), args.includeHistory, args.historyLimit);
 
   if (!result.ok) {
     return {
@@ -1572,8 +1590,7 @@ async function simulateGetSchedule(
       updatedAt: new Date(schedule.updatedAt).toISOString(),
       taskTemplate: {
         prompt:
-          schedule.taskTemplate.prompt.substring(0, 100) +
-          (schedule.taskTemplate.prompt.length > 100 ? '...' : ''),
+          schedule.taskTemplate.prompt.substring(0, 100) + (schedule.taskTemplate.prompt.length > 100 ? '...' : ''),
         priority: schedule.taskTemplate.priority,
         workingDirectory: schedule.taskTemplate.workingDirectory,
       },

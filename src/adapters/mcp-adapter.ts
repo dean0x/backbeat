@@ -21,10 +21,10 @@ import {
   Priority,
   ResumeTaskRequest,
   ScheduleCreateRequest,
+  ScheduledPipelineCreateRequest,
   ScheduleId,
   ScheduleStatus,
   ScheduleType,
-  ScheduledPipelineCreateRequest,
   Task,
   TaskId,
   TaskRequest,
@@ -589,8 +589,7 @@ export class MCPAdapter {
                   },
                   cancelTasks: {
                     type: 'boolean',
-                    description:
-                      'Also cancel in-flight tasks from the current pipeline execution (default: false)',
+                    description: 'Also cancel in-flight tasks from the current pipeline execution (default: false)',
                     default: false,
                   },
                 },
