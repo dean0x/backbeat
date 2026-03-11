@@ -1613,7 +1613,7 @@ export class MCPAdapter {
                 scheduleId: schedule.id,
                 stepCount: schedule.pipelineSteps?.length ?? 0,
                 scheduleType: schedule.scheduleType,
-                nextRunAt: schedule.nextRunAt ? new Date(schedule.nextRunAt).toISOString() : undefined,
+                nextRunAt: schedule.nextRunAt ? new Date(schedule.nextRunAt).toISOString() : null,
                 status: schedule.status,
                 timezone: schedule.timezone,
               },
