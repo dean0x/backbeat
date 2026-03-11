@@ -17,6 +17,7 @@ import {
   ScheduleId,
   ScheduleStatus,
   ScheduleType,
+  TaskId,
 } from '../../../src/core/domain';
 import { Database } from '../../../src/implementations/database';
 import { SQLiteScheduleRepository } from '../../../src/implementations/schedule-repository';
@@ -372,6 +373,98 @@ describe('ScheduleManagerService - Unit Tests', () => {
       const events = eventBus.getEmittedEvents('ScheduleCancelled');
       expect(events[0].scheduleId).toBe(schedule.id);
       expect(events[0].reason).toBe('no longer needed');
+    });
+
+    it('should emit TaskCancellationRequested for in-flight tasks when cancelTasks=true', async () => {
+      const schedule = createSchedule({
+        taskTemplate: { prompt: 'pipeline step' },
+        scheduleType: ScheduleType.CRON,
+        cronExpression: '0 9 * * *',
+      });
+      await scheduleRepo.save(schedule);
+
+      // Record an execution with pipeline task IDs
+      const now = Date.now();
+      await scheduleRepo.recordExecution({
+        scheduleId: schedule.id,
+        scheduledFor: now,
+        executedAt: now,
+        status: 'triggered',
+        pipelineTaskIds: [TaskId('task-aaa'), TaskId('task-bbb'), TaskId('task-ccc')],
+        createdAt: now,
+      });
+
+      const result = await service.cancelSchedule(schedule.id, 'abort pipeline', true);
+
+      expect(result.ok).toBe(true);
+      expect(eventBus.hasEmitted('ScheduleCancelled')).toBe(true);
+      expect(eventBus.hasEmitted('TaskCancellationRequested')).toBe(true);
+      expect(eventBus.getEventCount('TaskCancellationRequested')).toBe(3);
+
+      const cancelEvents = eventBus.getEmittedEvents('TaskCancellationRequested');
+      const cancelledTaskIds = cancelEvents.map((e: { taskId: string }) => e.taskId);
+      expect(cancelledTaskIds).toContain('task-aaa');
+      expect(cancelledTaskIds).toContain('task-bbb');
+      expect(cancelledTaskIds).toContain('task-ccc');
+    });
+
+    it('should cancel single taskId when no pipelineTaskIds in execution', async () => {
+      const schedule = createSchedule({
+        taskTemplate: { prompt: 'single task' },
+        scheduleType: ScheduleType.CRON,
+        cronExpression: '0 9 * * *',
+      });
+      await scheduleRepo.save(schedule);
+
+      // Insert a task row to satisfy FK constraint on schedule_executions.task_id
+      const taskId = TaskId('task-single');
+      const now = Date.now();
+      db.getDatabase().prepare(
+        `INSERT INTO tasks (id, prompt, status, priority, created_at) VALUES (?, ?, ?, ?, ?)`,
+      ).run(taskId, 'single task', 'running', 'P2', now);
+
+      // Record an execution with only a single taskId (non-pipeline schedule)
+      await scheduleRepo.recordExecution({
+        scheduleId: schedule.id,
+        scheduledFor: now,
+        executedAt: now,
+        status: 'triggered',
+        taskId,
+        createdAt: now,
+      });
+
+      const result = await service.cancelSchedule(schedule.id, 'stop it', true);
+
+      expect(result.ok).toBe(true);
+      expect(eventBus.getEventCount('TaskCancellationRequested')).toBe(1);
+
+      const cancelEvents = eventBus.getEmittedEvents('TaskCancellationRequested');
+      expect(cancelEvents[0].taskId).toBe('task-single');
+    });
+
+    it('should not emit TaskCancellationRequested when cancelTasks is false', async () => {
+      const schedule = createSchedule({
+        taskTemplate: { prompt: 'test' },
+        scheduleType: ScheduleType.CRON,
+        cronExpression: '0 9 * * *',
+      });
+      await scheduleRepo.save(schedule);
+
+      const now = Date.now();
+      await scheduleRepo.recordExecution({
+        scheduleId: schedule.id,
+        scheduledFor: now,
+        executedAt: now,
+        status: 'triggered',
+        pipelineTaskIds: [TaskId('task-x')],
+        createdAt: now,
+      });
+
+      const result = await service.cancelSchedule(schedule.id, 'normal cancel');
+
+      expect(result.ok).toBe(true);
+      expect(eventBus.hasEmitted('ScheduleCancelled')).toBe(true);
+      expect(eventBus.hasEmitted('TaskCancellationRequested')).toBe(false);
     });
 
     it('should return error for non-existent schedule', async () => {
