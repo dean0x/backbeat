@@ -1,6 +1,7 @@
 import { AGENT_PROVIDERS, type AgentProvider, isAgentProvider } from '../../core/agents.js';
 import { ScheduleId } from '../../core/domain.js';
 import type { ScheduleService } from '../../core/interfaces.js';
+import { toMissedRunPolicy } from '../../services/schedule-manager.js';
 import { validatePath } from '../../utils/validation.js';
 import { withServices } from '../services.js';
 import * as ui from '../ui.js';
@@ -154,7 +155,7 @@ async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]) 
     process.exit(1);
   }
 
-  const { ScheduleType, MissedRunPolicy, Priority } = await import('../../core/domain.js');
+  const { ScheduleType, Priority } = await import('../../core/domain.js');
 
   // Pipeline mode: --pipeline with --step flags
   if (isPipeline) {
@@ -169,14 +170,7 @@ async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]) 
       cronExpression,
       scheduledAt,
       timezone,
-      missedRunPolicy:
-        missedRunPolicy === 'catchup'
-          ? MissedRunPolicy.CATCHUP
-          : missedRunPolicy === 'fail'
-            ? MissedRunPolicy.FAIL
-            : missedRunPolicy
-              ? MissedRunPolicy.SKIP
-              : undefined,
+      missedRunPolicy: missedRunPolicy ? toMissedRunPolicy(missedRunPolicy) : undefined,
       priority: priority ? Priority[priority] : undefined,
       workingDirectory,
       maxRuns,
@@ -218,14 +212,7 @@ async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]) 
     cronExpression,
     scheduledAt,
     timezone,
-    missedRunPolicy:
-      missedRunPolicy === 'catchup'
-        ? MissedRunPolicy.CATCHUP
-        : missedRunPolicy === 'fail'
-          ? MissedRunPolicy.FAIL
-          : missedRunPolicy
-            ? MissedRunPolicy.SKIP
-            : undefined,
+    missedRunPolicy: missedRunPolicy ? toMissedRunPolicy(missedRunPolicy) : undefined,
     priority: priority ? Priority[priority] : undefined,
     workingDirectory,
     maxRuns,
