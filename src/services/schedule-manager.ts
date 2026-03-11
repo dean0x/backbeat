@@ -281,9 +281,10 @@ export class ScheduleManagerService implements ScheduleService {
       validatedWorkingDirectory = pathValidation.value;
     }
 
-    // Validate per-step workingDirectory
-    for (let i = 0; i < steps.length; i++) {
-      const step = steps[i];
+    // Validate per-step workingDirectory and build normalized steps
+    const normalizedSteps = [...steps];
+    for (let i = 0; i < normalizedSteps.length; i++) {
+      const step = normalizedSteps[i];
       if (step.workingDirectory) {
         const pathValidation = validatePath(step.workingDirectory);
         if (!pathValidation.ok) {
@@ -295,6 +296,7 @@ export class ScheduleManagerService implements ScheduleService {
             ),
           );
         }
+        normalizedSteps[i] = { ...step, workingDirectory: pathValidation.value };
       }
     }
 
@@ -303,10 +305,10 @@ export class ScheduleManagerService implements ScheduleService {
     if (!agentResult.ok) return agentResult;
 
     // Build synthetic prompt for display/taskTemplate
-    const stepSummary = steps.map((s, i) => `Step ${i + 1}: ${truncatePrompt(s.prompt, 40)}`).join(' → ');
-    const syntheticPrompt = `Pipeline (${steps.length} steps): ${stepSummary}`;
+    const stepSummary = normalizedSteps.map((s, i) => `Step ${i + 1}: ${truncatePrompt(s.prompt, 40)}`).join(' → ');
+    const syntheticPrompt = `Pipeline (${normalizedSteps.length} steps): ${stepSummary}`;
 
-    // Create schedule with pipelineSteps
+    // Create schedule with pipelineSteps (using normalized paths)
     const schedule = createSchedule({
       taskTemplate: {
         prompt: syntheticPrompt,
@@ -314,7 +316,7 @@ export class ScheduleManagerService implements ScheduleService {
         workingDirectory: validatedWorkingDirectory,
         agent: agentResult.value,
       },
-      pipelineSteps: steps,
+      pipelineSteps: normalizedSteps,
       scheduleType: request.scheduleType,
       cronExpression: request.cronExpression,
       scheduledAt: scheduledAtMs,

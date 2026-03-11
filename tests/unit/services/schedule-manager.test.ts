@@ -766,6 +766,31 @@ describe('ScheduleManagerService - Unit Tests', () => {
       expect(result.error.message).toContain('exceed 20 steps');
     });
 
+    it('should store normalized paths for per-step workingDirectory', async () => {
+      const cwd = process.cwd();
+      // Path with /../ segment that resolves to cwd
+      const unnormalizedPath = `${cwd}/src/../src`;
+      const normalizedPath = `${cwd}/src`;
+
+      const request = scheduledPipelineRequest({
+        steps: [
+          { prompt: 'Step one', workingDirectory: unnormalizedPath },
+          { prompt: 'Step two' },
+        ],
+      });
+
+      const result = await service.createScheduledPipeline(request);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // The schedule's pipelineSteps should contain the NORMALIZED path
+      expect(result.value.pipelineSteps).toBeDefined();
+      expect(result.value.pipelineSteps![0].workingDirectory).toBe(normalizedPath);
+      // Step without workingDirectory should remain undefined
+      expect(result.value.pipelineSteps![1].workingDirectory).toBeUndefined();
+    });
+
     it('should emit ScheduleCreated event with pipelineSteps', async () => {
       const request = scheduledPipelineRequest();
 
