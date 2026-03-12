@@ -10,15 +10,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Container } from '../../../src/core/container';
 import { InMemoryEventBus } from '../../../src/core/events/event-bus';
 import { InMemoryAgentRegistry } from '../../../src/implementations/agent-registry';
+import { SQLiteCheckpointRepository } from '../../../src/implementations/checkpoint-repository';
 import { Database } from '../../../src/implementations/database';
 import { SQLiteDependencyRepository } from '../../../src/implementations/dependency-repository';
 import { EventDrivenWorkerPool } from '../../../src/implementations/event-driven-worker-pool';
 import { BufferedOutputCapture } from '../../../src/implementations/output-capture';
 import { ProcessSpawnerAdapter } from '../../../src/implementations/process-spawner-adapter';
 import { SystemResourceMonitor } from '../../../src/implementations/resource-monitor';
-import { PriorityTaskQueue } from '../../../src/implementations/task-queue';
-import { SQLiteCheckpointRepository } from '../../../src/implementations/checkpoint-repository';
 import { SQLiteScheduleRepository } from '../../../src/implementations/schedule-repository';
+import { PriorityTaskQueue } from '../../../src/implementations/task-queue';
 import { SQLiteTaskRepository } from '../../../src/implementations/task-repository';
 import {
   extractHandlerDependencies,

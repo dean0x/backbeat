@@ -342,4 +342,3 @@ export class SQLiteTaskRepository implements TaskRepository, SyncTaskOperations 
     };
   }
 }
-

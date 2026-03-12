@@ -22,8 +22,8 @@ import {
   TaskRepository,
   WorkerPool,
 } from '../core/interfaces.js';
-import { Database } from '../implementations/database.js';
 import { err, ok, Result } from '../core/result.js';
+import { Database } from '../implementations/database.js';
 import { CheckpointHandler } from './handlers/checkpoint-handler.js';
 import { DependencyHandler } from './handlers/dependency-handler.js';
 import { OutputHandler } from './handlers/output-handler.js';
