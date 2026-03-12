@@ -201,6 +201,12 @@ async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]) 
     return;
   }
 
+  // Guard: --step without --pipeline is a user error
+  if (pipelineSteps.length > 0) {
+    ui.error('--step requires --pipeline. Did you mean: beat schedule create --pipeline --step "..." --step "..."');
+    process.exit(1);
+  }
+
   // Single-task mode
   const prompt = promptWords.join(' ');
   if (!prompt) {
