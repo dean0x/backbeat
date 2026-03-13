@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { TaskId } from '../core/domain.js';
 import { BackbeatError, ErrorCode, operationErrorHandler } from '../core/errors.js';
 import { DependencyRepository, TaskDependency } from '../core/interfaces.js';
-import { err, ok, Result, tryCatch, tryCatchAsync } from '../core/result.js';
+import { err, ok, Result, tryCatchAsync } from '../core/result.js';
 import { Database } from './database.js';
 
 /**
@@ -47,6 +47,7 @@ export class SQLiteDependencyRepository implements DependencyRepository {
   /** Default pagination limit for findAll() */
   private static readonly DEFAULT_LIMIT = 100;
 
+  private readonly database: Database;
   private readonly db: SQLite.Database;
   private readonly addDependencyStmt: SQLite.Statement;
   private readonly getDependenciesStmt: SQLite.Statement;
@@ -64,6 +65,7 @@ export class SQLiteDependencyRepository implements DependencyRepository {
   private readonly findAllPaginatedStmt: SQLite.Statement;
 
   constructor(database: Database) {
+    this.database = database;
     this.db = database.getDatabase();
 
     // Prepare statements for better performance
@@ -210,9 +212,9 @@ export class SQLiteDependencyRepository implements DependencyRepository {
       );
     }
 
-    // SECURITY: TOCTOU Fix - Use synchronous .transaction() for true atomicity
+    // SECURITY: TOCTOU Fix - Use runInTransaction() for true atomicity
     // All validation and insertion happens within single atomic transaction
-    const addDependenciesTransaction = this.db.transaction((taskId: TaskId, dependsOn: readonly TaskId[]) => {
+    return this.database.runInTransaction(() => {
       // ALL operations below are synchronous - no await, no yielding to event loop
 
       // VALIDATION: Check dependent task exists
@@ -265,29 +267,6 @@ export class SQLiteDependencyRepository implements DependencyRepository {
 
       return createdDependencies;
     });
-
-    // Execute the transaction and wrap result
-    return tryCatch(
-      () => addDependenciesTransaction(taskId, dependsOn),
-      (error) => {
-        // Preserve semantic BackbeatError types
-        if (error instanceof BackbeatError) {
-          return error;
-        }
-
-        // Handle UNIQUE constraint violation
-        if (error instanceof Error && error.message.includes('UNIQUE constraint')) {
-          return new BackbeatError(
-            ErrorCode.INVALID_OPERATION,
-            `One or more dependencies already exist for task: ${taskId}`,
-            { taskId, dependsOn },
-          );
-        }
-
-        // Unknown errors become SYSTEM_ERROR
-        return new BackbeatError(ErrorCode.SYSTEM_ERROR, `Failed to add dependencies: ${error}`, { taskId, dependsOn });
-      },
-    );
   }
 
   /**
