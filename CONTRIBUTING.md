@@ -14,7 +14,7 @@ npm run build
 Backbeat uses [Vitest](https://vitest.dev/) with grouped test commands. The full suite is memory-intensive, so tests are split into safe groups:
 
 ```bash
-# Safe to run from Claude Code or any environment
+# Safe to run individually
 npm run test:core           # Core domain logic (~3s)
 npm run test:handlers       # Service handlers (~3s)
 npm run test:services       # Service layer (task-manager, recovery, etc.)

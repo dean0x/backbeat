@@ -1,4 +1,4 @@
-# Backbeat Setup Guide for Claude Code
+# Backbeat Setup Guide
 
 ## Quick Setup (2 minutes)
 
@@ -43,7 +43,7 @@ mkdir -p ~/.config/claude
 cp /workspace/backbeat/config/mcp-config-ready.json ~/.config/claude/mcp_servers.json
 ```
 
-### Step 3: Start NEW Claude Code Session
+### Step 3: Start a New Coding Session
 
 **Important**: Must be a NEW session, not `--continue`
 ```bash
@@ -56,7 +56,7 @@ claude "Let's test Backbeat MCP tools"
 
 ### Step 4: Test Integration
 
-In the new Claude Code session, try:
+In the new coding session, try:
 
 1. **Check available tools**:
    > "What MCP tools are available?"
@@ -96,12 +96,14 @@ npm install
 npm run build
 ```
 
-## Using Real Claude CLI
+## Using a Real Agent CLI
 
-To use with actual Claude CLI (not mock):
+To use with an actual agent CLI (not mock):
+To use with an actual agent CLI (not mock):
 
 1. Remove `"MOCK_MODE": "true"` from config
-2. Ensure `claude` CLI is installed
+2. Ensure your chosen agent CLI is installed (e.g., `claude`, `codex`, `gemini-cli`)
+3. Test with real tasks
 3. Test with real tasks
 
 ## What You Can Do Now
@@ -140,8 +142,8 @@ npm run validate
 
 ## Success!
 
-Once you see the tools in Claude Code, Backbeat is ready!
-You can now delegate tasks to background Claude Code instances.
+Once you see the tools in your MCP client, Backbeat is ready!
+You can now delegate tasks to background AI agent instances.
 
 ---
 

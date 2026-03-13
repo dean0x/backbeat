@@ -8,11 +8,11 @@
 
 ## Why Backbeat Exists
 
-**The Problem**: Claude Code is incredibly powerful, but you can only work on one thing at a time with a single claude code instance. This kills true multitasking and orchestration.
+**The Problem**: AI coding agents are incredibly powerful, but you can only work on one thing at a time with a single instance. This kills true multitasking and orchestration.
 
-**Our Belief**: AI should scale with your ambition, not limit it. Why use only one Claude instance?
+**Our Belief**: AI should scale with your ambition, not limit it. Why use only one AI coding agent?
 
-**The Vision**: Transform your machine or dedicated server into an AI powerhouse where you orchestrate multiple Claude Code instances through one main session. Work on authentication in repo A while simultaneously building APIs in repo B, all coordinated through your primary Claude Code interface - no context pollution, no workflow interruption.
+**The Vision**: Transform your machine or dedicated server into an AI powerhouse where you orchestrate multiple AI coding agents through one main session. Work on authentication in repo A while simultaneously building APIs in repo B, all coordinated through your primary MCP client - no context pollution, no workflow interruption.
 
 ## Features
 
@@ -31,7 +31,7 @@ See **[FEATURES.md](./docs/FEATURES.md)** for complete feature list.
 
 - Node.js 20.0.0+
 - npm 10.0.0+
-- Claude Code CLI installed (`claude` command available)
+- An AI coding agent CLI installed (e.g., `claude`, `codex`, `gemini-cli`)
 
 ### System Requirements
 
@@ -61,13 +61,13 @@ Add to your project's `.mcp.json`:
 }
 ```
 
-Restart Claude Code to connect to Backbeat.
+Restart your MCP client to connect to Backbeat.
 
 ## Usage
 
 ### MCP Tools
 
-Once configured, use these tools in Claude Code:
+Once configured, use these MCP tools:
 
 | Tool | Description | Usage |
 |------|-------------|-------|
@@ -325,11 +325,11 @@ See **[ROADMAP.md](./docs/ROADMAP.md)** for detailed plans and timelines.
 
 ## Troubleshooting
 
-### Claude CLI not found
+### Agent CLI not found
 
-Ensure `claude` CLI is in your PATH:
+Ensure your agent CLI is in your PATH:
 ```bash
-which claude
+which claude    # or: which codex, which gemini
 ```
 
 ### Server won't start

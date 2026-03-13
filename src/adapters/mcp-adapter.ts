@@ -322,13 +322,13 @@ export class MCPAdapter {
           tools: [
             {
               name: 'DelegateTask',
-              description: 'Delegate a task to a background Claude Code instance',
+              description: 'Delegate a task to a background AI agent instance',
               inputSchema: {
                 type: 'object',
                 properties: {
                   prompt: {
                     type: 'string',
-                    description: 'The task for Claude Code to execute',
+                    description: 'The task for the AI agent to execute',
                     minLength: 1,
                     maxLength: 4000,
                   },

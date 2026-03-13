@@ -25,13 +25,13 @@ What actually happened instead.
 **Logs**
 If applicable, add logs from:
 - Backbeat server output
-- Claude Code console
+- MCP client console
 - Task logs (via TaskLogs tool)
 
 **Environment:**
  - OS: [e.g. macOS 14.0, Ubuntu 22.04]
  - Node.js version: [e.g. 20.10.0]
- - Claude Code version: [e.g. latest]
+ - MCP client & agent CLI version: [e.g. claude latest, codex 0.1]
  - Backbeat version: [e.g. 0.5.0]
 
 **Additional context**

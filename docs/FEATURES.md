@@ -7,7 +7,7 @@ Last Updated: March 2026
 ## ✅ Core Task Delegation
 
 ### MCP Tools
-- **DelegateTask**: Submit tasks to background Claude Code instances
+- **DelegateTask**: Submit tasks to background AI agent instances
 - **TaskStatus**: Check status of running/completed tasks
 - **TaskLogs**: Retrieve stdout/stderr output from tasks (with tail option)
 - **CancelTask**: Cancel running tasks with optional reason
@@ -82,9 +82,9 @@ Last Updated: March 2026
 
 ## ✅ Process Management
 
-### Claude Code Integration
-- **CLI Spawning**: Spawns `claude` processes with proper arguments
-- **Permission Handling**: Uses `--dangerously-skip-permissions` flag
+### Agent Process Management
+- **CLI Spawning**: Spawns agent processes (`claude`, `codex`, `gemini`) with proper arguments
+- **Permission Handling**: Agent-specific permission flags (e.g., `--dangerously-skip-permissions` for Claude)
 - **Working Directory**: Supports custom working directories
 - **Process Monitoring**: Tracks PIDs, exit codes, and resource usage
 
@@ -117,7 +117,7 @@ Last Updated: March 2026
 - `beat help`: Show help and usage
 
 ### Direct Task Commands (v0.2.1+)
-- `beat run <prompt>`: Delegate task directly to background Claude instance
+- `beat run <prompt>`: Delegate task directly to a background agent instance
 - `beat status [task-id]`: Check status of all tasks or specific task
 - `beat logs <task-id>`: Retrieve task output and logs
 - `beat cancel <task-id> [reason]`: Cancel running task with optional reason

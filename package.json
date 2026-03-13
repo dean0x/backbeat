@@ -60,15 +60,17 @@
   },
   "keywords": [
     "mcp",
-    "claude",
-    "claude-code",
+    "ai-agents",
+    "multi-agent",
+    "codex",
+    "gemini",
     "automation",
     "task-delegation",
     "backbeat"
   ],
   "author": "dean0x",
   "license": "MIT",
-  "description": "Backbeat — MCP server for delegating tasks to background Claude Code instances",
+  "description": "Backbeat — MCP server for orchestrating background AI coding agents (Claude, Codex, Gemini)",
   "publishConfig": {
     "access": "public"
   },
