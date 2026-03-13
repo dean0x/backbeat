@@ -86,7 +86,13 @@ describe('ScheduleHandler - Behavioral Tests', () => {
       const freshDb = new Database(':memory:');
       const freshScheduleRepo = new SQLiteScheduleRepository(freshDb);
       const freshTaskRepo = new SQLiteTaskRepository(freshDb);
-      const result = await ScheduleHandler.create(freshScheduleRepo, freshTaskRepo, freshEventBus, freshDb, freshLogger);
+      const result = await ScheduleHandler.create(
+        freshScheduleRepo,
+        freshTaskRepo,
+        freshEventBus,
+        freshDb,
+        freshLogger,
+      );
 
       expect(result.ok).toBe(true);
       expect(freshLogger.hasLogContaining('ScheduleHandler initialized')).toBe(true);
