@@ -27,7 +27,6 @@ import { err, ok, Result } from '../core/result.js';
 import { CheckpointHandler } from './handlers/checkpoint-handler.js';
 import { DependencyHandler } from './handlers/dependency-handler.js';
 import { PersistenceHandler } from './handlers/persistence-handler.js';
-import { QueryHandler } from './handlers/query-handler.js';
 import { QueueHandler } from './handlers/queue-handler.js';
 import { ScheduleHandler } from './handlers/schedule-handler.js';
 import { WorkerHandler } from './handlers/worker-handler.js';
@@ -194,17 +193,23 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
   // Helper for creating child loggers
   const childLogger = (module: string) => logger.child({ module });
 
-  // Create 4 standard handlers that use setup(eventBus) pattern
+  // Create 3 standard handlers that use setup(eventBus) pattern
   // ARCHITECTURE: All handlers are independent - no inter-handler dependencies
   const standardHandlers = [
     // 1. Persistence Handler - manages database operations
     new PersistenceHandler(deps.taskRepository, childLogger('PersistenceHandler')),
-    // 2. Query Handler - handles read operations for pure event-driven architecture
-    new QueryHandler(deps.taskRepository, deps.outputCapture, eventBus, childLogger('QueryHandler')),
-    // 3. Queue Handler - manages task queue operations with dependency awareness
+    // 2. Queue Handler - manages task queue operations with dependency awareness
     new QueueHandler(deps.taskQueue, deps.dependencyRepository, deps.taskRepository, childLogger('QueueHandler')),
-    // 4. Worker Handler - manages worker lifecycle
-    new WorkerHandler(deps.config, deps.workerPool, deps.resourceMonitor, eventBus, childLogger('WorkerHandler')),
+    // 3. Worker Handler - manages worker lifecycle
+    new WorkerHandler(
+      deps.config,
+      deps.workerPool,
+      deps.resourceMonitor,
+      eventBus,
+      deps.taskQueue,
+      deps.taskRepository,
+      childLogger('WorkerHandler'),
+    ),
   ];
 
   // Register all standard handlers

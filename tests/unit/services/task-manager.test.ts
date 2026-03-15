@@ -1,10 +1,10 @@
 /**
  * Unit tests for TaskManagerService
- * ARCHITECTURE: Tests the pure event-driven orchestrator with mock EventBus
+ * ARCHITECTURE: Tests the hybrid orchestrator (commands via events, queries direct)
  * Pattern: Behavior-driven testing with Result pattern validation
  *
- * The TaskManagerService NEVER accesses repositories directly.
- * All operations go through EventBus emit() for commands and request() for queries.
+ * The TaskManagerService uses EventBus for commands (delegate, cancel) and
+ * direct repository/outputCapture calls for queries (getStatus, getLogs, retry, resume).
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,7 +13,7 @@ import type { Task, TaskCheckpoint, TaskRequest } from '../../../src/core/domain
 import { Priority, TaskId, TaskStatus } from '../../../src/core/domain';
 import { BackbeatError, ErrorCode } from '../../../src/core/errors';
 import type { EventBus } from '../../../src/core/events/event-bus';
-import type { CheckpointRepository, Logger } from '../../../src/core/interfaces';
+import type { CheckpointRepository, Logger, OutputCapture, TaskRepository } from '../../../src/core/interfaces';
 import { err, ok } from '../../../src/core/result';
 import { TaskManagerService } from '../../../src/services/task-manager';
 import { ConfigFactory } from '../../fixtures/factories';
@@ -25,11 +25,10 @@ import { createMockLogger } from '../../fixtures/mocks';
 
 /**
  * Minimal EventBus mock: only the methods TaskManagerService actually calls.
- * Defaults: emit resolves ok, request resolves ok(null).
+ * Defaults: emit resolves ok.
  */
 const createTestEventBus = () => ({
   emit: vi.fn().mockResolvedValue(ok(undefined)),
-  request: vi.fn().mockResolvedValue(ok(null)),
   subscribe: vi.fn().mockReturnValue(ok('sub-1')),
   dispose: vi.fn(),
 });
@@ -41,11 +40,34 @@ const createMockCheckpointRepo = (): CheckpointRepository => ({
   deleteByTask: vi.fn().mockResolvedValue(ok(undefined)),
 });
 
+const createMockTaskRepo = (): TaskRepository => ({
+  save: vi.fn().mockResolvedValue(ok(undefined)),
+  update: vi.fn().mockResolvedValue(ok(undefined)),
+  findById: vi.fn().mockResolvedValue(ok(null)),
+  findAll: vi.fn().mockResolvedValue(ok([])),
+  findAllUnbounded: vi.fn().mockResolvedValue(ok([])),
+  count: vi.fn().mockResolvedValue(ok(0)),
+  findByStatus: vi.fn().mockResolvedValue(ok([])),
+});
+
+const createMockOutputCapture = (): OutputCapture => ({
+  capture: vi.fn().mockReturnValue(ok(undefined)),
+  getOutput: vi.fn().mockReturnValue(
+    ok({
+      taskId: TaskId('mock'),
+      stdout: [],
+      stderr: [],
+      totalSize: 0,
+    }),
+  ),
+  clear: vi.fn().mockReturnValue(ok(undefined)),
+});
+
 /**
  * Build a plain (unfrozen) Task-like object for use as mock return values.
  * NOTE: We avoid TaskFactory.withId() because createTask() returns Object.freeze()
  * objects, and the factory's .withId() tries to mutate the frozen object's id field.
- * For mock return values from eventBus.request, we need unfrozen plain objects.
+ * For mock return values from repo calls, we need unfrozen plain objects.
  */
 function buildMockTask(overrides: Partial<Task> = {}): Task {
   const now = Date.now();
@@ -101,13 +123,23 @@ describe('TaskManagerService', () => {
   let eventBus: ReturnType<typeof createTestEventBus>;
   let logger: Logger;
   let config: Configuration;
+  let taskRepo: ReturnType<typeof createMockTaskRepo>;
+  let outputCapture: ReturnType<typeof createMockOutputCapture>;
   let service: TaskManagerService;
 
   beforeEach(() => {
     eventBus = createTestEventBus();
     logger = createMockLogger();
     config = new ConfigFactory().build();
-    service = new TaskManagerService(eventBus as unknown as EventBus, logger, config);
+    taskRepo = createMockTaskRepo();
+    outputCapture = createMockOutputCapture();
+    service = new TaskManagerService(
+      eventBus as unknown as EventBus,
+      logger,
+      config,
+      taskRepo as unknown as TaskRepository,
+      outputCapture as unknown as OutputCapture,
+    );
   });
 
   // ---------------------------------------------------------------------------
@@ -176,7 +208,13 @@ describe('TaskManagerService', () => {
     describe('agent resolution', () => {
       it('should fail delegation when no agent specified and no default configured', async () => {
         const noDefaultConfig = new ConfigFactory().withDefaultAgent(undefined).build();
-        const svc = new TaskManagerService(eventBus as unknown as EventBus, logger, noDefaultConfig);
+        const svc = new TaskManagerService(
+          eventBus as unknown as EventBus,
+          logger,
+          noDefaultConfig,
+          taskRepo as unknown as TaskRepository,
+          outputCapture as unknown as OutputCapture,
+        );
 
         const result = await svc.delegate({ prompt: 'test' });
 
@@ -189,7 +227,13 @@ describe('TaskManagerService', () => {
 
       it('should use config defaultAgent when task does not specify one', async () => {
         const geminiConfig = new ConfigFactory().withDefaultAgent('gemini').build();
-        const svc = new TaskManagerService(eventBus as unknown as EventBus, logger, geminiConfig);
+        const svc = new TaskManagerService(
+          eventBus as unknown as EventBus,
+          logger,
+          geminiConfig,
+          taskRepo as unknown as TaskRepository,
+          outputCapture as unknown as OutputCapture,
+        );
 
         const result = await svc.delegate({ prompt: 'test' });
 
@@ -200,7 +244,13 @@ describe('TaskManagerService', () => {
 
       it('should prefer explicit task agent over config default', async () => {
         const claudeConfig = new ConfigFactory().withDefaultAgent('claude').build();
-        const svc = new TaskManagerService(eventBus as unknown as EventBus, logger, claudeConfig);
+        const svc = new TaskManagerService(
+          eventBus as unknown as EventBus,
+          logger,
+          claudeConfig,
+          taskRepo as unknown as TaskRepository,
+          outputCapture as unknown as OutputCapture,
+        );
 
         const result = await svc.delegate({ prompt: 'test', agent: 'codex' });
 
@@ -211,11 +261,11 @@ describe('TaskManagerService', () => {
     });
 
     describe('continueFrom handling', () => {
-      it('should validate continueFrom task exists via event bus request', async () => {
+      it('should validate continueFrom task exists via repository call', async () => {
         const existingTask = buildCompletedTask({
           id: TaskId('continue-task'),
         });
-        eventBus.request.mockResolvedValue(ok(existingTask));
+        (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(existingTask));
 
         const result = await service.delegate({
           prompt: 'continue work',
@@ -223,11 +273,11 @@ describe('TaskManagerService', () => {
         });
 
         expect(result.ok).toBe(true);
-        expect(eventBus.request).toHaveBeenCalledWith('TaskStatusQuery', { taskId: TaskId('continue-task') });
+        expect(taskRepo.findById).toHaveBeenCalledWith(TaskId('continue-task'));
       });
 
       it('should return error when continueFrom task not found', async () => {
-        // Default mock returns ok(null) for request
+        // Default mock returns ok(null) for findById
         const result = await service.delegate({
           prompt: 'continue work',
           continueFrom: TaskId('nonexistent'),
@@ -240,7 +290,9 @@ describe('TaskManagerService', () => {
       });
 
       it('should return error when continueFrom lookup fails', async () => {
-        eventBus.request.mockResolvedValue(err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'query failed')));
+        (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+          err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'query failed')),
+        );
 
         const result = await service.delegate({
           prompt: 'continue work',
@@ -254,7 +306,7 @@ describe('TaskManagerService', () => {
         const existingTask = buildCompletedTask({
           id: TaskId('dep-task'),
         });
-        eventBus.request.mockResolvedValue(ok(existingTask));
+        (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(existingTask));
 
         const result = await service.delegate({
           prompt: 'continue',
@@ -270,7 +322,7 @@ describe('TaskManagerService', () => {
         const existingTask = buildCompletedTask({
           id: TaskId('dep-task'),
         });
-        eventBus.request.mockResolvedValue(ok(existingTask));
+        (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(existingTask));
 
         const result = await service.delegate({
           prompt: 'continue',
@@ -288,7 +340,7 @@ describe('TaskManagerService', () => {
         const existingTask = buildCompletedTask({
           id: TaskId('continue-from'),
         });
-        eventBus.request.mockResolvedValue(ok(existingTask));
+        (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(existingTask));
 
         const result = await service.delegate({
           prompt: 'continue',
@@ -310,21 +362,19 @@ describe('TaskManagerService', () => {
   describe('getStatus()', () => {
     it('should return a single task when taskId is provided', async () => {
       const task = buildMockTask({ id: TaskId('status-1') });
-      eventBus.request.mockResolvedValue(ok(task));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(task));
 
       const result = await service.getStatus(TaskId('status-1'));
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect((result.value as Task).id).toBe(TaskId('status-1'));
-      expect(eventBus.request).toHaveBeenCalledWith('TaskStatusQuery', {
-        taskId: TaskId('status-1'),
-      });
+      expect(taskRepo.findById).toHaveBeenCalledWith(TaskId('status-1'));
     });
 
     it('should return all tasks when no taskId provided', async () => {
       const tasks = [buildMockTask(), buildMockTask(), buildMockTask()];
-      eventBus.request.mockResolvedValue(ok(tasks));
+      (taskRepo.findAllUnbounded as ReturnType<typeof vi.fn>).mockResolvedValue(ok(tasks));
 
       const result = await service.getStatus();
 
@@ -332,9 +382,7 @@ describe('TaskManagerService', () => {
       if (!result.ok) return;
       expect(Array.isArray(result.value)).toBe(true);
       expect((result.value as readonly Task[]).length).toBe(3);
-      expect(eventBus.request).toHaveBeenCalledWith('TaskStatusQuery', {
-        taskId: undefined,
-      });
+      expect(taskRepo.findAllUnbounded).toHaveBeenCalled();
     });
 
     it('should return error when task not found (null from query)', async () => {
@@ -347,15 +395,15 @@ describe('TaskManagerService', () => {
       expect((result.error as BackbeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
     });
 
-    it('should propagate event bus errors', async () => {
-      const busError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'query failed');
-      eventBus.request.mockResolvedValue(err(busError));
+    it('should propagate repository errors', async () => {
+      const repoError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'query failed');
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(err(repoError));
 
       const result = await service.getStatus(TaskId('any'));
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.error).toBe(busError);
+      expect(result.error).toBe(repoError);
     });
   });
 
@@ -363,14 +411,17 @@ describe('TaskManagerService', () => {
   // getLogs()
   // ---------------------------------------------------------------------------
   describe('getLogs()', () => {
-    it('should query logs via event bus', async () => {
+    it('should query logs via repository and outputCapture', async () => {
+      const task = buildMockTask({ id: TaskId('logs-1') });
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(task));
+
       const output = {
         taskId: TaskId('logs-1'),
         stdout: ['line 1', 'line 2'],
         stderr: [],
         totalSize: 14,
       };
-      eventBus.request.mockResolvedValue(ok(output));
+      (outputCapture.getOutput as ReturnType<typeof vi.fn>).mockReturnValue(ok(output));
 
       const result = await service.getLogs(TaskId('logs-1'));
 
@@ -378,32 +429,37 @@ describe('TaskManagerService', () => {
       if (!result.ok) return;
       expect(result.value.taskId).toBe(TaskId('logs-1'));
       expect(result.value.stdout).toEqual(['line 1', 'line 2']);
-      expect(eventBus.request).toHaveBeenCalledWith('TaskLogsQuery', {
-        taskId: TaskId('logs-1'),
-        tail: undefined,
-      });
+      expect(taskRepo.findById).toHaveBeenCalledWith(TaskId('logs-1'));
+      expect(outputCapture.getOutput).toHaveBeenCalledWith(TaskId('logs-1'), undefined);
     });
 
-    it('should pass tail parameter to event bus query', async () => {
-      eventBus.request.mockResolvedValue(ok({ taskId: TaskId('logs-1'), stdout: [], stderr: [], totalSize: 0 }));
+    it('should pass tail parameter to outputCapture', async () => {
+      const task = buildMockTask({ id: TaskId('logs-1') });
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(task));
 
       await service.getLogs(TaskId('logs-1'), 50);
 
-      expect(eventBus.request).toHaveBeenCalledWith('TaskLogsQuery', {
-        taskId: TaskId('logs-1'),
-        tail: 50,
-      });
+      expect(outputCapture.getOutput).toHaveBeenCalledWith(TaskId('logs-1'), 50);
     });
 
-    it('should propagate event bus errors', async () => {
-      const busError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'logs failed');
-      eventBus.request.mockResolvedValue(err(busError));
+    it('should return taskNotFound when task does not exist', async () => {
+      // Default mock returns ok(null)
+      const result = await service.getLogs(TaskId('nonexistent'));
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect((result.error as BackbeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
+    });
+
+    it('should propagate repository errors', async () => {
+      const repoError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'logs failed');
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(err(repoError));
 
       const result = await service.getLogs(TaskId('any'));
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.error).toBe(busError);
+      expect(result.error).toBe(repoError);
     });
   });
 
@@ -453,7 +509,7 @@ describe('TaskManagerService', () => {
         priority: Priority.P0,
         workingDirectory: '/project',
       });
-      eventBus.request.mockResolvedValue(ok(failedTask));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(failedTask));
 
       const result = await service.retry(TaskId('failed-1'));
 
@@ -474,7 +530,7 @@ describe('TaskManagerService', () => {
       const completedTask = buildCompletedTask({
         id: TaskId('comp-1'),
       });
-      eventBus.request.mockResolvedValue(ok(completedTask));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(completedTask));
 
       const result = await service.retry(TaskId('comp-1'));
 
@@ -488,7 +544,7 @@ describe('TaskManagerService', () => {
         id: TaskId('cancelled-1'),
         status: TaskStatus.CANCELLED,
       });
-      eventBus.request.mockResolvedValue(ok(cancelledTask));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(cancelledTask));
 
       const result = await service.retry(TaskId('cancelled-1'));
 
@@ -501,7 +557,7 @@ describe('TaskManagerService', () => {
       const runningTask = buildRunningTask({
         id: TaskId('running-1'),
       });
-      eventBus.request.mockResolvedValue(ok(runningTask));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(runningTask));
 
       const result = await service.retry(TaskId('running-1'));
 
@@ -516,7 +572,7 @@ describe('TaskManagerService', () => {
         id: TaskId('queued-1'),
         status: TaskStatus.QUEUED,
       });
-      eventBus.request.mockResolvedValue(ok(queuedTask));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(queuedTask));
 
       const result = await service.retry(TaskId('queued-1'));
 
@@ -534,8 +590,10 @@ describe('TaskManagerService', () => {
       expect((result.error as BackbeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
     });
 
-    it('should propagate event bus query errors', async () => {
-      eventBus.request.mockResolvedValue(err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'bus down')));
+    it('should propagate repository errors', async () => {
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+        err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'bus down')),
+      );
 
       const result = await service.retry(TaskId('any'));
 
@@ -544,7 +602,7 @@ describe('TaskManagerService', () => {
 
     it('should return error when TaskDelegated emission fails', async () => {
       const failedTask = buildFailedTask({ id: TaskId('fail-emit') });
-      eventBus.request.mockResolvedValue(ok(failedTask));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(failedTask));
       eventBus.emit.mockResolvedValue(err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'emit failed')));
 
       const result = await service.retry(TaskId('fail-emit'));
@@ -554,7 +612,7 @@ describe('TaskManagerService', () => {
 
     it('should emit TaskDelegated for the new retry task', async () => {
       const failedTask = buildFailedTask({ id: TaskId('f1') });
-      eventBus.request.mockResolvedValue(ok(failedTask));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(failedTask));
 
       const result = await service.retry(TaskId('f1'));
 
@@ -570,15 +628,13 @@ describe('TaskManagerService', () => {
 
     describe('retry chain tracking', () => {
       it('should point parentTaskId to the root task on second retry', async () => {
-        // Original: task-A -> First retry: task-B (parentTaskId=task-A, retryCount=1)
-        // Retrying task-B should produce parentTaskId=task-A (root), retryOf=task-B
         const firstRetry = buildFailedTask({
           id: TaskId('task-B'),
           parentTaskId: TaskId('task-A'),
           retryCount: 1,
           retryOf: TaskId('task-A'),
         });
-        eventBus.request.mockResolvedValue(ok(firstRetry));
+        (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(firstRetry));
 
         const result = await service.retry(TaskId('task-B'));
 
@@ -593,8 +649,7 @@ describe('TaskManagerService', () => {
         const originalTask = buildFailedTask({
           id: TaskId('original'),
         });
-        // No parentTaskId set (undefined) -- first in chain
-        eventBus.request.mockResolvedValue(ok(originalTask));
+        (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(originalTask));
 
         const result = await service.retry(TaskId('original'));
 
@@ -612,7 +667,7 @@ describe('TaskManagerService', () => {
           retryCount: 3,
           retryOf: TaskId('retry-2'),
         });
-        eventBus.request.mockResolvedValue(ok(thirdRetry));
+        (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(thirdRetry));
 
         const result = await service.retry(TaskId('retry-3'));
 
@@ -634,7 +689,14 @@ describe('TaskManagerService', () => {
 
     beforeEach(() => {
       checkpointRepo = createMockCheckpointRepo();
-      svcWithCheckpoint = new TaskManagerService(eventBus as unknown as EventBus, logger, config, checkpointRepo);
+      svcWithCheckpoint = new TaskManagerService(
+        eventBus as unknown as EventBus,
+        logger,
+        config,
+        taskRepo as unknown as TaskRepository,
+        outputCapture as unknown as OutputCapture,
+        checkpointRepo,
+      );
     });
 
     it('should return error when task not found', async () => {
@@ -649,7 +711,7 @@ describe('TaskManagerService', () => {
 
     it('should reject resume for a running task', async () => {
       const running = buildRunningTask({ id: TaskId('r1') });
-      eventBus.request.mockResolvedValue(ok(running));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(running));
 
       const result = await svcWithCheckpoint.resume({
         taskId: TaskId('r1'),
@@ -662,7 +724,7 @@ describe('TaskManagerService', () => {
 
     it('should reject resume for a queued task', async () => {
       const queued = buildMockTask({ id: TaskId('q1'), status: TaskStatus.QUEUED });
-      eventBus.request.mockResolvedValue(ok(queued));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(queued));
 
       const result = await svcWithCheckpoint.resume({
         taskId: TaskId('q1'),
@@ -678,7 +740,7 @@ describe('TaskManagerService', () => {
         id: TaskId('res-1'),
         prompt: 'original prompt',
       });
-      eventBus.request.mockResolvedValue(ok(failed));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(failed));
 
       const result = await svcWithCheckpoint.resume({
         taskId: TaskId('res-1'),
@@ -695,7 +757,7 @@ describe('TaskManagerService', () => {
         id: TaskId('res-2'),
         prompt: 'build feature',
       });
-      eventBus.request.mockResolvedValue(ok(failed));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(failed));
 
       const checkpoint: TaskCheckpoint = {
         id: 1,
@@ -726,7 +788,7 @@ describe('TaskManagerService', () => {
 
     it('should include additional context in enriched prompt', async () => {
       const failed = buildFailedTask({ id: TaskId('res-3') });
-      eventBus.request.mockResolvedValue(ok(failed));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(failed));
 
       const result = await svcWithCheckpoint.resume({
         taskId: TaskId('res-3'),
@@ -740,7 +802,7 @@ describe('TaskManagerService', () => {
 
     it('should emit TaskDelegated event on resume', async () => {
       const failed = buildFailedTask({ id: TaskId('res-4') });
-      eventBus.request.mockResolvedValue(ok(failed));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(failed));
 
       const result = await svcWithCheckpoint.resume({
         taskId: TaskId('res-4'),
@@ -760,7 +822,7 @@ describe('TaskManagerService', () => {
         parentTaskId: TaskId('root-task'),
         retryCount: 2,
       });
-      eventBus.request.mockResolvedValue(ok(failed));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(failed));
 
       const result = await svcWithCheckpoint.resume({
         taskId: TaskId('chain-1'),
@@ -775,7 +837,7 @@ describe('TaskManagerService', () => {
 
     it('should return error when TaskDelegated emission fails', async () => {
       const failed = buildFailedTask({ id: TaskId('fail-emit') });
-      eventBus.request.mockResolvedValue(ok(failed));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(failed));
       eventBus.emit.mockResolvedValue(err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'emit failed')));
 
       const result = await svcWithCheckpoint.resume({
@@ -790,7 +852,7 @@ describe('TaskManagerService', () => {
         id: TaskId('res-warn'),
         prompt: 'do work',
       });
-      eventBus.request.mockResolvedValue(ok(failed));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(failed));
       (checkpointRepo.findLatest as ReturnType<typeof vi.fn>).mockResolvedValue(
         err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'db error')),
       );
@@ -811,7 +873,7 @@ describe('TaskManagerService', () => {
         id: TaskId('no-repo'),
         prompt: 'task prompt',
       });
-      eventBus.request.mockResolvedValue(ok(failed));
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(failed));
 
       const result = await service.resume({ taskId: TaskId('no-repo') });
 
@@ -820,8 +882,10 @@ describe('TaskManagerService', () => {
       expect(result.value.prompt).toContain('task prompt');
     });
 
-    it('should propagate event bus query errors', async () => {
-      eventBus.request.mockResolvedValue(err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'query failed')));
+    it('should propagate repository errors', async () => {
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+        err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'query failed')),
+      );
 
       const result = await svcWithCheckpoint.resume({
         taskId: TaskId('any'),

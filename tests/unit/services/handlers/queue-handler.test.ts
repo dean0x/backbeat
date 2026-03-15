@@ -114,33 +114,6 @@ describe('QueueHandler', () => {
     });
   });
 
-  describe('NextTaskQuery', () => {
-    it('should respond with task when queue has tasks', async () => {
-      const task = createTask({ prompt: 'test task' });
-      queue.enqueue(task);
-
-      const result = await eventBus.request<{ type: 'NextTaskQuery' }, Task | null>('NextTaskQuery', {});
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).not.toBeNull();
-        expect(result.value!.id).toBe(task.id);
-      }
-
-      // Task should have been dequeued
-      expect(queue.size()).toBe(0);
-    });
-
-    it('should respond with null when queue is empty', async () => {
-      const result = await eventBus.request<{ type: 'NextTaskQuery' }, Task | null>('NextTaskQuery', {});
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBeNull();
-      }
-    });
-  });
-
   describe('RequeueTask', () => {
     it('should re-enqueue task and emit TaskQueued', async () => {
       const task = createTask({ prompt: 'retried task' });

@@ -21,7 +21,7 @@
     "test:full": "npm run test:all && npm run test:worker-handler",
     "test:unit": "NODE_OPTIONS='--max-old-space-size=2048' vitest run --no-file-parallelism",
     "test:core": "NODE_OPTIONS='--max-old-space-size=2048' vitest run tests/unit/core --no-file-parallelism",
-    "test:handlers": "NODE_OPTIONS='--max-old-space-size=2048' vitest run tests/unit/services/handlers/dependency-handler.test.ts tests/unit/services/handlers/query-handler.test.ts tests/unit/services/handlers/schedule-handler.test.ts tests/unit/services/handlers/checkpoint-handler.test.ts tests/unit/services/handlers/persistence-handler.test.ts tests/unit/services/handlers/queue-handler.test.ts --no-file-parallelism",
+    "test:handlers": "NODE_OPTIONS='--max-old-space-size=2048' vitest run tests/unit/services/handlers/dependency-handler.test.ts tests/unit/services/handlers/schedule-handler.test.ts tests/unit/services/handlers/checkpoint-handler.test.ts tests/unit/services/handlers/persistence-handler.test.ts tests/unit/services/handlers/queue-handler.test.ts --no-file-parallelism",
     "test:worker-handler": "NODE_OPTIONS='--max-old-space-size=2048' vitest run tests/unit/services/handlers/worker-handler.test.ts --no-file-parallelism --testTimeout=60000",
     "test:repositories": "NODE_OPTIONS='--max-old-space-size=2048' vitest run tests/unit/implementations/dependency-repository.test.ts tests/unit/implementations/task-repository.test.ts tests/unit/implementations/database.test.ts tests/unit/implementations/checkpoint-repository.test.ts tests/unit/implementations/output-repository.test.ts --no-file-parallelism",
     "test:adapters": "NODE_OPTIONS='--max-old-space-size=2048' vitest run tests/unit/adapters --no-file-parallelism",

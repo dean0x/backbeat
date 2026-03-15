@@ -7,17 +7,9 @@ import { Configuration } from '../../core/configuration.js';
 import { Task, TaskId, TaskStatus, Worker } from '../../core/domain.js';
 import { BackbeatError, ErrorCode, taskNotFound } from '../../core/errors.js';
 import { EventBus } from '../../core/events/event-bus.js';
-import {
-  createEvent,
-  NextTaskQueryEvent,
-  TaskCancellationRequestedEvent,
-  TaskCancelledEvent,
-  TaskDelegatedEvent,
-  TaskQueuedEvent,
-  TaskStatusQueryEvent,
-} from '../../core/events/events.js';
+import { TaskCancellationRequestedEvent, TaskCancelledEvent, TaskQueuedEvent } from '../../core/events/events.js';
 import { BaseEventHandler } from '../../core/events/handlers.js';
-import { Logger, ResourceMonitor, WorkerPool } from '../../core/interfaces.js';
+import { Logger, ResourceMonitor, TaskQueue, TaskRepository, WorkerPool } from '../../core/interfaces.js';
 import { err, ok, Result } from '../../core/result.js';
 
 export class WorkerHandler extends BaseEventHandler {
@@ -66,6 +58,8 @@ export class WorkerHandler extends BaseEventHandler {
     private readonly workerPool: WorkerPool,
     private readonly resourceMonitor: ResourceMonitor,
     private readonly eventBus: EventBus,
+    private readonly taskQueue: TaskQueue,
+    private readonly taskRepo: TaskRepository,
     logger: Logger,
   ) {
     super(logger, 'WorkerHandler');
@@ -126,14 +120,13 @@ export class WorkerHandler extends BaseEventHandler {
 
   /**
    * Handle task cancellation - validate and kill worker if running
-   * ARCHITECTURE: Pure event-driven - uses TaskStatusQuery instead of direct repository access
    */
   private async handleTaskCancellation(event: TaskCancellationRequestedEvent): Promise<void> {
     await this.handleEvent(event, async (event) => {
       const { taskId, reason } = event;
 
-      // First validate that task can be cancelled using event-driven query
-      const taskResult = await this.eventBus.request<TaskStatusQueryEvent, Task | null>('TaskStatusQuery', { taskId });
+      // First validate that task can be cancelled via direct repository call
+      const taskResult = await this.taskRepo.findById(taskId);
 
       if (!taskResult.ok) {
         this.logger.error('Failed to find task for cancellation', taskResult.error, { taskId });
@@ -387,8 +380,8 @@ export class WorkerHandler extends BaseEventHandler {
           return;
         }
 
-        // Step 3: Get next task from queue
-        const taskResult = await this.eventBus.request<NextTaskQueryEvent, Task | null>('NextTaskQuery', {});
+        // Step 3: Get next task from queue (direct call)
+        const taskResult = this.taskQueue.dequeue();
         if (!taskResult.ok || !taskResult.value) {
           return; // No tasks or error
         }
@@ -433,9 +426,9 @@ export class WorkerHandler extends BaseEventHandler {
       // Update resource monitor
       this.resourceMonitor.decrementWorkerCount();
 
-      // Calculate duration using task startedAt timestamp via event query
+      // Calculate duration using task startedAt timestamp via direct repository call
       let duration = 0;
-      const taskResult = await this.eventBus.request<TaskStatusQueryEvent, Task | null>('TaskStatusQuery', { taskId });
+      const taskResult = await this.taskRepo.findById(taskId);
       if (taskResult.ok && taskResult.value?.startedAt) {
         duration = Date.now() - taskResult.value.startedAt;
       }

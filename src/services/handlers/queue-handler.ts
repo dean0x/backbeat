@@ -7,11 +7,8 @@
 import { Task, TaskStatus } from '../../core/domain.js';
 import { EventBus } from '../../core/events/event-bus.js';
 import {
-  createEvent,
-  NextTaskQueryEvent,
   RequeueTaskEvent,
   TaskCancellationRequestedEvent,
-  TaskCancelledEvent,
   TaskPersistedEvent,
   TaskUnblockedEvent,
 } from '../../core/events/events.js';
@@ -40,7 +37,6 @@ export class QueueHandler extends BaseEventHandler {
     const subscriptions = [
       eventBus.subscribe('TaskPersisted', this.handleTaskPersisted.bind(this)),
       eventBus.subscribe('TaskCancellationRequested', this.handleTaskCancellation.bind(this)),
-      eventBus.subscribe('NextTaskQuery', this.handleNextTaskQuery.bind(this)),
       eventBus.subscribe('RequeueTask', this.handleRequeueTask.bind(this)),
       eventBus.subscribe('TaskUnblocked', this.handleTaskUnblocked.bind(this)),
     ];
@@ -156,50 +152,6 @@ export class QueueHandler extends BaseEventHandler {
 
       // Task not in queue - let other handlers deal with it
       this.logger.debug('Task not in queue for cancellation', { taskId });
-      return ok(undefined);
-    });
-  }
-
-  /**
-   * Handle next task query - event-driven dequeue operation
-   * ARCHITECTURE: Pure event-driven pattern - WorkerHandler uses events, not direct calls
-   */
-  private async handleNextTaskQuery(event: NextTaskQueryEvent): Promise<void> {
-    await this.handleEvent(event, async (event) => {
-      const result = this.queue.dequeue();
-
-      if (!result.ok) {
-        // Respond with error
-        const correlationId = event.__correlationId;
-        if (correlationId && this.eventBus?.respondError) {
-          this.eventBus.respondError(correlationId, result.error);
-        }
-        return result;
-      }
-
-      if (!result.value) {
-        // Respond with null (no tasks)
-        const correlationId = event.__correlationId;
-        if (correlationId && this.eventBus?.respond) {
-          this.eventBus.respond(correlationId, null);
-        }
-        return ok(undefined);
-      }
-
-      const task = result.value;
-
-      this.logger.debug('Task dequeued via event', {
-        taskId: task.id,
-        priority: task.priority,
-        queueSize: this.queue.size(),
-      });
-
-      // Respond with task
-      const correlationId = event.__correlationId;
-      if (correlationId && this.eventBus?.respond) {
-        this.eventBus.respond(correlationId, task);
-      }
-
       return ok(undefined);
     });
   }

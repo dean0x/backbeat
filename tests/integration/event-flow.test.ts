@@ -49,9 +49,9 @@ describe('Integration: Event-driven task delegation flow', () => {
       outputCapture, // outputCapture
     );
 
-    // Initialize task manager with new signature: (eventBus, logger, config)
+    // Initialize task manager with hybrid architecture: (eventBus, logger, config, taskRepo, outputCapture)
     const config = createTestConfiguration();
-    const taskManager = new TaskManagerService(eventBus, logger, config);
+    const taskManager = new TaskManagerService(eventBus, logger, config, repository, outputCapture);
 
     // Track events
     const events: string[] = [];
@@ -95,18 +95,6 @@ describe('Integration: Event-driven task delegation flow', () => {
       }
     });
 
-    // Setup query handler for TaskStatusQuery
-    eventBus.onRequest('TaskStatusQuery', async (event) => {
-      const { taskId } = event;
-      if (taskId) {
-        const result = await repository.findById(taskId);
-        if (result.ok) {
-          return { ok: true, value: { task: result.value } };
-        }
-      }
-      return { ok: false, error: new Error('Task not found') };
-    });
-
     try {
       // Test 1: Delegate a simple task
       const request1 = {
@@ -127,13 +115,13 @@ describe('Integration: Event-driven task delegation flow', () => {
       expect(events).toContain('TaskQueued');
       expect(events).toContain('TaskStarted');
 
-      // Test 2: Query task status via event bus
+      // Test 2: Query task status via direct repository call
       // Give time for the task to be saved to database
       await flushEventLoop();
-      const statusResult = await eventBus.request('TaskStatusQuery', { taskId: task1!.id });
+      const statusResult = await repository.findById(task1!.id);
       expect(statusResult.ok).toBe(true);
       if (statusResult.ok) {
-        expect(statusResult.value.task?.id).toBe(task1!.id);
+        expect(statusResult.value?.id).toBe(task1!.id);
       }
 
       // Test 3: Handle task completion

@@ -198,7 +198,7 @@ describe('handler-setup', () => {
       }
     });
 
-    it('should setup all 7 handlers (4 standard + DependencyHandler + ScheduleHandler + CheckpointHandler)', async () => {
+    it('should setup all 6 handlers (3 standard + DependencyHandler + ScheduleHandler + CheckpointHandler)', async () => {
       const depsResult = extractHandlerDependencies(container);
       expect(depsResult.ok).toBe(true);
       if (!depsResult.ok) return;
@@ -212,10 +212,8 @@ describe('handler-setup', () => {
 
       // With all handlers setup, we should have multiple event subscriptions
       // PersistenceHandler: TaskDelegated, TaskStarted, TaskCompleted, TaskFailed, etc.
-      // QueryHandler: TaskStatusQuery, TaskListQuery, TaskLogsQuery
-      // QueueHandler: TaskDelegated, TaskUnblocked
-      // WorkerHandler: TaskQueued, WorkerStarted, WorkerCompleted, etc.
-      // OutputHandler: WorkerOutput, WorkerError
+      // QueueHandler: TaskPersisted, TaskCancellationRequested, RequeueTask, TaskUnblocked
+      // WorkerHandler: TaskQueued, TaskCancellationRequested
       // DependencyHandler: TaskDelegated, TaskCompleted, TaskFailed, TaskCancelled, etc.
       expect(subscriptionCount).toBeGreaterThan(0);
     });

@@ -7,7 +7,6 @@ import {
   MissedRunPolicy,
   Schedule,
   ScheduleId,
-  ScheduleStatus,
   Task,
   TaskCheckpoint,
   TaskId,
@@ -97,41 +96,6 @@ export interface OutputCapturedEvent extends BaseEvent {
   taskId: TaskId;
   outputType: 'stdout' | 'stderr';
   data: string;
-}
-
-/**
- * Query events - for read operations in pure event-driven architecture
- * ARCHITECTURE: Part of pure event-driven pattern - ALL operations go through events
- */
-export interface TaskStatusQueryEvent extends BaseEvent {
-  type: 'TaskStatusQuery';
-  taskId?: TaskId; // If omitted, return all tasks
-}
-
-export interface TaskStatusResponseEvent extends BaseEvent {
-  type: 'TaskStatusResponse';
-  result: Task | readonly Task[];
-}
-
-export interface TaskLogsQueryEvent extends BaseEvent {
-  type: 'TaskLogsQuery';
-  taskId: TaskId;
-  tail?: number;
-}
-
-export interface TaskLogsResponseEvent extends BaseEvent {
-  type: 'TaskLogsResponse';
-  taskId: TaskId;
-  stdout: readonly string[];
-  stderr: readonly string[];
-  totalSize: number;
-}
-
-/**
- * Queue query events - for pure event-driven queue operations
- */
-export interface NextTaskQueryEvent extends BaseEvent {
-  type: 'NextTaskQuery';
 }
 
 export interface RequeueTaskEvent extends BaseEvent {
@@ -228,21 +192,6 @@ export interface ScheduleUpdatedEvent extends BaseEvent {
 }
 
 /**
- * Schedule query events - for pure event-driven reads
- * ARCHITECTURE: Follows same pattern as TaskStatusQuery/TaskStatusResponse
- */
-export interface ScheduleQueryEvent extends BaseEvent {
-  type: 'ScheduleQuery';
-  scheduleId?: ScheduleId; // If omitted, return all schedules
-  status?: ScheduleStatus; // Optional filter by status
-}
-
-export interface ScheduleQueryResponseEvent extends BaseEvent {
-  type: 'ScheduleQueryResponse';
-  schedules: readonly Schedule[];
-}
-
-/**
  * Checkpoint and resumption events
  * ARCHITECTURE: Part of task resumption system ("smart retry with context")
  */
@@ -268,13 +217,7 @@ export type BackbeatEvent =
   | TaskCancelledEvent
   | TaskTimeoutEvent
   | TaskCancellationRequestedEvent
-  // Query events (pure event-driven architecture)
-  | TaskStatusQueryEvent
-  | TaskStatusResponseEvent
-  | TaskLogsQueryEvent
-  | TaskLogsResponseEvent
-  // Queue query events
-  | NextTaskQueryEvent
+  // Queue events
   | RequeueTaskEvent
   // Dependency events
   | TaskDependencyAddedEvent
@@ -291,9 +234,6 @@ export type BackbeatEvent =
   | ScheduleResumedEvent
   | ScheduleExpiredEvent
   | ScheduleUpdatedEvent
-  // Schedule query events
-  | ScheduleQueryEvent
-  | ScheduleQueryResponseEvent
   // Checkpoint events
   | CheckpointCreatedEvent
   // Output events

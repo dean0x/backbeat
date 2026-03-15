@@ -336,11 +336,13 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
 
   // Register task manager
   container.registerSingleton('taskManager', async () => {
-    // ARCHITECTURE: Pure event-driven TaskManager - checkpoint repo injected for resume()
+    // ARCHITECTURE: Hybrid TaskManager - commands via events, queries via direct repo
     const taskManager = new TaskManagerService(
       getFromContainer<EventBus>(container, 'eventBus'),
       getFromContainer<Logger>(container, 'logger').child({ module: 'TaskManager' }),
       config, // Pass complete config - no partial objects needed
+      getFromContainer<TaskRepository>(container, 'taskRepository'),
+      getFromContainer<OutputCapture>(container, 'outputCapture'),
       getFromContainer<CheckpointRepository>(container, 'checkpointRepository'),
     );
 
