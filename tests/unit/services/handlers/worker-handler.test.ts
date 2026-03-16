@@ -124,7 +124,7 @@ class MockResourceMonitor implements ResourceMonitor {
 }
 
 /**
- * Mock TaskQueue for testing — replaces the NextTaskQuery event pattern
+ * Mock TaskQueue for testing — validates direct dequeue call behavior
  */
 class MockTaskQueue implements TaskQueue {
   private dequeueResult: Result<Task | null> = ok(null);
@@ -164,7 +164,7 @@ class MockTaskQueue implements TaskQueue {
 }
 
 /**
- * Mock TaskRepository for testing — replaces the TaskStatusQuery event pattern
+ * Mock TaskRepository for testing — validates direct task lookup behavior
  */
 class MockTaskRepo {
   private findByIdResult: Result<Task | null> = ok(null);

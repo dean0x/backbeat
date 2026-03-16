@@ -452,7 +452,8 @@ export class WorkerHandler extends BaseEventHandler {
         duration,
       });
     } catch (error) {
-      this.logger.error('Error handling worker completion', error as Error, {
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      this.logger.error('Error handling worker completion', normalizedError, {
         taskId,
         exitCode,
       });
@@ -477,7 +478,8 @@ export class WorkerHandler extends BaseEventHandler {
         error: error.message,
       });
     } catch (err) {
-      this.logger.error('Error handling worker timeout', err as Error, {
+      const normalizedError = err instanceof Error ? err : new Error(String(err));
+      this.logger.error('Error handling worker timeout', normalizedError, {
         taskId,
       });
     }
