@@ -3,7 +3,7 @@
  * Handles loading tasks from database and emits events for recovery actions
  */
 
-import { isTerminalState, TaskStatus } from '../core/domain.js';
+import { TaskStatus } from '../core/domain.js';
 import { EventBus } from '../core/events/event-bus.js';
 import { Logger, TaskQueue, TaskRepository } from '../core/interfaces.js';
 import { err, ok, Result } from '../core/result.js';

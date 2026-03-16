@@ -12,8 +12,9 @@ import { BackbeatEvent, BaseEvent, createEvent, EventHandler } from './events.js
 /**
  * Event bus interface for dependency injection
  *
- * ARCHITECTURE: Supports both fire-and-forget (emit) and request-response (request) patterns
- * for hybrid event-driven architecture. Commands flow through events; queries use direct repository access.
+ * ARCHITECTURE: Hybrid event-driven architecture.
+ * Commands flow through events (fire-and-forget emit); queries use direct repository access.
+ * Request-response (request) pattern retained for internal use.
  */
 export interface EventBus {
   emit<T extends BackbeatEvent>(type: T['type'], payload: Omit<T, keyof BaseEvent | 'type'>): Promise<Result<void>>;

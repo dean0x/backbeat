@@ -237,14 +237,14 @@ The EventBus automatically profiles all handlers:
 Example output:
 ```
 WARN: Slow event handler detected {
-  eventType: 'TaskPersisted',
+  eventType: 'TaskDelegated',
   handlerIndex: 2,
   duration: 250,
   threshold: 100
 }
 
 DEBUG: Event handlers completed {
-  eventType: 'TaskPersisted',
+  eventType: 'TaskDelegated',
   eventId: 'evt-123',
   handlerCount: 3,
   totalDuration: 267,

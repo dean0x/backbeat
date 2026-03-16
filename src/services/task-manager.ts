@@ -56,10 +56,7 @@ export class TaskManagerService implements TaskManager {
 
       // Validate referenced task exists via direct repository call
       const lookupResult = await this.taskRepo.findById(continueFromId);
-      if (!lookupResult.ok) {
-        return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `continueFrom task not found: ${continueFromId}`));
-      }
-      if (lookupResult.value === null) {
+      if (!lookupResult.ok || lookupResult.value === null) {
         return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `continueFrom task not found: ${continueFromId}`));
       }
 
@@ -127,11 +124,7 @@ export class TaskManagerService implements TaskManager {
       return err(taskNotFound(taskId));
     }
 
-    const output = this.outputCapture.getOutput(taskId, tail);
-    if (!output.ok) {
-      return output;
-    }
-    return ok(output.value);
+    return this.outputCapture.getOutput(taskId, tail);
   }
 
   async cancel(taskId: TaskId, reason?: string): Promise<Result<void>> {

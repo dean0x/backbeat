@@ -104,7 +104,7 @@ export class QueueHandler extends BaseEventHandler {
         'TaskQueued',
         {
           taskId: task.id,
-          task: task,
+          task,
         },
         { context: { taskId: task.id } },
       );

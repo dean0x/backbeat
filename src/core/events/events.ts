@@ -83,7 +83,6 @@ export interface TaskCancellationRequestedEvent extends BaseEvent {
   reason?: string;
 }
 
-
 /**
  * Output and configuration events
  */
@@ -196,7 +195,6 @@ export interface CheckpointCreatedEvent extends BaseEvent {
   taskId: TaskId;
   checkpoint: TaskCheckpoint;
 }
-
 
 /**
  * Union type of all events

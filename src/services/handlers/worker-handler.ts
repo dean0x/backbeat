@@ -177,8 +177,7 @@ export class WorkerHandler extends BaseEventHandler {
           });
           return killResult;
         }
-
-        }
+      }
 
       // Emit TaskCancelled so subscribers (CLI wait, persistence) receive terminal state
       const cancelResult = await this.eventBus.emit<TaskCancelledEvent>('TaskCancelled', {

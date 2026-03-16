@@ -719,5 +719,4 @@ export class ScheduleHandler extends BaseEventHandler {
       return ok(undefined);
     });
   }
-
 }
