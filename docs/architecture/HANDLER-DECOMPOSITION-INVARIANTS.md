@@ -56,7 +56,7 @@ private async processNextTask(): Promise<void> {
    - Prevents spawning when system is overloaded
    - On failure: apply backoff, return early
 
-3. **Get task THIRD** - Via NextTaskQuery event
+3. **Get task THIRD** - Via TaskQueue.dequeue() direct call
    - Returns null if queue empty
    - On empty/error: return early (no task to process)
 

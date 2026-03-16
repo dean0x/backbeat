@@ -4,7 +4,7 @@ This file provides project-specific guidance for Claude Code when working on Bac
 
 ## Project Overview
 
-Backbeat is an MCP (Model Context Protocol) server that enables task delegation to background Claude Code instances. It uses event-driven architecture with autoscaling workers, task dependencies (DAG-based), and SQLite persistence.
+Backbeat is an MCP (Model Context Protocol) server that enables task delegation to background Claude Code instances. It uses hybrid event-driven architecture with workers, task dependencies (DAG-based), and SQLite persistence.
 
 **Core Concept**: Transform a dedicated server into an AI powerhouse - orchestrate multiple Claude Code instances through one main session for parallel development across repositories.
 

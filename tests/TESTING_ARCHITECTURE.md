@@ -304,12 +304,12 @@ afterEach(async () => {
 
 ```typescript
 describe('PersistenceHandler', () => {
-  it('should persist task on TaskDelegated event', async () => {
-    const handler = new PersistenceHandler(repo, eventBus);
+  it('should persist task and enqueue on TaskDelegated event', async () => {
+    const handler = new PersistenceHandler(repo, queueHandler, eventBus);
     const task = createTestTask();
 
     eventBus.emit('TaskDelegated', { task });
-    await waitForEvent(eventBus, 'TaskPersisted');
+    await waitForEvent(eventBus, 'TaskQueued');
 
     const saved = await repo.getTask(task.id);
     expect(saved).toBeDefined();

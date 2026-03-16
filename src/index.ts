@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Backbeat MCP Server - New Architecture
- * Main entry point with autoscaling
+ * Main entry point
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
