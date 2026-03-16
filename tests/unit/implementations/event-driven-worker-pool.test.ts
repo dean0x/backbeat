@@ -324,7 +324,6 @@ describe('EventDrivenWorkerPool', () => {
 
       expect(monitor.decrementWorkerCount as ReturnType<typeof vi.fn>).toHaveBeenCalledOnce();
     });
-
   });
 
   // --- killAll ---

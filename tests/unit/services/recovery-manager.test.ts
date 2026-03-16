@@ -206,7 +206,6 @@ describe('RecoveryManager', () => {
         task: task2,
       });
     });
-
   });
 
   describe('RUNNING task recovery - stale tasks', () => {
@@ -373,7 +372,6 @@ describe('RecoveryManager', () => {
         expect(result.error).toBe(findError);
       }
     });
-
   });
 
   describe('Mixed scenario', () => {

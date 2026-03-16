@@ -368,7 +368,6 @@ describe('Integration: Task Resumption - End-to-End Flow', () => {
       // retryOf should point to the immediate parent (first resume)
       expect(secondResume.retryOf).toBe(firstResume.id);
     });
-
   });
 
   describe('Checkpoint Persistence', () => {

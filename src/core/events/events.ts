@@ -5,15 +5,7 @@
  * 25 event types remain after Phase 1 simplification.
  */
 
-import {
-  MissedRunPolicy,
-  Schedule,
-  ScheduleId,
-  Task,
-  TaskCheckpoint,
-  TaskId,
-  WorkerId,
-} from '../domain.js';
+import { MissedRunPolicy, Schedule, ScheduleId, Task, TaskCheckpoint, TaskId, WorkerId } from '../domain.js';
 import { BackbeatError } from '../errors.js';
 
 /**

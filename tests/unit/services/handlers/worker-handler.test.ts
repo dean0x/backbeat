@@ -232,15 +232,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
       killGracePeriodMs: 5000,
     } as Configuration;
 
-    workerHandler = new WorkerHandler(
-      config,
-      workerPool,
-      resourceMonitor,
-      eventBus,
-      taskQueue,
-      taskRepo,
-      logger,
-    );
+    workerHandler = new WorkerHandler(config, workerPool, resourceMonitor, eventBus, taskQueue, taskRepo, logger);
 
     await workerHandler.setup(eventBus);
   });

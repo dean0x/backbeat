@@ -180,10 +180,7 @@ export class DependencyHandler extends BaseEventHandler {
    *
    * @returns Discriminated union: success (type: 'ok') or failure with error and reason
    */
-  private validateSingleDependency(
-    taskId: TaskId,
-    depId: TaskId,
-  ): DependencyValidationResult {
+  private validateSingleDependency(taskId: TaskId, depId: TaskId): DependencyValidationResult {
     // Cycle detection
     const cycleCheck = this.graph.wouldCreateCycle(taskId, depId);
     if (!cycleCheck.ok) {

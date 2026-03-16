@@ -134,7 +134,6 @@ describe('Network Failure Scenarios', () => {
       // Good handler should still be called
       expect(goodHandler).toHaveBeenCalledTimes(1);
     });
-
   });
 
   describe('Worker Communication Failures', () => {
