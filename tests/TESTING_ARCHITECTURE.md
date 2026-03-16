@@ -43,7 +43,6 @@ tests/
 │   │
 │   ├── Services
 │   │   ├── task-manager.test.ts   # Task management service
-│   │   ├── autoscaling-manager.test.ts # Autoscaling logic
 │   │   ├── recovery-manager.test.ts    # Recovery mechanisms
 │   │   └── worker-pool.test.ts    # Worker pool management
 │   │

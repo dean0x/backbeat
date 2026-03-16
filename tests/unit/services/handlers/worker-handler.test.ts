@@ -11,7 +11,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Configuration } from '../../../../src/core/configuration';
 import type { Task, Worker } from '../../../../src/core/domain';
-import { TaskId } from '../../../../src/core/domain';
 import { BackbeatError, ErrorCode } from '../../../../src/core/errors';
 import type { ResourceMonitor, TaskQueue, TaskRepository, WorkerPool } from '../../../../src/core/interfaces';
 import { err, ok, Result } from '../../../../src/core/result';
@@ -166,7 +165,7 @@ class MockTaskQueue implements TaskQueue {
 /**
  * Mock TaskRepository for testing — validates direct task lookup behavior
  */
-class MockTaskRepo {
+class MockTaskRepo implements TaskRepository {
   private findByIdResult: Result<Task | null> = ok(null);
 
   setFindByIdResult(result: Result<Task | null>) {
@@ -194,6 +193,12 @@ class MockTaskRepo {
   }
   async findByStatus(): Promise<Result<readonly Task[]>> {
     return ok([]);
+  }
+  async delete(): Promise<Result<void>> {
+    return ok(undefined);
+  }
+  async cleanupOldTasks(): Promise<Result<number>> {
+    return ok(0);
   }
 }
 
@@ -232,8 +237,8 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
       workerPool,
       resourceMonitor,
       eventBus,
-      taskQueue as unknown as TaskQueue,
-      taskRepo as unknown as TaskRepository,
+      taskQueue,
+      taskRepo,
       logger,
     );
 
@@ -254,8 +259,8 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
         workerPool,
         resourceMonitor,
         newEventBus,
-        taskQueue as unknown as TaskQueue,
-        taskRepo as unknown as TaskRepository,
+        taskQueue,
+        taskRepo,
         logger,
       );
 
@@ -272,8 +277,8 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
         workerPool,
         resourceMonitor,
         newEventBus,
-        taskQueue as unknown as TaskQueue,
-        taskRepo as unknown as TaskRepository,
+        taskQueue,
+        taskRepo,
         logger,
       );
 
@@ -296,8 +301,8 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
         workerPool,
         resourceMonitor,
         newEventBus,
-        taskQueue as unknown as TaskQueue,
-        taskRepo as unknown as TaskRepository,
+        taskQueue,
+        taskRepo,
         logger,
       );
 

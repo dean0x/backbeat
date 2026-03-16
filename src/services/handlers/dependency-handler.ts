@@ -42,11 +42,12 @@ export interface DependencyHandlerOptions {
  * Type-safe: 'ok' has null error, failure variants have non-null error.
  * Exhaustive checking prevents silent acceptance of new failure variants.
  */
-type DependencyValidationResult =
-  | { depId: TaskId; error: null; type: 'ok' }
+type DependencyValidationOk = { depId: TaskId; error: null; type: 'ok' };
+type DependencyValidationFailure =
   | { depId: TaskId; error: Error; type: 'cycle' }
   | { depId: TaskId; error: Error; type: 'depth' }
   | { depId: TaskId; error: Error; type: 'system' };
+type DependencyValidationResult = DependencyValidationOk | DependencyValidationFailure;
 
 export class DependencyHandler extends BaseEventHandler {
   private eventBus: EventBus;
@@ -227,7 +228,7 @@ export class DependencyHandler extends BaseEventHandler {
   private async handleValidationFailure(
     taskId: TaskId,
     requestedDependencies: readonly TaskId[],
-    failure: { depId: TaskId; error: Error; type: 'cycle' | 'depth' | 'system' },
+    failure: DependencyValidationFailure,
   ): Promise<void> {
     const context = { taskId, dependsOnTaskId: failure.depId };
 
@@ -347,7 +348,7 @@ export class DependencyHandler extends BaseEventHandler {
 
       // Step 3: Check for validation failures (INVARIANT: fail-fast on first error)
       // Discriminated union: type !== 'ok' narrows to failure variants with non-null error
-      const failure = validationResults.find((r): r is Exclude<DependencyValidationResult, { type: 'ok' }> => r.type !== 'ok');
+      const failure = validationResults.find((r): r is DependencyValidationFailure => r.type !== 'ok');
       if (failure) {
         await this.handleValidationFailure(task.id, task.dependsOn, failure);
         return err(failure.error);
