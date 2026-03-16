@@ -183,41 +183,6 @@ describe('Integration: Event-driven task delegation flow', () => {
   });
 });
 
-describe('Integration: Request-response pattern with timeout', () => {
-  it('should handle timeouts correctly', async () => {
-    const logger = new TestLogger();
-    const busConfig = createTestConfiguration();
-    const eventBus = new InMemoryEventBus(busConfig, logger);
-
-    // Setup handler that responds slowly
-    eventBus.onRequest('SlowQuery', async () => {
-      await flushEventLoop();
-      return { ok: true, value: 'slow response' };
-    });
-
-    // Setup handler that never responds
-    eventBus.onRequest('HangingQuery', async () => {
-      await new Promise(() => {}); // Never resolves
-      return { ok: true, value: 'never' };
-    });
-
-    try {
-      // Test normal response
-      const result = await eventBus.request('SlowQuery', {}, 200);
-      expect(result.ok).toBe(true);
-
-      // Test timeout
-      const timeoutResult = await eventBus.request('HangingQuery', {}, 50);
-      expect(timeoutResult.ok).toBe(false);
-      if (!timeoutResult.ok) {
-        expect(timeoutResult.error.message).toContain('timeout');
-      }
-    } finally {
-      eventBus.dispose();
-    }
-  });
-});
-
 describe('Integration: Event handler registration and cleanup', () => {
   it('should manage event handlers correctly', async () => {
     const logger = new TestLogger();

@@ -23,8 +23,6 @@ export interface BaseEvent {
   eventId: string;
   timestamp: number;
   source: string;
-  /** Correlation ID for request-response pattern */
-  __correlationId?: string;
 }
 
 /**
