@@ -7,8 +7,8 @@ import { BackbeatError, ErrorCode } from '../../../../src/core/errors';
 import { InMemoryEventBus } from '../../../../src/core/events/event-bus';
 import { Database } from '../../../../src/implementations/database';
 import { SQLiteTaskRepository } from '../../../../src/implementations/task-repository';
+import type { TaskEnqueuer } from '../../../../src/core/interfaces';
 import { PersistenceHandler } from '../../../../src/services/handlers/persistence-handler';
-import { QueueHandler } from '../../../../src/services/handlers/queue-handler';
 import { createTestConfiguration } from '../../../fixtures/factories';
 import { TestLogger } from '../../../fixtures/test-doubles';
 import { flushEventLoop } from '../../../utils/event-helpers.js';
@@ -20,7 +20,7 @@ describe('PersistenceHandler', () => {
   let database: Database;
   let tempDir: string;
   let logger: TestLogger;
-  let mockQueueHandler: { enqueueIfReady: ReturnType<typeof vi.fn> };
+  let mockTaskEnqueuer: { enqueueIfReady: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     logger = new TestLogger();
@@ -31,11 +31,11 @@ describe('PersistenceHandler', () => {
     database = new Database(join(tempDir, 'test.db'));
     taskRepo = new SQLiteTaskRepository(database);
 
-    mockQueueHandler = {
+    mockTaskEnqueuer = {
       enqueueIfReady: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
     };
 
-    handler = new PersistenceHandler(taskRepo, mockQueueHandler as unknown as QueueHandler, logger);
+    handler = new PersistenceHandler(taskRepo, mockTaskEnqueuer as TaskEnqueuer, logger);
     const setupResult = await handler.setup(eventBus);
     if (!setupResult.ok) {
       throw new Error(`Failed to setup PersistenceHandler: ${setupResult.error.message}`);
@@ -61,8 +61,8 @@ describe('PersistenceHandler', () => {
       expect(findResult.value).not.toBeNull();
       expect(findResult.value!.id).toBe(task.id);
 
-      // QueueHandler.enqueueIfReady should have been called with the task
-      expect(mockQueueHandler.enqueueIfReady).toHaveBeenCalledWith(task);
+      // TaskEnqueuer.enqueueIfReady should have been called with the task
+      expect(mockTaskEnqueuer.enqueueIfReady).toHaveBeenCalledWith(task);
     });
 
     it('should log error and not crash when repository save fails', async () => {
@@ -79,8 +79,8 @@ describe('PersistenceHandler', () => {
       expect(errorLogs.length).toBeGreaterThan(0);
       expect(errorLogs.some((l) => l.message.includes('Failed to persist delegated task'))).toBe(true);
 
-      // QueueHandler should NOT have been called since save failed
-      expect(mockQueueHandler.enqueueIfReady).not.toHaveBeenCalled();
+      // TaskEnqueuer should NOT have been called since save failed
+      expect(mockTaskEnqueuer.enqueueIfReady).not.toHaveBeenCalled();
     });
   });
 

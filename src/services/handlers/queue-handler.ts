@@ -12,10 +12,10 @@ import {
   TaskUnblockedEvent,
 } from '../../core/events/events.js';
 import { BaseEventHandler } from '../../core/events/handlers.js';
-import { DependencyRepository, Logger, TaskQueue, TaskRepository } from '../../core/interfaces.js';
+import { DependencyRepository, Logger, TaskEnqueuer, TaskQueue, TaskRepository } from '../../core/interfaces.js';
 import { err, ok, Result } from '../../core/result.js';
 
-export class QueueHandler extends BaseEventHandler {
+export class QueueHandler extends BaseEventHandler implements TaskEnqueuer {
   private eventBus?: EventBus;
 
   constructor(

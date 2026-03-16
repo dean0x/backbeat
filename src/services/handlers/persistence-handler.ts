@@ -15,14 +15,13 @@ import {
   TaskTimeoutEvent,
 } from '../../core/events/events.js';
 import { BaseEventHandler } from '../../core/events/handlers.js';
-import { Logger, TaskRepository } from '../../core/interfaces.js';
+import { Logger, TaskEnqueuer, TaskRepository } from '../../core/interfaces.js';
 import { ok, Result } from '../../core/result.js';
-import { QueueHandler } from './queue-handler.js';
 
 export class PersistenceHandler extends BaseEventHandler {
   constructor(
     private readonly repository: TaskRepository,
-    private readonly queueHandler: QueueHandler,
+    private readonly taskEnqueuer: TaskEnqueuer,
     logger: Logger,
   ) {
     super(logger, 'PersistenceHandler');
@@ -71,8 +70,8 @@ export class PersistenceHandler extends BaseEventHandler {
         taskId: event.task.id,
       });
 
-      // Directly call QueueHandler to enqueue task if not blocked by dependencies
-      await this.queueHandler.enqueueIfReady(event.task);
+      // Directly call TaskEnqueuer to enqueue task if not blocked by dependencies
+      await this.taskEnqueuer.enqueueIfReady(event.task);
 
       return ok(undefined);
     });
