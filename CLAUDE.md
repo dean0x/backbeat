@@ -122,6 +122,7 @@ See `docs/TASK-DEPENDENCIES.md` for usage patterns.
 - SQLite with WAL mode for concurrent access
 - All mutations go through event handlers (PersistenceHandler, DependencyHandler)
 - Use synchronous transactions for TOCTOU protection (cycle detection)
+- `workers` table: active worker registrations with ownerPid for crash detection (migration v9)
 - `schedules` table: schedule definitions, cron/one-time config, status, timezone
 - `schedule_executions` table: execution history and audit trail
 
@@ -151,6 +152,7 @@ Quick reference for common operations:
 | Handler setup | `src/services/handler-setup.ts` |
 | MCP adapter | `src/adapters/mcp-adapter.ts` |
 | CLI | `src/cli.ts` |
+| Worker repository | `src/implementations/worker-repository.ts` |
 | Schedule repository | `src/implementations/schedule-repository.ts` |
 | Schedule handler | `src/services/handlers/schedule-handler.ts` |
 | Schedule executor | `src/services/schedule-executor.ts` |
