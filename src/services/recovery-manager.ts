@@ -3,7 +3,7 @@
  * Handles loading tasks from database and emits events for recovery actions
  */
 
-import { TaskStatus } from '../core/domain.js';
+import { Task, TaskStatus } from '../core/domain.js';
 import { EventBus } from '../core/events/event-bus.js';
 import { Logger, TaskQueue, TaskRepository, WorkerRepository } from '../core/interfaces.js';
 import { ok, Result } from '../core/result.js';
@@ -33,45 +33,13 @@ export class RecoveryManager {
   async recover(): Promise<Result<void>> {
     this.logger.info('Starting recovery process');
 
-    // Phase 0: Clean dead worker registrations (PID-based crash detection)
-    const allWorkers = this.workerRepository.findAll();
-    if (allWorkers.ok) {
-      for (const reg of allWorkers.value) {
-        if (!this.isProcessAlive(reg.ownerPid)) {
-          const unregResult = this.workerRepository.unregister(reg.workerId);
-          if (!unregResult.ok) {
-            this.logger.error('Failed to unregister dead worker', unregResult.error, {
-              workerId: reg.workerId,
-            });
-          }
-          const updateResult = await this.repository.update(reg.taskId, {
-            status: TaskStatus.FAILED,
-            completedAt: Date.now(),
-            exitCode: -1, // Crash indicator
-          });
-          if (!updateResult.ok) {
-            this.logger.error('Failed to mark dead worker task as failed', updateResult.error, {
-              taskId: reg.taskId,
-            });
-          }
-          this.logger.info('Cleaned up dead worker and failed its task', {
-            workerId: reg.workerId,
-            taskId: reg.taskId,
-            deadPid: reg.ownerPid,
-          });
-        }
-      }
-    }
+    // Phase 0: Clean dead worker registrations (must run before Phase 3)
+    await this.cleanDeadWorkerRegistrations();
 
-    // First, cleanup old completed tasks (older than 7 days)
-    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-    const cleanupResult = await this.repository.cleanupOldTasks(sevenDaysMs);
+    // Phase 1: Cleanup old completed tasks
+    await this.cleanupOldCompletedTasks();
 
-    if (cleanupResult.ok && cleanupResult.value > 0) {
-      this.logger.info('Cleaned up old completed tasks', { count: cleanupResult.value });
-    }
-
-    // Get only QUEUED and RUNNING tasks (non-terminal states that need recovery)
+    // Fetch non-terminal tasks for recovery
     const queuedResult = await this.repository.findByStatus(TaskStatus.QUEUED);
     const runningResult = await this.repository.findByStatus(TaskStatus.RUNNING);
 
@@ -85,11 +53,64 @@ export class RecoveryManager {
       return runningResult;
     }
 
-    let queuedCount = 0;
-    let failedCount = 0;
+    // Phase 2 & 3: Recover tasks
+    const queuedCount = await this.recoverQueuedTasks(queuedResult.value);
+    const failedCount = await this.recoverRunningTasks(runningResult.value);
 
-    // Re-queue QUEUED tasks (check for duplicates first)
-    for (const task of queuedResult.value) {
+    this.logger.info('Recovery complete', {
+      queuedTasks: queuedResult.value.length,
+      runningTasks: runningResult.value.length,
+      requeued: queuedCount,
+      markedFailed: failedCount,
+    });
+
+    return ok(undefined);
+  }
+
+  private async cleanDeadWorkerRegistrations(): Promise<void> {
+    const allWorkers = this.workerRepository.findAll();
+    if (!allWorkers.ok) return;
+
+    for (const reg of allWorkers.value) {
+      if (!this.isProcessAlive(reg.ownerPid)) {
+        const unregResult = this.workerRepository.unregister(reg.workerId);
+        if (!unregResult.ok) {
+          this.logger.error('Failed to unregister dead worker', unregResult.error, {
+            workerId: reg.workerId,
+          });
+        }
+        const updateResult = await this.repository.update(reg.taskId, {
+          status: TaskStatus.FAILED,
+          completedAt: Date.now(),
+          exitCode: -1, // Crash indicator
+        });
+        if (!updateResult.ok) {
+          this.logger.error('Failed to mark dead worker task as failed', updateResult.error, {
+            taskId: reg.taskId,
+          });
+        }
+        this.logger.info('Cleaned up dead worker and failed its task', {
+          workerId: reg.workerId,
+          taskId: reg.taskId,
+          deadPid: reg.ownerPid,
+        });
+      }
+    }
+  }
+
+  private async cleanupOldCompletedTasks(): Promise<void> {
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    const cleanupResult = await this.repository.cleanupOldTasks(sevenDaysMs);
+
+    if (cleanupResult.ok && cleanupResult.value > 0) {
+      this.logger.info('Cleaned up old completed tasks', { count: cleanupResult.value });
+    }
+  }
+
+  private async recoverQueuedTasks(tasks: readonly Task[]): Promise<number> {
+    let queuedCount = 0;
+
+    for (const task of tasks) {
       // Safety check: don't re-queue if already in queue
       if (this.queue.contains(task.id)) {
         this.logger.warn('Task already in queue, skipping re-queue', { taskId: task.id });
@@ -117,31 +138,35 @@ export class RecoveryManager {
       }
     }
 
-    /**
-     * PID-BASED RECOVERY for RUNNING tasks
-     *
-     * WHY THIS EXISTS:
-     * Tasks stuck in RUNNING status are typically from crashed workers or server shutdowns.
-     * Without this check, every server restart would re-queue ALL old running tasks,
-     * causing a fork-bomb scenario where dozens of claude-code processes spawn simultaneously.
-     *
-     * WHAT IT DOES:
-     * - Checks if the task has a worker row in the workers table
-     * - If worker row exists and ownerPid is alive → leave it alone (running in another process)
-     * - If no worker row, or ownerPid is dead → mark FAILED immediately (definitively crashed)
-     *
-     * REPLACES: 30-minute staleness heuristic (pre-v1.0).
-     * PID-based detection is definitive — no false positives from short tasks,
-     * no 30-minute wait for long-crashed tasks.
-     *
-     * INCIDENT REFERENCE: 2025-10-04
-     * Removing spawn delay caused 7 stale tasks to spawn simultaneously → system crash
-     * PID-based detection prevents this by marking crashed tasks immediately.
-     */
-    const now = Date.now();
+    return queuedCount;
+  }
 
-    // Mark RUNNING tasks as FAILED if their worker is dead
-    for (const task of runningResult.value) {
+  /**
+   * PID-BASED RECOVERY for RUNNING tasks
+   *
+   * WHY THIS EXISTS:
+   * Tasks stuck in RUNNING status are typically from crashed workers or server shutdowns.
+   * Without this check, every server restart would re-queue ALL old running tasks,
+   * causing a fork-bomb scenario where dozens of claude-code processes spawn simultaneously.
+   *
+   * WHAT IT DOES:
+   * - Checks if the task has a worker row in the workers table
+   * - If worker row exists and ownerPid is alive → leave it alone (running in another process)
+   * - If no worker row, or ownerPid is dead → mark FAILED immediately (definitively crashed)
+   *
+   * REPLACES: 30-minute staleness heuristic (pre-v1.0).
+   * PID-based detection is definitive — no false positives from short tasks,
+   * no 30-minute wait for long-crashed tasks.
+   *
+   * INCIDENT REFERENCE: 2025-10-04
+   * Removing spawn delay caused 7 stale tasks to spawn simultaneously → system crash
+   * PID-based detection prevents this by marking crashed tasks immediately.
+   */
+  private async recoverRunningTasks(tasks: readonly Task[]): Promise<number> {
+    const now = Date.now();
+    let failedCount = 0;
+
+    for (const task of tasks) {
       const workerResult = this.workerRepository.findByTaskId(task.id);
       const workerRegistration = workerResult.ok ? workerResult.value : null;
 
@@ -173,13 +198,6 @@ export class RecoveryManager {
       }
     }
 
-    this.logger.info('Recovery complete', {
-      queuedTasks: queuedResult.value.length,
-      runningTasks: runningResult.value.length,
-      requeued: queuedCount,
-      markedFailed: failedCount,
-    });
-
-    return ok(undefined);
+    return failedCount;
   }
 }
