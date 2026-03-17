@@ -8,14 +8,29 @@
  */
 
 import SQLite from 'better-sqlite3';
+import { z } from 'zod';
 import { TaskId, WorkerId, WorkerRegistration } from '../core/domain.js';
-import { BackbeatError, ErrorCode } from '../core/errors.js';
+import { BackbeatError, ErrorCode, operationErrorHandler } from '../core/errors.js';
 import { WorkerRepository } from '../core/interfaces.js';
 import { Result, tryCatch } from '../core/result.js';
 import { Database } from './database.js';
 
 /**
+ * Zod schema for validating worker rows from database
+ * Pattern: Parse, don't validate - ensures type safety at system boundary
+ */
+const WorkerRowSchema = z.object({
+  worker_id: z.string().min(1),
+  task_id: z.string().min(1),
+  pid: z.number(),
+  owner_pid: z.number(),
+  agent: z.string(),
+  started_at: z.number(),
+});
+
+/**
  * Database row type for workers table
+ * TYPE-SAFETY: Explicit typing instead of Record<string, any>
  */
 interface WorkerRow {
   readonly worker_id: string;
@@ -108,12 +123,7 @@ export class SQLiteWorkerRepository implements WorkerRepository {
       () => {
         this.unregisterStmt.run(workerId);
       },
-      (error) =>
-        new BackbeatError(
-          ErrorCode.SYSTEM_ERROR,
-          `Failed to unregister worker: ${error instanceof Error ? error.message : String(error)}`,
-          { workerId },
-        ),
+      operationErrorHandler('unregister worker', { workerId }),
     );
   }
 
@@ -123,12 +133,7 @@ export class SQLiteWorkerRepository implements WorkerRepository {
         const row = this.findByTaskIdStmt.get(taskId) as WorkerRow | undefined;
         return row ? this.rowToRegistration(row) : null;
       },
-      (error) =>
-        new BackbeatError(
-          ErrorCode.SYSTEM_ERROR,
-          `Failed to find worker by task: ${error instanceof Error ? error.message : String(error)}`,
-          { taskId },
-        ),
+      operationErrorHandler('find worker by task', { taskId }),
     );
   }
 
@@ -138,12 +143,7 @@ export class SQLiteWorkerRepository implements WorkerRepository {
         const rows = this.findByOwnerPidStmt.all(ownerPid) as WorkerRow[];
         return rows.map((row) => this.rowToRegistration(row));
       },
-      (error) =>
-        new BackbeatError(
-          ErrorCode.SYSTEM_ERROR,
-          `Failed to find workers by owner PID: ${error instanceof Error ? error.message : String(error)}`,
-          { ownerPid },
-        ),
+      operationErrorHandler('find workers by owner PID', { ownerPid }),
     );
   }
 
@@ -153,11 +153,7 @@ export class SQLiteWorkerRepository implements WorkerRepository {
         const rows = this.findAllStmt.all() as WorkerRow[];
         return rows.map((row) => this.rowToRegistration(row));
       },
-      (error) =>
-        new BackbeatError(
-          ErrorCode.SYSTEM_ERROR,
-          `Failed to find all workers: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+      operationErrorHandler('find all workers'),
     );
   }
 
@@ -167,11 +163,7 @@ export class SQLiteWorkerRepository implements WorkerRepository {
         const row = this.countStmt.get() as { count: number };
         return row.count;
       },
-      (error) =>
-        new BackbeatError(
-          ErrorCode.SYSTEM_ERROR,
-          `Failed to get global worker count: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+      operationErrorHandler('get global worker count'),
     );
   }
 
@@ -181,23 +173,25 @@ export class SQLiteWorkerRepository implements WorkerRepository {
         const result = this.deleteByOwnerPidStmt.run(ownerPid);
         return result.changes;
       },
-      (error) =>
-        new BackbeatError(
-          ErrorCode.SYSTEM_ERROR,
-          `Failed to delete workers by owner PID: ${error instanceof Error ? error.message : String(error)}`,
-          { ownerPid },
-        ),
+      operationErrorHandler('delete workers by owner PID', { ownerPid }),
     );
   }
 
+  /**
+   * Convert database row to WorkerRegistration domain object
+   * Pattern: Validate at boundary - ensures data integrity from database
+   * @throws Error if row data is invalid (indicates database corruption)
+   */
   private rowToRegistration(row: WorkerRow): WorkerRegistration {
+    // Validate row data at system boundary (parse throws ZodError on invalid data)
+    const data = WorkerRowSchema.parse(row);
     return {
-      workerId: WorkerId(row.worker_id),
-      taskId: TaskId(row.task_id),
-      pid: row.pid,
-      ownerPid: row.owner_pid,
-      agent: row.agent,
-      startedAt: row.started_at,
+      workerId: WorkerId(data.worker_id),
+      taskId: TaskId(data.task_id),
+      pid: data.pid,
+      ownerPid: data.owner_pid,
+      agent: data.agent,
+      startedAt: data.started_at,
     };
   }
 }
