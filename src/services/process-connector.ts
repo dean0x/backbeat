@@ -125,6 +125,15 @@ export class ProcessConnector {
   }
 
   /**
+   * Stop periodic flushing and perform a final output flush.
+   * Used by WorkerPool.kill() before sending SIGTERM (Edge Case I).
+   */
+  async prepareForKill(taskId: TaskId): Promise<void> {
+    this.stopFlushing(taskId);
+    await this.flushOutput(taskId);
+  }
+
+  /**
    * Flush current in-memory output to the database.
    * Reads accumulated output from OutputCapture and writes a snapshot via save().
    */

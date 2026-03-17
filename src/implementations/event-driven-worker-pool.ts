@@ -158,11 +158,8 @@ export class EventDrivenWorkerPool implements WorkerPool {
       // Clear timeout to prevent race condition
       this.clearTimeoutForWorker(worker);
 
-      // Stop periodic output flushing BEFORE killing (Edge Case I)
-      this.processConnector.stopFlushing(worker.taskId);
-
-      // Final flush to persist output up to kill moment
-      await this.processConnector.flushOutput(worker.taskId);
+      // Stop periodic flushing + final output flush before kill (Edge Case I)
+      await this.processConnector.prepareForKill(worker.taskId);
 
       // Kill the process
       if (worker.process && !worker.process.killed) {

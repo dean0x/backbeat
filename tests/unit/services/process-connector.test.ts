@@ -308,6 +308,39 @@ describe('ProcessConnector', () => {
     expect(outputRepo.save).toHaveBeenCalledTimes(2);
   });
 
+  it('should stop interval and perform final flush via prepareForKill', async () => {
+    const capture = createMockOutputCapture();
+    (capture.getOutput as ReturnType<typeof vi.fn>).mockReturnValue(
+      ok({ taskId, stdout: ['pre-kill'], stderr: [], totalSize: 8 }),
+    );
+    const logger = createTestLogger();
+    const outputRepo = createMockOutputRepository();
+    const flushIntervalMs = 500;
+    const connector = new ProcessConnector(capture, logger, outputRepo, flushIntervalMs);
+    const proc = createMockProcess();
+    const onExit = vi.fn();
+
+    connector.connect(proc as never, taskId, onExit);
+
+    // First interval fires normally
+    await vi.advanceTimersByTimeAsync(flushIntervalMs);
+    expect(outputRepo.save).toHaveBeenCalledTimes(1);
+
+    // prepareForKill: stops interval + final flush
+    await connector.prepareForKill(taskId);
+    expect(outputRepo.save).toHaveBeenCalledTimes(2);
+    expect(outputRepo.save).toHaveBeenLastCalledWith(taskId, {
+      taskId,
+      stdout: ['pre-kill'],
+      stderr: [],
+      totalSize: 8,
+    });
+
+    // Subsequent intervals should NOT fire (interval was cleared)
+    await vi.advanceTimersByTimeAsync(flushIntervalMs);
+    expect(outputRepo.save).toHaveBeenCalledTimes(2);
+  });
+
   it('should call onExit even when final flush fails', async () => {
     const capture = createMockOutputCapture();
     (capture.getOutput as ReturnType<typeof vi.fn>).mockReturnValue(
