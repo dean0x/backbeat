@@ -1,12 +1,12 @@
 import { AGENT_PROVIDERS, type AgentProvider, isAgentProvider } from '../../core/agents.js';
-import { ScheduleId, type ScheduleStatus as ScheduleStatusType } from '../../core/domain.js';
+import { Priority, ScheduleId, ScheduleStatus, ScheduleType } from '../../core/domain.js';
 import type { ScheduleExecution, ScheduleRepository, ScheduleService } from '../../core/interfaces.js';
 import { toMissedRunPolicy } from '../../services/schedule-manager.js';
 import { validatePath } from '../../utils/validation.js';
 import { withReadOnlyContext, withServices } from '../services.js';
 import * as ui from '../ui.js';
 
-export async function handleScheduleCommand(subCmd: string | undefined, scheduleArgs: string[]) {
+export async function handleScheduleCommand(subCmd: string | undefined, scheduleArgs: string[]): Promise<void> {
   if (!subCmd) {
     ui.error('Usage: beat schedule <create|list|get|cancel|pause|resume>');
     process.exit(1);
@@ -17,7 +17,7 @@ export async function handleScheduleCommand(subCmd: string | undefined, schedule
     const s = ui.createSpinner();
     s.start(subCmd === 'list' ? 'Fetching schedules...' : 'Fetching schedule...');
     const ctx = withReadOnlyContext(s);
-    s.stop(subCmd === 'list' ? 'Schedules loaded' : 'Schedule loaded');
+    s.stop('Ready');
 
     try {
       if (subCmd === 'list') {
@@ -169,8 +169,6 @@ async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]) 
     process.exit(1);
   }
 
-  const { ScheduleType, Priority } = await import('../../core/domain.js');
-
   // Pipeline mode: --pipeline with --step flags
   if (isPipeline) {
     if (promptWords.length > 0) {
@@ -259,7 +257,7 @@ async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]) 
   }
 }
 
-async function scheduleList(repo: ScheduleRepository, scheduleArgs: string[]) {
+async function scheduleList(repo: ScheduleRepository, scheduleArgs: string[]): Promise<void> {
   let status: string | undefined;
   let limit: number | undefined;
 
@@ -276,12 +274,12 @@ async function scheduleList(repo: ScheduleRepository, scheduleArgs: string[]) {
     }
   }
 
-  const { ScheduleStatus } = await import('../../core/domain.js');
   const validStatuses = Object.values(ScheduleStatus);
 
-  let statusValue: ScheduleStatusType | undefined;
+  let statusValue: ScheduleStatus | undefined;
   if (status) {
-    statusValue = validStatuses.find((v) => v === status.toLowerCase()) as ScheduleStatusType | undefined;
+    const normalized = status.toLowerCase();
+    statusValue = validStatuses.find((v) => v === normalized);
     if (!statusValue) {
       ui.error(`Invalid status: ${status}. Valid values: ${validStatuses.join(', ')}`);
       process.exit(1);
@@ -311,7 +309,7 @@ async function scheduleList(repo: ScheduleRepository, scheduleArgs: string[]) {
   }
 }
 
-async function scheduleGet(repo: ScheduleRepository, scheduleArgs: string[]) {
+async function scheduleGet(repo: ScheduleRepository, scheduleArgs: string[]): Promise<void> {
   const scheduleId = scheduleArgs[0];
   if (!scheduleId) {
     ui.error('Usage: beat schedule get <schedule-id> [--history] [--history-limit N]');

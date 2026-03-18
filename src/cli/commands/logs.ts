@@ -1,11 +1,12 @@
 import { TaskId } from '../../core/domain.js';
 import { taskNotFound } from '../../core/errors.js';
+import type { ReadOnlyContext } from '../read-only-context.js';
 import { errorMessage, withReadOnlyContext } from '../services.js';
 import * as ui from '../ui.js';
 
-export async function getTaskLogs(taskId: string, tail?: number) {
+export async function getTaskLogs(taskId: string, tail?: number): Promise<void> {
   const s = ui.createSpinner();
-  let ctx: ReturnType<typeof withReadOnlyContext> | undefined;
+  let ctx: ReadOnlyContext | undefined;
   try {
     s.start(`Fetching logs for ${taskId}...`);
     ctx = withReadOnlyContext(s);

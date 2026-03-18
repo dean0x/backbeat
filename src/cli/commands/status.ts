@@ -1,11 +1,12 @@
 import { TaskId } from '../../core/domain.js';
 import { taskNotFound } from '../../core/errors.js';
+import type { ReadOnlyContext } from '../read-only-context.js';
 import { errorMessage, withReadOnlyContext } from '../services.js';
 import * as ui from '../ui.js';
 
-export async function getTaskStatus(taskId?: string) {
+export async function getTaskStatus(taskId?: string): Promise<void> {
   const s = ui.createSpinner();
-  let ctx: ReturnType<typeof withReadOnlyContext> | undefined;
+  let ctx: ReadOnlyContext | undefined;
   try {
     s.start(taskId ? `Fetching status for ${taskId}...` : 'Fetching tasks...');
     ctx = withReadOnlyContext(s);
