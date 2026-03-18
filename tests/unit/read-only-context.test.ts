@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createReadOnlyContext, ReadOnlyContext } from '../../src/cli/read-only-context.js';
+import { createReadOnlyContext } from '../../src/cli/read-only-context.js';
 import { createTask, TaskStatus } from '../../src/core/domain.js';
 
 describe('ReadOnlyContext', () => {
@@ -24,18 +24,18 @@ describe('ReadOnlyContext', () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it('creates context with all 4 fields', () => {
+  it('creates context with repositories and close()', () => {
     const result = createReadOnlyContext();
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
     const ctx = result.value;
-    expect(ctx.database).toBeDefined();
     expect(ctx.taskRepository).toBeDefined();
     expect(ctx.outputRepository).toBeDefined();
     expect(ctx.scheduleRepository).toBeDefined();
+    expect(ctx.close).toBeInstanceOf(Function);
 
-    ctx.database.close();
+    ctx.close();
   });
 
   it('round-trips task data through repository', async () => {
@@ -56,19 +56,17 @@ describe('ReadOnlyContext', () => {
     expect(findResult.value!.prompt).toBe('test read-only context');
     expect(findResult.value!.status).toBe(TaskStatus.QUEUED);
 
-    ctx.database.close();
+    ctx.close();
   });
 
-  it('database.close() works and database.isOpen() reflects state', () => {
+  it('close() releases database resources', () => {
     const result = createReadOnlyContext();
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
     const ctx = result.value;
-    expect(ctx.database.isOpen()).toBe(true);
-
-    ctx.database.close();
-    expect(ctx.database.isOpen()).toBe(false);
+    // close() should not throw
+    ctx.close();
   });
 
   it('returns error for invalid database path', () => {
@@ -108,7 +106,7 @@ describe('ReadOnlyContext', () => {
     if (!schedResult.ok) return;
     expect(schedResult.value.length).toBe(0);
 
-    ctx.database.close();
+    ctx.close();
   });
 
   it('output repository round-trips data', async () => {
@@ -135,6 +133,6 @@ describe('ReadOnlyContext', () => {
     expect(outputResult.value!.stdout).toEqual(['line 1', 'line 2']);
     expect(outputResult.value!.stderr).toEqual(['err 1']);
 
-    ctx.database.close();
+    ctx.close();
   });
 });

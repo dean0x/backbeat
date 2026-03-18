@@ -13,18 +13,19 @@
  */
 
 import { loadConfiguration } from '../core/configuration.js';
-import { ScheduleRepository, TaskRepository } from '../core/interfaces.js';
+import type { ScheduleRepository, TaskRepository } from '../core/interfaces.js';
 import { Result, tryCatch } from '../core/result.js';
 import { Database } from '../implementations/database.js';
-import { OutputRepository, SQLiteOutputRepository } from '../implementations/output-repository.js';
+import type { OutputRepository } from '../implementations/output-repository.js';
+import { SQLiteOutputRepository } from '../implementations/output-repository.js';
 import { SQLiteScheduleRepository } from '../implementations/schedule-repository.js';
 import { SQLiteTaskRepository } from '../implementations/task-repository.js';
 
 export interface ReadOnlyContext {
-  readonly database: Database;
   readonly taskRepository: TaskRepository;
   readonly outputRepository: OutputRepository;
   readonly scheduleRepository: ScheduleRepository;
+  close(): void;
 }
 
 /**
@@ -39,6 +40,11 @@ export function createReadOnlyContext(): Result<ReadOnlyContext> {
     const outputRepository = new SQLiteOutputRepository(config, database);
     const scheduleRepository = new SQLiteScheduleRepository(database);
 
-    return { database, taskRepository, outputRepository, scheduleRepository };
+    return {
+      taskRepository,
+      outputRepository,
+      scheduleRepository,
+      close: () => database.close(),
+    };
   });
 }
