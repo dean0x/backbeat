@@ -1,5 +1,5 @@
 import { AGENT_PROVIDERS, type AgentProvider, isAgentProvider } from '../../core/agents.js';
-import { ScheduleId } from '../../core/domain.js';
+import { ScheduleId, type ScheduleStatus as ScheduleStatusType } from '../../core/domain.js';
 import type { ScheduleExecution, ScheduleRepository, ScheduleService } from '../../core/interfaces.js';
 import { toMissedRunPolicy } from '../../services/schedule-manager.js';
 import { validatePath } from '../../utils/validation.js';
@@ -15,14 +15,18 @@ export async function handleScheduleCommand(subCmd: string | undefined, schedule
   // Read-only subcommands: lightweight context, no full bootstrap
   if (subCmd === 'list' || subCmd === 'get') {
     const s = ui.createSpinner();
-    s.start('Initializing...');
+    s.start(subCmd === 'list' ? 'Fetching schedules...' : 'Fetching schedule...');
     const ctx = withReadOnlyContext(s);
-    s.stop('Ready');
+    s.stop(subCmd === 'list' ? 'Schedules loaded' : 'Schedule loaded');
 
-    if (subCmd === 'list') {
-      await scheduleList(ctx.scheduleRepository, scheduleArgs);
-    } else {
-      await scheduleGet(ctx.scheduleRepository, scheduleArgs);
+    try {
+      if (subCmd === 'list') {
+        await scheduleList(ctx.scheduleRepository, scheduleArgs);
+      } else {
+        await scheduleGet(ctx.scheduleRepository, scheduleArgs);
+      }
+    } finally {
+      ctx.close();
     }
     process.exit(0);
   }
@@ -273,10 +277,19 @@ async function scheduleList(repo: ScheduleRepository, scheduleArgs: string[]) {
   }
 
   const { ScheduleStatus } = await import('../../core/domain.js');
-  const statusEnum = status ? (status as keyof typeof ScheduleStatus) : undefined;
+  const validStatuses = Object.values(ScheduleStatus);
 
-  const result = statusEnum
-    ? await repo.findByStatus(ScheduleStatus[statusEnum.toUpperCase() as keyof typeof ScheduleStatus], limit)
+  let statusValue: ScheduleStatusType | undefined;
+  if (status) {
+    statusValue = validStatuses.find((v) => v === status.toLowerCase()) as ScheduleStatusType | undefined;
+    if (!statusValue) {
+      ui.error(`Invalid status: ${status}. Valid values: ${validStatuses.join(', ')}`);
+      process.exit(1);
+    }
+  }
+
+  const result = statusValue
+    ? await repo.findByStatus(statusValue, limit)
     : await repo.findAll(limit);
 
   if (result.ok) {
@@ -331,6 +344,7 @@ async function scheduleGet(repo: ScheduleRepository, scheduleArgs: string[]) {
       history = historyResult.value;
     } else {
       ui.error(`Failed to fetch execution history: ${historyResult.error.message}`);
+      process.exit(1);
     }
   }
 
