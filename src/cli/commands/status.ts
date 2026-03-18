@@ -1,4 +1,3 @@
-import type { Task } from '../../core/domain.js';
 import { TaskId } from '../../core/domain.js';
 import { taskNotFound } from '../../core/errors.js';
 import { errorMessage, withReadOnlyContext } from '../services.js';
@@ -6,9 +5,10 @@ import * as ui from '../ui.js';
 
 export async function getTaskStatus(taskId?: string) {
   const s = ui.createSpinner();
+  let ctx: ReturnType<typeof withReadOnlyContext> | undefined;
   try {
     s.start(taskId ? `Fetching status for ${taskId}...` : 'Fetching tasks...');
-    const ctx = withReadOnlyContext(s);
+    ctx = withReadOnlyContext(s);
 
     if (taskId) {
       const result = await ctx.taskRepository.findById(TaskId(taskId));
@@ -59,11 +59,11 @@ export async function getTaskStatus(taskId?: string) {
 
       ui.note(lines.join('\n'), 'Task Details');
     } else {
-      const result = await ctx.taskRepository.findAllUnbounded();
+      const result = await ctx.taskRepository.findAll();
       if (result.ok && Array.isArray(result.value) && result.value.length > 0) {
         s.stop(`${result.value.length} task${result.value.length === 1 ? '' : 's'}`);
 
-        for (const task of result.value as Task[]) {
+        for (const task of result.value) {
           const prompt = task.prompt.substring(0, 50) + (task.prompt.length > 50 ? '...' : '');
           ui.step(`${ui.dim(task.id)}  ${ui.colorStatus(task.status.padEnd(10))}  ${prompt}`);
         }
@@ -81,5 +81,7 @@ export async function getTaskStatus(taskId?: string) {
     s.stop('Failed');
     ui.error(errorMessage(error));
     process.exit(1);
+  } finally {
+    ctx?.close();
   }
 }
