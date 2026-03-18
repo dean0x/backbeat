@@ -21,6 +21,7 @@ import {
   TaskRequest,
   Worker,
   WorkerId,
+  WorkerRegistration,
 } from './domain.js';
 import { BackbeatEvent, BaseEvent, EventHandler } from './events/events.js';
 import { Result } from './result.js';
@@ -470,4 +471,23 @@ export interface CheckpointLookup {
  */
 export interface TaskEnqueuer {
   enqueueIfReady(task: Task): Promise<Result<void>>;
+}
+
+/**
+ * Worker registration persistence for cross-process coordination
+ * ARCHITECTURE: Tracks which workers exist across all processes sharing the same SQLite DB.
+ * Enables PID-based recovery (replaces 30-minute staleness heuristic) and cross-process
+ * resource checks (prevents over-spawning).
+ *
+ * All methods are synchronous Result<T> — better-sqlite3 is synchronous,
+ * enables use inside runInTransaction().
+ */
+export interface WorkerRepository {
+  register(registration: WorkerRegistration): Result<void>;
+  unregister(workerId: WorkerId): Result<void>;
+  findByTaskId(taskId: TaskId): Result<WorkerRegistration | null>;
+  findByOwnerPid(ownerPid: number): Result<readonly WorkerRegistration[]>;
+  findAll(): Result<readonly WorkerRegistration[]>;
+  getGlobalCount(): Result<number>;
+  deleteByOwnerPid(ownerPid: number): Result<number>;
 }

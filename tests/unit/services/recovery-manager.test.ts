@@ -2,30 +2,31 @@
  * Unit tests for RecoveryManager
  * ARCHITECTURE: Tests startup task recovery with pure mocks (no DB)
  * Pattern: Behavioral testing - focuses on recovery decisions:
+ *   - Phase 0: Dead worker cleanup via PID-based detection
  *   - QUEUED tasks are re-queued
- *   - Stale RUNNING tasks (>=30min) are marked FAILED
- *   - Recent RUNNING tasks (<30min) are re-queued
+ *   - RUNNING tasks with no live worker (PID-based) are marked FAILED
+ *   - RUNNING tasks with live worker are left alone (skipped)
  *   - Duplicate detection via queue.contains()
  *   - Error propagation from repository
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Task } from '../../../src/core/domain';
-import { TaskId, TaskStatus } from '../../../src/core/domain';
+import { TaskId, TaskStatus, WorkerId } from '../../../src/core/domain';
 import { BackbeatError, ErrorCode } from '../../../src/core/errors';
 import type { EventBus } from '../../../src/core/events/event-bus';
-import type { Logger, TaskQueue, TaskRepository } from '../../../src/core/interfaces';
+import type { Logger, TaskQueue, TaskRepository, WorkerRepository } from '../../../src/core/interfaces';
 import { err, ok } from '../../../src/core/result';
 import { RecoveryManager } from '../../../src/services/recovery-manager';
 import { TaskFactory } from '../../fixtures/factories';
-import { createMockLogger } from '../../fixtures/mocks';
+import { createMockLogger, createMockWorkerRepository } from '../../fixtures/mocks';
 
 // --- Mock factories ---
 
 const createMockRepo = () => ({
   save: vi.fn(),
   update: vi.fn().mockResolvedValue(ok(undefined)),
-  findById: vi.fn(),
+  findById: vi.fn().mockResolvedValue(ok(null)),
   findAll: vi.fn(),
   findAllUnbounded: vi.fn(),
   count: vi.fn(),
@@ -63,18 +64,21 @@ describe('RecoveryManager', () => {
   let queue: ReturnType<typeof createMockQueue>;
   let eventBus: ReturnType<typeof createTestEventBus>;
   let logger: ReturnType<typeof createMockLogger>;
+  let workerRepo: ReturnType<typeof createMockWorkerRepository>;
 
   beforeEach(() => {
     repo = createMockRepo();
     queue = createMockQueue();
     eventBus = createTestEventBus();
     logger = createMockLogger();
+    workerRepo = createMockWorkerRepository();
 
     manager = new RecoveryManager(
       repo as unknown as TaskRepository,
       queue as unknown as TaskQueue,
       eventBus as unknown as EventBus,
       logger as unknown as Logger,
+      workerRepo as unknown as WorkerRepository,
     );
   });
 
@@ -82,7 +86,6 @@ describe('RecoveryManager', () => {
   // NOTE: TaskFactory.withId() cannot be used because createTask() returns a frozen object.
   // Instead, we build via the factory and spread into a new (unfrozen) object with the desired id.
 
-  const THIRTY_ONE_MINUTES_AGO = Date.now() - 31 * 60 * 1000;
   const FIVE_MINUTES_AGO = Date.now() - 5 * 60 * 1000;
 
   function buildQueuedTask(id: string): Task {
@@ -90,12 +93,7 @@ describe('RecoveryManager', () => {
     return { ...base, id: TaskId(id) };
   }
 
-  function buildStaleRunningTask(id: string): Task {
-    const base = new TaskFactory().withStatus(TaskStatus.RUNNING).withStartedAt(THIRTY_ONE_MINUTES_AGO).build();
-    return { ...base, id: TaskId(id) };
-  }
-
-  function buildRecentRunningTask(id: string): Task {
+  function buildRunningTask(id: string): Task {
     const base = new TaskFactory().withStatus(TaskStatus.RUNNING).withStartedAt(FIVE_MINUTES_AGO).build();
     return { ...base, id: TaskId(id) };
   }
@@ -104,7 +102,189 @@ describe('RecoveryManager', () => {
     repo.findByStatus.mockResolvedValueOnce(ok(queuedTasks)).mockResolvedValueOnce(ok(runningTasks));
   }
 
+  // Use current process PID for "alive" checks and a known-dead PID for "dead" checks
+  const ALIVE_PID = process.pid;
+  const DEAD_PID = 999999;
+
   // --- Tests ---
+
+  describe('Phase 0: Dead worker cleanup on startup', () => {
+    it('should unregister dead workers and fail their tasks', async () => {
+      const deadWorker = {
+        workerId: WorkerId('w-dead'),
+        taskId: TaskId('task-dead'),
+        pid: DEAD_PID,
+        ownerPid: DEAD_PID,
+        agent: 'claude',
+        startedAt: Date.now(),
+      };
+      workerRepo.findAll.mockReturnValue(ok([deadWorker]));
+      repo.findById.mockResolvedValue(ok(buildRunningTask('task-dead')));
+      setupFindByStatus([], []);
+
+      await manager.recover();
+
+      expect(workerRepo.unregister).toHaveBeenCalledWith(WorkerId('w-dead'));
+      expect(repo.update).toHaveBeenCalledWith(
+        TaskId('task-dead'),
+        expect.objectContaining({
+          status: TaskStatus.FAILED,
+          completedAt: expect.any(Number),
+          exitCode: -1,
+        }),
+      );
+      expect(logger.info).toHaveBeenCalledWith('Cleaned up dead worker and failed its task', {
+        workerId: WorkerId('w-dead'),
+        taskId: TaskId('task-dead'),
+        deadPid: DEAD_PID,
+      });
+    });
+
+    it('should leave alive workers untouched', async () => {
+      const aliveWorker = {
+        workerId: WorkerId('w-alive'),
+        taskId: TaskId('task-alive'),
+        pid: ALIVE_PID,
+        ownerPid: ALIVE_PID,
+        agent: 'claude',
+        startedAt: Date.now(),
+      };
+      workerRepo.findAll.mockReturnValue(ok([aliveWorker]));
+      setupFindByStatus([], []);
+
+      await manager.recover();
+
+      expect(workerRepo.unregister).not.toHaveBeenCalled();
+    });
+
+    it('should handle mix of dead and alive workers', async () => {
+      const deadWorker = {
+        workerId: WorkerId('w-dead'),
+        taskId: TaskId('task-dead'),
+        pid: DEAD_PID,
+        ownerPid: DEAD_PID,
+        agent: 'claude',
+        startedAt: Date.now(),
+      };
+      const aliveWorker = {
+        workerId: WorkerId('w-alive'),
+        taskId: TaskId('task-alive'),
+        pid: ALIVE_PID,
+        ownerPid: ALIVE_PID,
+        agent: 'claude',
+        startedAt: Date.now(),
+      };
+      workerRepo.findAll.mockReturnValue(ok([deadWorker, aliveWorker]));
+      repo.findById.mockResolvedValue(ok(buildRunningTask('task-dead')));
+      setupFindByStatus([], []);
+
+      await manager.recover();
+
+      expect(workerRepo.unregister).toHaveBeenCalledTimes(1);
+      expect(workerRepo.unregister).toHaveBeenCalledWith(WorkerId('w-dead'));
+    });
+
+    it('should treat EPERM as process-alive (no permission to signal)', async () => {
+      const epermWorker = {
+        workerId: WorkerId('w-eperm'),
+        taskId: TaskId('task-eperm'),
+        pid: 42,
+        ownerPid: 42,
+        agent: 'claude',
+        startedAt: Date.now(),
+      };
+      workerRepo.findAll.mockReturnValue(ok([epermWorker]));
+      setupFindByStatus([], []);
+
+      const killSpy = vi.spyOn(process, 'kill');
+      try {
+        const epermError = Object.assign(new Error('EPERM'), { code: 'EPERM' });
+        killSpy.mockImplementation((pid: number) => {
+          if (pid === 42) throw epermError;
+          return true;
+        });
+
+        await manager.recover();
+
+        // Worker should NOT be unregistered — EPERM means process is alive
+        expect(workerRepo.unregister).not.toHaveBeenCalled();
+      } finally {
+        killSpy.mockRestore();
+      }
+    });
+
+    it('should skip status update when dead worker task is already COMPLETED', async () => {
+      const deadWorker = {
+        workerId: WorkerId('w-dead-completed'),
+        taskId: TaskId('task-completed'),
+        pid: DEAD_PID,
+        ownerPid: DEAD_PID,
+        agent: 'claude',
+        startedAt: Date.now(),
+      };
+      workerRepo.findAll.mockReturnValue(ok([deadWorker]));
+      const completedTask = new TaskFactory().withStatus(TaskStatus.COMPLETED).build();
+      repo.findById.mockResolvedValue(ok({ ...completedTask, id: TaskId('task-completed') }));
+      setupFindByStatus([], []);
+
+      await manager.recover();
+
+      // Worker should be unregistered (dead PID)
+      expect(workerRepo.unregister).toHaveBeenCalledWith(WorkerId('w-dead-completed'));
+      // But task should NOT be updated (already terminal)
+      expect(repo.update).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith('Dead worker row cleaned, task already terminal', {
+        workerId: WorkerId('w-dead-completed'),
+        taskId: TaskId('task-completed'),
+        currentStatus: TaskStatus.COMPLETED,
+        deadPid: DEAD_PID,
+      });
+    });
+
+    it('should skip status update when dead worker task is already CANCELLED', async () => {
+      const deadWorker = {
+        workerId: WorkerId('w-dead-cancelled'),
+        taskId: TaskId('task-cancelled'),
+        pid: DEAD_PID,
+        ownerPid: DEAD_PID,
+        agent: 'claude',
+        startedAt: Date.now(),
+      };
+      workerRepo.findAll.mockReturnValue(ok([deadWorker]));
+      const cancelledTask = new TaskFactory().withStatus(TaskStatus.CANCELLED).build();
+      repo.findById.mockResolvedValue(ok({ ...cancelledTask, id: TaskId('task-cancelled') }));
+      setupFindByStatus([], []);
+
+      await manager.recover();
+
+      expect(workerRepo.unregister).toHaveBeenCalledWith(WorkerId('w-dead-cancelled'));
+      expect(repo.update).not.toHaveBeenCalled();
+    });
+
+    it('should handle findById failure gracefully in Phase 0', async () => {
+      const deadWorker = {
+        workerId: WorkerId('w-dead-err'),
+        taskId: TaskId('task-err'),
+        pid: DEAD_PID,
+        ownerPid: DEAD_PID,
+        agent: 'claude',
+        startedAt: Date.now(),
+      };
+      workerRepo.findAll.mockReturnValue(ok([deadWorker]));
+      const findError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'DB read failed');
+      repo.findById.mockResolvedValue(err(findError));
+      setupFindByStatus([], []);
+
+      await manager.recover();
+
+      // Worker unregistered, but task update skipped due to findById failure
+      expect(workerRepo.unregister).toHaveBeenCalledWith(WorkerId('w-dead-err'));
+      expect(repo.update).not.toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Failed to look up task for dead worker', findError, {
+        taskId: TaskId('task-err'),
+      });
+    });
+  });
 
   describe('Empty recovery', () => {
     it('should succeed with no operations when no queued or running tasks exist', async () => {
@@ -114,7 +294,6 @@ describe('RecoveryManager', () => {
 
       expect(result.ok).toBe(true);
       expect(queue.enqueue).not.toHaveBeenCalled();
-      expect(repo.update).not.toHaveBeenCalled();
     });
   });
 
@@ -205,16 +384,17 @@ describe('RecoveryManager', () => {
     });
   });
 
-  describe('RUNNING task recovery - stale tasks', () => {
-    it('should mark stale RUNNING tasks (>=30 min) as FAILED with exitCode -1', async () => {
-      const staleTask = buildStaleRunningTask('stale-1');
-      setupFindByStatus([], [staleTask]);
+  describe('RUNNING task recovery - PID-based detection', () => {
+    it('should mark RUNNING task as FAILED when no worker row exists', async () => {
+      const task = buildRunningTask('no-worker');
+      setupFindByStatus([], [task]);
+      // Default: findByTaskId returns ok(null) — no worker row
 
       const result = await manager.recover();
 
       expect(result.ok).toBe(true);
       expect(repo.update).toHaveBeenCalledWith(
-        staleTask.id,
+        task.id,
         expect.objectContaining({
           status: TaskStatus.FAILED,
           exitCode: -1,
@@ -223,121 +403,116 @@ describe('RecoveryManager', () => {
       );
     });
 
-    it('should not re-queue stale RUNNING tasks', async () => {
-      const staleTask = buildStaleRunningTask('stale-no-queue');
-      setupFindByStatus([], [staleTask]);
-
-      await manager.recover();
-
-      // Enqueue should not be called for stale tasks
-      expect(queue.enqueue).not.toHaveBeenCalled();
-    });
-
-    it('should use startedAt for age calculation when available', async () => {
-      // Create task with startedAt 5 min ago but createdAt 2 hours ago
-      const base = new TaskFactory().withStatus(TaskStatus.RUNNING).withStartedAt(FIVE_MINUTES_AGO).build();
-      const task = {
-        ...base,
-        id: TaskId('started-at-test'),
-        createdAt: Date.now() - 120 * 60 * 1000,
-      };
+    it('should mark RUNNING task as FAILED when worker has dead ownerPid', async () => {
+      const task = buildRunningTask('dead-worker');
       setupFindByStatus([], [task]);
 
-      await manager.recover();
+      workerRepo.findByTaskId.mockReturnValue(
+        ok({
+          workerId: WorkerId('w1'),
+          taskId: task.id,
+          pid: DEAD_PID,
+          ownerPid: DEAD_PID,
+          agent: 'claude',
+          startedAt: Date.now(),
+        }),
+      );
 
-      // Should be treated as recent (using startedAt=5min, not createdAt=2hr)
-      expect(queue.enqueue).toHaveBeenCalledWith(task);
-      expect(repo.update).not.toHaveBeenCalled();
-    });
+      const result = await manager.recover();
 
-    it('should fall back to createdAt when startedAt is undefined', async () => {
-      // Task with no startedAt, createdAt 31 min ago
-      const base = new TaskFactory().withStatus(TaskStatus.RUNNING).build();
-      const taskWithoutStartedAt = {
-        ...base,
-        id: TaskId('no-started-at'),
-        createdAt: THIRTY_ONE_MINUTES_AGO,
-        startedAt: undefined,
-      };
-      setupFindByStatus([], [taskWithoutStartedAt]);
-
-      await manager.recover();
-
-      // Should use createdAt => 31 min => stale => marked FAILED
+      expect(result.ok).toBe(true);
       expect(repo.update).toHaveBeenCalledWith(
-        taskWithoutStartedAt.id,
+        task.id,
         expect.objectContaining({
           status: TaskStatus.FAILED,
           exitCode: -1,
+          completedAt: expect.any(Number),
         }),
       );
     });
 
-    it('should log stale task failure with age in minutes', async () => {
-      const staleTask = buildStaleRunningTask('stale-logged');
-      setupFindByStatus([], [staleTask]);
+    it('should skip RUNNING task when worker has alive ownerPid', async () => {
+      const task = buildRunningTask('alive-worker');
+      setupFindByStatus([], [task]);
+
+      workerRepo.findByTaskId.mockReturnValue(
+        ok({
+          workerId: WorkerId('w1'),
+          taskId: task.id,
+          pid: ALIVE_PID,
+          ownerPid: ALIVE_PID,
+          agent: 'claude',
+          startedAt: Date.now(),
+        }),
+      );
+
+      const result = await manager.recover();
+
+      expect(result.ok).toBe(true);
+      // Task should NOT be updated (it's alive)
+      expect(repo.update).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith('Running task has live worker in another process, skipping', {
+        taskId: task.id,
+        ownerPid: ALIVE_PID,
+      });
+    });
+
+    it('should not re-queue RUNNING tasks with dead workers', async () => {
+      const task = buildRunningTask('dead-no-queue');
+      setupFindByStatus([], [task]);
+      // Default: findByTaskId returns ok(null) — no worker
+
+      await manager.recover();
+
+      // Enqueue should not be called for crashed tasks
+      expect(queue.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('should log crashed task failure', async () => {
+      const task = buildRunningTask('crashed-logged');
+      setupFindByStatus([], [task]);
+      // Default: findByTaskId returns ok(null) — no worker
 
       await manager.recover();
 
       expect(logger.info).toHaveBeenCalledWith(
-        'Marked stale crashed task as failed',
+        'Marked crashed task as failed (no live worker)',
         expect.objectContaining({
-          taskId: staleTask.id,
-          ageMinutes: expect.any(Number),
+          taskId: task.id,
         }),
       );
     });
 
-    it('should log error when update fails for stale task', async () => {
-      const staleTask = buildStaleRunningTask('stale-update-fail');
-      setupFindByStatus([], [staleTask]);
+    it('should log error when update fails for crashed task', async () => {
+      const task = buildRunningTask('crashed-update-fail');
+      setupFindByStatus([], [task]);
+      // Default: findByTaskId returns ok(null) — no worker
       const updateError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'DB write failed');
       repo.update.mockResolvedValue(err(updateError));
 
       await manager.recover();
 
-      expect(logger.error).toHaveBeenCalledWith('Failed to update stale crashed task', updateError, {
-        taskId: staleTask.id,
-      });
-    });
-  });
-
-  describe('RUNNING task recovery - recent tasks', () => {
-    it('should re-queue recent RUNNING tasks (<30 min) and emit TaskQueued events', async () => {
-      const recentTask = buildRecentRunningTask('recent-1');
-      setupFindByStatus([], [recentTask]);
-
-      const result = await manager.recover();
-
-      expect(result.ok).toBe(true);
-      expect(queue.enqueue).toHaveBeenCalledWith(recentTask);
-      expect(eventBus.emit).toHaveBeenCalledWith('TaskQueued', {
-        taskId: recentTask.id,
+      expect(logger.error).toHaveBeenCalledWith('Failed to update crashed task', updateError, {
+        taskId: task.id,
       });
     });
 
-    it('should skip recent RUNNING tasks already in the queue', async () => {
-      const recentTask = buildRecentRunningTask('recent-already-queued');
-      setupFindByStatus([], [recentTask]);
-      queue.contains.mockReturnValue(true);
+    it('should skip RUNNING task when it became terminal between fetch and update', async () => {
+      const task = buildRunningTask('race-completed');
+      setupFindByStatus([], [task]);
+      // No worker row → would normally mark as FAILED
+      workerRepo.findByTaskId.mockReturnValue(ok(null));
+      // But task has since been completed by another process (TOCTOU)
+      const completedTask = new TaskFactory().withStatus(TaskStatus.COMPLETED).build();
+      repo.findById.mockResolvedValue(ok({ ...completedTask, id: TaskId('race-completed') }));
 
       await manager.recover();
 
-      expect(queue.enqueue).not.toHaveBeenCalled();
-      expect(logger.warn).toHaveBeenCalledWith('Task already in queue, skipping re-queue', { taskId: recentTask.id });
-    });
-
-    it('should log enqueue failure for recent running task but continue', async () => {
-      const recentTask = buildRecentRunningTask('recent-enqueue-fail');
-      setupFindByStatus([], [recentTask]);
-      const enqueueError = new BackbeatError(ErrorCode.QUEUE_FULL, 'Queue full');
-      queue.enqueue.mockReturnValue(err(enqueueError));
-
-      const result = await manager.recover();
-
-      expect(result.ok).toBe(true);
-      expect(logger.error).toHaveBeenCalledWith('Failed to re-queue recent running task', enqueueError, {
-        taskId: recentTask.id,
+      // Task should NOT be updated — it's already terminal
+      expect(repo.update).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith('Running task already terminal, skipping recovery', {
+        taskId: TaskId('race-completed'),
+        currentStatus: TaskStatus.COMPLETED,
       });
     });
   });
@@ -371,11 +546,25 @@ describe('RecoveryManager', () => {
   });
 
   describe('Mixed scenario', () => {
-    it('should handle a mix of queued, stale running, and recent running tasks', async () => {
+    it('should handle a mix of queued, dead-worker running, and alive-worker running tasks', async () => {
       const queuedTask = buildQueuedTask('q-1');
-      const staleTask = buildStaleRunningTask('stale-1');
-      const recentTask = buildRecentRunningTask('recent-1');
-      setupFindByStatus([queuedTask], [staleTask, recentTask]);
+      const deadWorkerTask = buildRunningTask('dead-1');
+      const aliveWorkerTask = buildRunningTask('alive-1');
+      setupFindByStatus([queuedTask], [deadWorkerTask, aliveWorkerTask]);
+
+      // Dead worker for first task, alive worker for second
+      workerRepo.findByTaskId
+        .mockReturnValueOnce(ok(null)) // dead-1: no worker row
+        .mockReturnValueOnce(
+          ok({
+            workerId: WorkerId('w-alive'),
+            taskId: aliveWorkerTask.id,
+            pid: ALIVE_PID,
+            ownerPid: ALIVE_PID,
+            agent: 'claude',
+            startedAt: Date.now(),
+          }),
+        );
 
       const result = await manager.recover();
 
@@ -384,42 +573,60 @@ describe('RecoveryManager', () => {
       // Queued task re-queued
       expect(queue.enqueue).toHaveBeenCalledWith(queuedTask);
 
-      // Stale task marked FAILED
+      // Dead-worker task marked FAILED
       expect(repo.update).toHaveBeenCalledWith(
-        staleTask.id,
+        deadWorkerTask.id,
         expect.objectContaining({
           status: TaskStatus.FAILED,
           exitCode: -1,
         }),
       );
 
-      // Recent task re-queued
-      expect(queue.enqueue).toHaveBeenCalledWith(recentTask);
+      // Alive-worker task left alone (not updated)
+      const updateCalls = repo.update.mock.calls.filter((call: unknown[]) => call[0] === aliveWorkerTask.id);
+      expect(updateCalls).toHaveLength(0);
     });
 
     it('should handle multiple queued and multiple running tasks', async () => {
       const q1 = buildQueuedTask('q-1');
       const q2 = buildQueuedTask('q-2');
-      const stale1 = buildStaleRunningTask('stale-1');
-      const stale2 = buildStaleRunningTask('stale-2');
-      const recent1 = buildRecentRunningTask('recent-1');
-      setupFindByStatus([q1, q2], [stale1, stale2, recent1]);
+      const deadTask1 = buildRunningTask('dead-1');
+      const deadTask2 = buildRunningTask('dead-2');
+      const aliveTask = buildRunningTask('alive-1');
+      setupFindByStatus([q1, q2], [deadTask1, deadTask2, aliveTask]);
 
       // Second queued task is already in queue
       queue.contains
         .mockReturnValueOnce(false) // q1 not in queue
-        .mockReturnValueOnce(true) // q2 already in queue
-        .mockReturnValueOnce(false); // recent1 not in queue
+        .mockReturnValueOnce(true); // q2 already in queue
+
+      // Worker lookups: dead tasks have no worker, alive task has worker
+      workerRepo.findByTaskId
+        .mockReturnValueOnce(ok(null)) // dead-1: no worker
+        .mockReturnValueOnce(ok(null)) // dead-2: no worker
+        .mockReturnValueOnce(
+          ok({
+            workerId: WorkerId('w-alive'),
+            taskId: aliveTask.id,
+            pid: ALIVE_PID,
+            ownerPid: ALIVE_PID,
+            agent: 'claude',
+            startedAt: Date.now(),
+          }),
+        );
 
       await manager.recover();
 
-      // q1 enqueued, q2 skipped, recent1 enqueued
-      expect(queue.enqueue).toHaveBeenCalledTimes(2);
+      // q1 enqueued, q2 skipped
+      expect(queue.enqueue).toHaveBeenCalledTimes(1);
       expect(queue.enqueue).toHaveBeenCalledWith(q1);
-      expect(queue.enqueue).toHaveBeenCalledWith(recent1);
 
-      // 2 stale tasks marked FAILED
-      expect(repo.update).toHaveBeenCalledTimes(2);
+      // 2 dead tasks marked FAILED (alive task skipped)
+      const failedUpdateCalls = repo.update.mock.calls.filter((call: unknown[]) => {
+        const update = call[1] as { status?: string };
+        return update.status === TaskStatus.FAILED;
+      });
+      expect(failedUpdateCalls).toHaveLength(2);
     });
   });
 
@@ -442,22 +649,26 @@ describe('RecoveryManager', () => {
   });
 
   describe('Edge cases', () => {
-    it('should handle task at exactly 30 minute boundary as not stale', async () => {
-      // Task started slightly less than 30 minutes ago to avoid timing drift
-      // between Date.now() here and Date.now() inside recover()
+    it('should mark RUNNING task with no worker as FAILED regardless of task age', async () => {
+      // Even a very recent task with no worker row is definitively crashed
       const base = new TaskFactory()
         .withStatus(TaskStatus.RUNNING)
-        .withStartedAt(Date.now() - 30 * 60 * 1000 + 1000)
+        .withStartedAt(Date.now() - 1000) // Started 1 second ago
         .build();
-      const task = { ...base, id: TaskId('boundary-task') };
+      const task = { ...base, id: TaskId('recent-no-worker') };
       setupFindByStatus([], [task]);
+      // Default: findByTaskId returns ok(null)
 
       await manager.recover();
 
-      // Under 30 min threshold, so isStale = false (> not >=)
-      // The task should be re-queued, not marked failed
-      expect(queue.enqueue).toHaveBeenCalledWith(task);
-      expect(repo.update).not.toHaveBeenCalled();
+      // PID-based: no worker → FAILED, regardless of age
+      expect(repo.update).toHaveBeenCalledWith(
+        task.id,
+        expect.objectContaining({
+          status: TaskStatus.FAILED,
+          exitCode: -1,
+        }),
+      );
     });
 
     it('should call findByStatus with correct status values', async () => {

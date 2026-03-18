@@ -12,9 +12,10 @@ import { AgentRegistry } from '../core/agents.js';
 import { Task, TaskId, Worker, WorkerId } from '../core/domain.js';
 import { BackbeatError, ErrorCode, taskTimeout } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
-import { Logger, OutputCapture, ResourceMonitor, WorkerPool } from '../core/interfaces.js';
+import { Logger, OutputCapture, ResourceMonitor, WorkerPool, WorkerRepository } from '../core/interfaces.js';
 import { err, ok, Result } from '../core/result.js';
 import { ProcessConnector } from '../services/process-connector.js';
+import { OutputRepository } from './output-repository.js';
 
 interface WorkerState extends Worker {
   process: ChildProcess;
@@ -33,8 +34,11 @@ export class EventDrivenWorkerPool implements WorkerPool {
     private readonly logger: Logger,
     private readonly eventBus: EventBus,
     outputCapture: OutputCapture,
+    private readonly workerRepository: WorkerRepository,
+    outputRepository: OutputRepository,
+    outputFlushIntervalMs?: number,
   ) {
-    this.processConnector = new ProcessConnector(outputCapture, logger);
+    this.processConnector = new ProcessConnector(outputCapture, logger, outputRepository, outputFlushIntervalMs);
   }
 
   async spawn(task: Task): Promise<Result<Worker>> {
@@ -102,6 +106,23 @@ export class EventDrivenWorkerPool implements WorkerPool {
     this.workers.set(workerId, worker);
     this.taskToWorker.set(task.id, workerId);
 
+    // Register in DB for cross-process coordination
+    const regResult = this.workerRepository.register({
+      workerId,
+      taskId: task.id,
+      pid,
+      ownerPid: process.pid,
+      agent: agentProvider,
+      startedAt: Date.now(),
+    });
+    if (!regResult.ok) {
+      // UNIQUE violation = another process already owns this task (Edge Case J)
+      childProcess.kill('SIGTERM');
+      this.workers.delete(workerId);
+      this.taskToWorker.delete(task.id);
+      return err(regResult.error);
+    }
+
     // Set up timeout if task has one
     this.setupTimeoutForWorker(worker);
 
@@ -137,6 +158,9 @@ export class EventDrivenWorkerPool implements WorkerPool {
       // Clear timeout to prevent race condition
       this.clearTimeoutForWorker(worker);
 
+      // Stop periodic flushing + final output flush before kill (Edge Case I)
+      await this.processConnector.prepareForKill(worker.taskId);
+
       // Kill the process
       if (worker.process && !worker.process.killed) {
         worker.process.kill('SIGTERM');
@@ -149,12 +173,7 @@ export class EventDrivenWorkerPool implements WorkerPool {
         }, 5000);
       }
 
-      // Clean up worker state
-      this.workers.delete(workerId);
-      this.taskToWorker.delete(worker.taskId);
-
-      // Decrement worker count
-      this.monitor.decrementWorkerCount();
+      this.cleanupWorkerState(workerId, worker.taskId);
 
       return ok(undefined);
     } catch (error) {
@@ -205,6 +224,22 @@ export class EventDrivenWorkerPool implements WorkerPool {
 
     const worker = this.workers.get(workerId);
     return ok(worker || null);
+  }
+
+  /**
+   * Remove worker from in-memory maps, decrement monitor count,
+   * and unregister from DB. Shared by kill() and handleWorkerCompletion().
+   */
+  private cleanupWorkerState(workerId: WorkerId, taskId: TaskId): void {
+    this.workers.delete(workerId);
+    this.taskToWorker.delete(taskId);
+    this.monitor.decrementWorkerCount();
+
+    // Unregister from DB (log and continue on error — stale rows cleaned on next startup)
+    const unregResult = this.workerRepository.unregister(workerId);
+    if (!unregResult.ok) {
+      this.logger.error('Failed to unregister worker from DB', unregResult.error, { workerId });
+    }
   }
 
   /**
@@ -269,10 +304,7 @@ export class EventDrivenWorkerPool implements WorkerPool {
     // Calculate duration
     const duration = Date.now() - worker.startedAt;
 
-    // Clean up worker state
-    this.workers.delete(workerId);
-    this.taskToWorker.delete(taskId);
-    this.monitor.decrementWorkerCount();
+    this.cleanupWorkerState(workerId, taskId);
 
     // Emit appropriate events
     if (exitCode === 0) {

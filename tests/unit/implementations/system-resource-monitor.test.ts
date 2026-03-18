@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryEventBus } from '../../../src/core/events/event-bus';
+import type { WorkerRepository } from '../../../src/core/interfaces';
+import { ok } from '../../../src/core/result';
 import { TestLogger } from '../../../src/implementations/logger';
 import { SystemResourceMonitor } from '../../../src/implementations/resource-monitor';
 import { createTestConfiguration } from '../../fixtures/factories';
+import { createMockWorkerRepository } from '../../fixtures/mocks';
 
 // Mock os module
 let mockTotalmem = () => 16_000_000_000;
@@ -27,6 +30,7 @@ describe('SystemResourceMonitor', () => {
   let monitor: SystemResourceMonitor;
   let eventBus: InMemoryEventBus;
   let logger: TestLogger;
+  let workerRepo: WorkerRepository;
 
   const MEMORY_16GB = 16_000_000_000;
   const MEMORY_8GB = 8_000_000_000;
@@ -35,6 +39,7 @@ describe('SystemResourceMonitor', () => {
   beforeEach(() => {
     logger = new TestLogger();
     eventBus = new InMemoryEventBus(createTestConfiguration(), logger);
+    workerRepo = createMockWorkerRepository();
 
     // Setup default mock values
     mockTotalmem = () => MEMORY_16GB;
@@ -48,7 +53,7 @@ describe('SystemResourceMonitor', () => {
       resourceMonitorIntervalMs: 100,
     });
 
-    monitor = new SystemResourceMonitor(config, eventBus, logger);
+    monitor = new SystemResourceMonitor(config, workerRepo, eventBus, logger);
   });
 
   afterEach(() => {
@@ -238,7 +243,9 @@ describe('SystemResourceMonitor', () => {
           cpuCoresReserved: 2,
           memoryReserve: MEMORY_1GB,
         });
-        const limitedMonitor = new SystemResourceMonitor(limitedConfig, eventBus, logger);
+        // getGlobalCount returns 0 initially, then 1 after spawn
+        const limitedWorkerRepo = createMockWorkerRepository();
+        const limitedMonitor = new SystemResourceMonitor(limitedConfig, limitedWorkerRepo, eventBus, logger);
 
         // Before recordSpawn, should be able to spawn
         const beforeResult = await limitedMonitor.canSpawnWorker();
@@ -249,6 +256,8 @@ describe('SystemResourceMonitor', () => {
 
         // Record a spawn - this should affect eligibility
         limitedMonitor.recordSpawn();
+        // Simulate DB now has 1 worker registered
+        (limitedWorkerRepo.getGlobalCount as ReturnType<typeof vi.fn>).mockReturnValue(ok(1));
 
         // After recordSpawn, should NOT be able to spawn (at maxWorkers)
         const afterResult = await limitedMonitor.canSpawnWorker();
@@ -274,21 +283,25 @@ describe('SystemResourceMonitor', () => {
           cpuCoresReserved: 2,
           memoryReserve: MEMORY_1GB,
         });
-        const limitedMonitor = new SystemResourceMonitor(limitedConfig, eventBus, logger);
+        const limitedWorkerRepo = createMockWorkerRepository();
+        const limitedMonitor = new SystemResourceMonitor(limitedConfig, limitedWorkerRepo, eventBus, logger);
 
         // Record spawns up to but not exceeding limit
         limitedMonitor.recordSpawn();
         limitedMonitor.recordSpawn();
+        // Simulate DB has 2 workers registered
+        (limitedWorkerRepo.getGlobalCount as ReturnType<typeof vi.fn>).mockReturnValue(ok(2));
 
-        // 2 settling workers < 3 max → should still allow spawn
+        // 2 workers < 3 max → should still allow spawn
         const canSpawn = await limitedMonitor.canSpawnWorker();
         expect(canSpawn.ok).toBe(true);
         if (canSpawn.ok) {
           expect(canSpawn.value).toBe(true);
         }
 
-        // 3rd settling worker hits the limit
+        // 3rd worker hits the limit
         limitedMonitor.recordSpawn();
+        (limitedWorkerRepo.getGlobalCount as ReturnType<typeof vi.fn>).mockReturnValue(ok(3));
         const blocked = await limitedMonitor.canSpawnWorker();
         expect(blocked.ok).toBe(true);
         if (blocked.ok) {
@@ -312,12 +325,15 @@ describe('SystemResourceMonitor', () => {
           cpuCoresReserved: 2,
           memoryReserve: MEMORY_1GB,
         });
-        const limitedMonitor = new SystemResourceMonitor(limitedConfig, eventBus, logger);
+        const limitedWorkerRepo = createMockWorkerRepository();
+        const limitedMonitor = new SystemResourceMonitor(limitedConfig, limitedWorkerRepo, eventBus, logger);
 
         // Record a spawn (fills the 1-worker limit)
         limitedMonitor.recordSpawn();
+        // Simulate DB has 1 worker registered
+        (limitedWorkerRepo.getGlobalCount as ReturnType<typeof vi.fn>).mockReturnValue(ok(1));
 
-        // Should be blocked while settling
+        // Should be blocked while worker is active
         const blocked = await limitedMonitor.canSpawnWorker();
         expect(blocked.ok).toBe(true);
         if (blocked.ok) {
@@ -327,7 +343,10 @@ describe('SystemResourceMonitor', () => {
         // Fast-forward past the settling window (15 seconds)
         await vi.advanceTimersByTimeAsync(16_000);
 
-        // The spawn should have expired — can spawn again
+        // Simulate worker completed and unregistered from DB
+        (limitedWorkerRepo.getGlobalCount as ReturnType<typeof vi.fn>).mockReturnValue(ok(0));
+
+        // The worker is gone — can spawn again
         const unblocked = await limitedMonitor.canSpawnWorker();
         expect(unblocked.ok).toBe(true);
         if (unblocked.ok) {
@@ -351,15 +370,18 @@ describe('SystemResourceMonitor', () => {
           cpuCoresReserved: 2,
           memoryReserve: MEMORY_1GB,
         });
-        const limitedMonitor = new SystemResourceMonitor(limitedConfig, eventBus, logger);
+        const limitedWorkerRepo = createMockWorkerRepository();
+        const limitedMonitor = new SystemResourceMonitor(limitedConfig, limitedWorkerRepo, eventBus, logger);
 
         // Record a spawn (fills the 1-worker limit)
         limitedMonitor.recordSpawn();
+        // Simulate DB has 1 worker registered
+        (limitedWorkerRepo.getGlobalCount as ReturnType<typeof vi.fn>).mockReturnValue(ok(1));
 
         // Fast-forward 10 seconds (within the 15 second window)
         await vi.advanceTimersByTimeAsync(10_000);
 
-        // The spawn should still be tracked — cannot spawn
+        // Worker is still active in DB — cannot spawn
         const result = await limitedMonitor.canSpawnWorker();
         expect(result.ok).toBe(true);
         if (result.ok) {
@@ -385,13 +407,16 @@ describe('SystemResourceMonitor', () => {
           cpuCoresReserved: 2,
           memoryReserve: MEMORY_1GB,
         });
-        const limitedMonitor = new SystemResourceMonitor(limitedConfig, eventBus, logger);
+        const limitedWorkerRepo = createMockWorkerRepository();
+        const limitedMonitor = new SystemResourceMonitor(limitedConfig, limitedWorkerRepo, eventBus, logger);
 
-        // Record spawns up to the limit (2 settling workers = max)
+        // Record spawns up to the limit (2 workers = max)
         limitedMonitor.recordSpawn();
         limitedMonitor.recordSpawn();
+        // Simulate DB has 2 workers registered
+        (limitedWorkerRepo.getGlobalCount as ReturnType<typeof vi.fn>).mockReturnValue(ok(2));
 
-        // Should not allow more spawns because settling workers count toward limit
+        // Should not allow more spawns because worker count equals max
         const result = await limitedMonitor.canSpawnWorker();
         expect(result.ok).toBe(true);
         if (result.ok) {
@@ -461,7 +486,7 @@ describe('SystemResourceMonitor', () => {
         memoryReserve: MEMORY_1GB,
         resourceMonitorIntervalMs: 100,
       });
-      const noEventBusMonitor = new SystemResourceMonitor(config, undefined, logger);
+      const noEventBusMonitor = new SystemResourceMonitor(config, workerRepo, undefined, logger);
 
       noEventBusMonitor.startMonitoring();
 

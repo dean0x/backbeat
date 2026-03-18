@@ -168,12 +168,22 @@ Server Startup
     ▼
 ┌───────────────────────────────────────────────────────────────┐
 │ 1. RecoveryManager.recover()                                   │
-│    • Queries database for non-terminal tasks                   │
+│    • Phase 0: Clean dead worker registrations                  │
+│    • Then: recover QUEUED and RUNNING tasks                    │
 └───────────────────────────────────────────────────────────────┘
     │
     ▼
 ┌───────────────────────────────────────────────────────────────┐
-│ 2. Handle QUEUED tasks                                         │
+│ 2. Phase 0: Dead Worker Cleanup (PID-based crash detection)   │
+│    • Loads all worker registrations from workers table         │
+│    • For each: checks if ownerPid is alive (signal 0)         │
+│    • Dead PID → unregister worker + mark task FAILED          │
+│    • Live PID → leave alone (running in another process)      │
+└───────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌───────────────────────────────────────────────────────────────┐
+│ 3. Handle QUEUED tasks                                         │
 │    • Safety check: not already in queue                        │
 │    • Enqueue task                                              │
 │    • Emits: TaskQueued                                         │
@@ -181,24 +191,21 @@ Server Startup
     │
     ▼
 ┌───────────────────────────────────────────────────────────────┐
-│ 3. Handle RUNNING tasks (STALE DETECTION)                     │
+│ 4. Handle RUNNING tasks (PID-based crash detection)           │
 │                                                                 │
-│  IF task age > 30 minutes (STALE):                            │
-│    • Mark as FAILED (exit code -1)                            │
-│    • Log: "Marked stale crashed task as failed"              │
+│  • Looks up worker registration by taskId                     │
+│  • IF worker exists AND ownerPid alive → skip (legitimate)   │
+│  • IF no worker OR ownerPid dead → mark FAILED (crashed)     │
 │                                                                 │
-│  IF task age < 30 minutes (RECENT):                           │
-│    • Re-queue for recovery                                     │
-│    • Emits: TaskQueued                                         │
-│    • Log: "Re-queued recent running task for recovery"       │
-│                                                                 │
-│  WHY: Prevents fork-bomb on restart from old tasks            │
+│  WHY: Prevents fork-bomb on restart from crashed tasks        │
+│       PID checks are definitive — no false positives          │
+│       Replaces old 30-minute staleness heuristic              │
 │       See: RecoveryManager JSDoc for incident details          │
 └───────────────────────────────────────────────────────────────┘
     │
     ▼
 ┌───────────────────────────────────────────────────────────────┐
-│ 4. WorkerHandler.handleTaskQueued()                           │
+│ 5. WorkerHandler.handleTaskQueued()                           │
 │    • Enforces 10s spawn delay between workers                 │
 │    • Prevents burst spawning during recovery                   │
 │    • See: WorkerHandler JSDoc for fork-bomb prevention        │
@@ -300,22 +307,23 @@ Recovery with 5 queued tasks:
 
 **Incident Reference**: 2025-12-06 TOCTOU race in spawn delay check
 
-### 2. Stale Task Detection (RecoveryManager)
+### 2. PID-Based Crash Detection (RecoveryManager)
 
 **Problem**: Crashed tasks stuck in RUNNING status cause fork-bomb on restart.
 
-**Solution**: 30-minute threshold - old tasks marked FAILED, recent tasks re-queued.
+**Solution**: Two-phase PID-based recovery. Phase 0 cleans dead worker registrations (checks ownerPid liveness). Phase 1 checks remaining RUNNING tasks against the workers table -- tasks with no live worker are definitively crashed and marked FAILED immediately.
 
 ```
 Server restart with 10 RUNNING tasks:
 
-Age > 30 min (7 tasks):  MARK AS FAILED (don't re-queue)
-Age < 30 min (3 tasks):  RE-QUEUE (might be legitimate)
+Phase 0: Dead worker registrations (6 tasks) → unregister + FAILED
+Phase 1: RUNNING with no live worker (2 tasks) → FAILED
+Phase 1: RUNNING with live ownerPid (2 tasks) → SKIP (legitimate)
 
-Result: Only 3 workers spawn instead of 10
+Result: Only 2 queued tasks spawn, not 10
 ```
 
-**Code**: `src/services/recovery-manager.ts:88-175`
+**Code**: `src/services/recovery-manager.ts`
 
 ### 3. Handler Profiling (EventBus)
 
@@ -495,6 +503,5 @@ You'll see:
 
 See removal criteria in:
 - `WorkerHandler` spawn serialization - documented in `docs/architecture/HANDLER-DECOMPOSITION-INVARIANTS.md`
-- `RecoveryManager` stale detection - see JSDoc in `src/services/recovery-manager.ts`
 
 Only remove these safeguards if you implement the suggested alternatives.

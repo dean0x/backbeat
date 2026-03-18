@@ -22,6 +22,7 @@ import {
   TaskQueue,
   TaskRepository,
   WorkerPool,
+  WorkerRepository,
 } from './core/interfaces.js';
 import { err, ok, Result } from './core/result.js';
 
@@ -57,13 +58,14 @@ import { EventDrivenWorkerPool } from './implementations/event-driven-worker-poo
 import { GeminiAdapter } from './implementations/gemini-adapter.js';
 import { ConsoleLogger, LogLevel, StructuredLogger } from './implementations/logger.js';
 import { BufferedOutputCapture } from './implementations/output-capture.js';
-import { SQLiteOutputRepository } from './implementations/output-repository.js';
+import { OutputRepository, SQLiteOutputRepository } from './implementations/output-repository.js';
 import { ClaudeProcessSpawner } from './implementations/process-spawner.js';
 import { ProcessSpawnerAdapter } from './implementations/process-spawner-adapter.js';
 import { SystemResourceMonitor } from './implementations/resource-monitor.js';
 import { SQLiteScheduleRepository } from './implementations/schedule-repository.js';
 import { PriorityTaskQueue } from './implementations/task-queue.js';
 import { SQLiteTaskRepository } from './implementations/task-repository.js';
+import { SQLiteWorkerRepository } from './implementations/worker-repository.js';
 
 // Services
 import { extractHandlerDependencies, setupEventHandlers } from './services/handler-setup.js';
@@ -243,6 +245,13 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
     return new SQLiteCheckpointRepository(dbResult.value);
   });
 
+  // Register WorkerRepository for cross-process coordination (v1.0)
+  container.registerSingleton('workerRepository', () => {
+    const dbResult = container.get<Database>('database');
+    if (!dbResult.ok) throw new Error('Failed to get database for WorkerRepository');
+    return new SQLiteWorkerRepository(dbResult.value);
+  });
+
   // Register ScheduleService for schedule management (v0.4.0)
   container.registerSingleton('scheduleService', () => {
     return new ScheduleManagerService(
@@ -302,6 +311,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
 
     const monitor = new SystemResourceMonitor(
       configResult.value,
+      getFromContainer<WorkerRepository>(container, 'workerRepository'),
       getFromContainer<EventBus>(container, 'eventBus'),
       getFromContainer<Logger>(container, 'logger').child({ module: 'ResourceMonitor' }),
     );
@@ -324,14 +334,16 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
 
   // Register worker pool (v0.5.0: uses AgentRegistry instead of ProcessSpawner)
   container.registerSingleton('workerPool', () => {
-    const pool = new EventDrivenWorkerPool(
+    return new EventDrivenWorkerPool(
       getFromContainer<AgentRegistry>(container, 'agentRegistry'),
       getFromContainer<ResourceMonitor>(container, 'resourceMonitor'),
       getFromContainer<Logger>(container, 'logger').child({ module: 'WorkerPool' }),
       getFromContainer<EventBus>(container, 'eventBus'),
       getFromContainer<OutputCapture>(container, 'outputCapture'),
+      getFromContainer<WorkerRepository>(container, 'workerRepository'),
+      getFromContainer<OutputRepository>(container, 'outputRepository'),
+      config.outputFlushIntervalMs,
     );
-    return pool;
   });
 
   // Register task manager
@@ -343,6 +355,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
       config, // Pass complete config - no partial objects needed
       getFromContainer<TaskRepository>(container, 'taskRepository'),
       getFromContainer<OutputCapture>(container, 'outputCapture'),
+      getFromContainer<OutputRepository>(container, 'outputRepository'),
       getFromContainer<CheckpointRepository>(container, 'checkpointRepository'),
     );
 
@@ -393,6 +406,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
       getFromContainer<TaskQueue>(container, 'taskQueue'),
       getFromContainer<EventBus>(container, 'eventBus'),
       getFromContainer<Logger>(container, 'logger').child({ module: 'Recovery' }),
+      getFromContainer<WorkerRepository>(container, 'workerRepository'),
     );
   });
 

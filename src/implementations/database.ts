@@ -532,6 +532,32 @@ export class Database implements TransactionRunner {
           db.exec(`ALTER TABLE schedule_executions ADD COLUMN pipeline_task_ids TEXT`);
         },
       },
+      {
+        version: 9,
+        description: 'Add workers table for cross-process coordination (v1.0)',
+        up: (db) => {
+          // Workers table - tracks active workers across all processes
+          // ARCHITECTURE: Enables cross-process coordination and PID-based crash recovery
+          // Pattern: Each worker row represents a live worker process; removed on completion/kill
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS workers (
+              worker_id TEXT PRIMARY KEY,
+              task_id TEXT NOT NULL UNIQUE,
+              pid INTEGER NOT NULL,
+              owner_pid INTEGER NOT NULL,
+              agent TEXT NOT NULL DEFAULT 'claude',
+              started_at INTEGER NOT NULL,
+              FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+            )
+          `);
+
+          // Indexes for common queries
+          db.exec(`
+            CREATE INDEX IF NOT EXISTS idx_workers_owner_pid ON workers(owner_pid);
+            CREATE INDEX IF NOT EXISTS idx_workers_pid ON workers(pid);
+          `);
+        },
+      },
     ];
   }
 

@@ -6,13 +6,15 @@
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryEventBus } from '../../src/core/events/event-bus.js';
+import { ok } from '../../src/core/result.js';
 import { Database } from '../../src/implementations/database.js';
 import { PriorityTaskQueue } from '../../src/implementations/task-queue.js';
 import { SQLiteTaskRepository } from '../../src/implementations/task-repository.js';
 import { RecoveryManager } from '../../src/services/recovery-manager.js';
 import { createTestConfiguration } from '../fixtures/factories.js';
+import { createMockWorkerRepository } from '../fixtures/mocks.js';
 import { createTestTask as createTask } from '../fixtures/test-data.js';
 import { TestLogger } from '../fixtures/test-doubles.js';
 
@@ -76,7 +78,7 @@ describe('Integration: Task persistence', () => {
       });
 
       // Create recovery manager
-      const recoveryManager = new RecoveryManager(repository2, queue2, eventBus, logger);
+      const recoveryManager = new RecoveryManager(repository2, queue2, eventBus, logger, createMockWorkerRepository());
 
       // Perform recovery
       await recoveryManager.recover();
@@ -332,24 +334,32 @@ describe('Integration: Task persistence', () => {
         recoveredTaskIds.push(data.taskId);
       });
 
-      const recoveryManager = new RecoveryManager(repository, new PriorityTaskQueue(logger), eventBus, logger);
+      const recoveryManager = new RecoveryManager(
+        repository,
+        new PriorityTaskQueue(logger),
+        eventBus,
+        logger,
+        createMockWorkerRepository(),
+      );
 
       await recoveryManager.recover();
 
-      // Should recover: 2 QUEUED + 1 RECENT RUNNING = 3 tasks
-      // STALE RUNNING task (1 hour old) should be marked failed, not recovered
-      expect(recoveredTaskIds.length).toBe(3); // 2 QUEUED + 1 RECENT RUNNING
+      // PID-based recovery: RUNNING tasks with no live worker are marked FAILED, not re-queued.
+      // Only QUEUED tasks are re-queued.
+      expect(recoveredTaskIds.length).toBe(2); // 2 QUEUED tasks only
 
-      // Verify STALE running task was marked as failed (not recovered)
+      // Verify both RUNNING tasks were marked as failed (no live worker in mock)
       const staleTaskResult = await repository.findById(tasks[3].id); // Second running task (STALE)
       expect(staleTaskResult.ok).toBe(true);
       if (staleTaskResult.ok && staleTaskResult.value) {
         expect(staleTaskResult.value.status).toBe('failed');
       }
 
-      // Verify RECENT running task was recovered
-      const recentTaskRecovered = recoveredTaskIds.includes(tasks[2].id); // Recent running task
-      expect(recentTaskRecovered).toBe(true); // Should have recovered the recent RUNNING task
+      const recentTaskResult = await repository.findById(tasks[2].id); // Recent running task
+      expect(recentTaskResult.ok).toBe(true);
+      if (recentTaskResult.ok && recentTaskResult.value) {
+        expect(recentTaskResult.value.status).toBe('failed'); // No live worker → marked failed
+      }
 
       database.close();
       eventBus.dispose();

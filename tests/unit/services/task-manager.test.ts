@@ -15,9 +15,10 @@ import { BackbeatError, ErrorCode } from '../../../src/core/errors';
 import type { EventBus } from '../../../src/core/events/event-bus';
 import type { CheckpointRepository, Logger, OutputCapture, TaskRepository } from '../../../src/core/interfaces';
 import { err, ok } from '../../../src/core/result';
+import type { OutputRepository } from '../../../src/implementations/output-repository';
 import { TaskManagerService } from '../../../src/services/task-manager';
 import { ConfigFactory } from '../../fixtures/factories';
-import { createMockLogger } from '../../fixtures/mocks';
+import { createMockLogger, createMockOutputRepository } from '../../fixtures/mocks';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -125,6 +126,7 @@ describe('TaskManagerService', () => {
   let config: Configuration;
   let taskRepo: ReturnType<typeof createMockTaskRepo>;
   let outputCapture: ReturnType<typeof createMockOutputCapture>;
+  let outputRepository: ReturnType<typeof createMockOutputRepository>;
   let service: TaskManagerService;
 
   beforeEach(() => {
@@ -133,12 +135,14 @@ describe('TaskManagerService', () => {
     config = new ConfigFactory().build();
     taskRepo = createMockTaskRepo();
     outputCapture = createMockOutputCapture();
+    outputRepository = createMockOutputRepository();
     service = new TaskManagerService(
       eventBus as unknown as EventBus,
       logger,
       config,
       taskRepo as unknown as TaskRepository,
       outputCapture as unknown as OutputCapture,
+      outputRepository as unknown as OutputRepository,
     );
   });
 
@@ -214,6 +218,7 @@ describe('TaskManagerService', () => {
           noDefaultConfig,
           taskRepo as unknown as TaskRepository,
           outputCapture as unknown as OutputCapture,
+          outputRepository as unknown as OutputRepository,
         );
 
         const result = await svc.delegate({ prompt: 'test' });
@@ -233,6 +238,7 @@ describe('TaskManagerService', () => {
           geminiConfig,
           taskRepo as unknown as TaskRepository,
           outputCapture as unknown as OutputCapture,
+          outputRepository as unknown as OutputRepository,
         );
 
         const result = await svc.delegate({ prompt: 'test' });
@@ -250,6 +256,7 @@ describe('TaskManagerService', () => {
           claudeConfig,
           taskRepo as unknown as TaskRepository,
           outputCapture as unknown as OutputCapture,
+          outputRepository as unknown as OutputRepository,
         );
 
         const result = await svc.delegate({ prompt: 'test', agent: 'codex' });
@@ -460,6 +467,87 @@ describe('TaskManagerService', () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error).toBe(repoError);
+    });
+
+    it('should use in-memory output when it has data (totalSize > 0)', async () => {
+      const task = buildMockTask({ id: TaskId('logs-mem') });
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(task));
+
+      const inMemoryOutput = {
+        taskId: TaskId('logs-mem'),
+        stdout: ['in-memory line'],
+        stderr: [],
+        totalSize: 14,
+      };
+      (outputCapture.getOutput as ReturnType<typeof vi.fn>).mockReturnValue(ok(inMemoryOutput));
+
+      const result = await service.getLogs(TaskId('logs-mem'));
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.stdout).toEqual(['in-memory line']);
+      // Should not query outputRepository when in-memory has data
+      expect(outputRepository.get).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to outputRepository when in-memory is empty', async () => {
+      const task = buildMockTask({ id: TaskId('logs-db') });
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(task));
+
+      // In-memory returns empty (totalSize: 0) — default mock behavior
+      const dbOutput = {
+        taskId: TaskId('logs-db'),
+        stdout: ['db line 1', 'db line 2'],
+        stderr: ['db err'],
+        totalSize: 30,
+      };
+      (outputRepository.get as ReturnType<typeof vi.fn>).mockResolvedValue(ok(dbOutput));
+
+      const result = await service.getLogs(TaskId('logs-db'));
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.stdout).toEqual(['db line 1', 'db line 2']);
+      expect(result.value.stderr).toEqual(['db err']);
+      expect(outputRepository.get).toHaveBeenCalledWith(TaskId('logs-db'));
+    });
+
+    it('should apply tail slicing to DB result when tail is requested', async () => {
+      const task = buildMockTask({ id: TaskId('logs-tail') });
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(task));
+
+      // In-memory returns empty (totalSize: 0) — default mock behavior
+      const dbOutput = {
+        taskId: TaskId('logs-tail'),
+        stdout: ['line 1', 'line 2', 'line 3', 'line 4', 'line 5'],
+        stderr: ['err 1', 'err 2', 'err 3'],
+        totalSize: 100,
+      };
+      (outputRepository.get as ReturnType<typeof vi.fn>).mockResolvedValue(ok(dbOutput));
+
+      const result = await service.getLogs(TaskId('logs-tail'), 2);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.stdout).toEqual(['line 4', 'line 5']);
+      expect(result.value.stderr).toEqual(['err 2', 'err 3']);
+      expect(result.value.totalSize).toBe(100);
+    });
+
+    it('should return empty output when both in-memory and DB are empty', async () => {
+      const task = buildMockTask({ id: TaskId('logs-empty') });
+      (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(task));
+
+      // In-memory returns empty (totalSize: 0) — default mock behavior
+      // DB returns null — default mock behavior
+
+      const result = await service.getLogs(TaskId('logs-empty'));
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.totalSize).toBe(0);
+      expect(result.value.stdout).toEqual([]);
+      expect(result.value.stderr).toEqual([]);
     });
   });
 
@@ -748,6 +836,7 @@ describe('TaskManagerService', () => {
         config,
         taskRepo as unknown as TaskRepository,
         outputCapture as unknown as OutputCapture,
+        outputRepository as unknown as OutputRepository,
         checkpointRepo,
       );
     });

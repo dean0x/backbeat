@@ -27,6 +27,7 @@ import { BackbeatError, ErrorCode, taskNotFound } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
 import { CheckpointRepository, Logger, OutputCapture, TaskManager, TaskRepository } from '../core/interfaces.js';
 import { err, ok, Result } from '../core/result.js';
+import { OutputRepository } from '../implementations/output-repository.js';
 
 export class TaskManagerService implements TaskManager {
   constructor(
@@ -35,6 +36,7 @@ export class TaskManagerService implements TaskManager {
     private readonly config: Configuration,
     private readonly taskRepo: TaskRepository,
     private readonly outputCapture: OutputCapture,
+    private readonly outputRepository: OutputRepository,
     private readonly checkpointRepo?: CheckpointRepository,
   ) {
     this.logger.debug('TaskManager initialized with hybrid architecture (commands via events, queries direct)');
@@ -125,6 +127,29 @@ export class TaskManagerService implements TaskManager {
       return err(taskNotFound(taskId));
     }
 
+    // Try in-memory first (current process)
+    const inMemory = this.outputCapture.getOutput(taskId, tail);
+    if (inMemory.ok && inMemory.value.totalSize > 0) {
+      return inMemory;
+    }
+
+    // Fall back to DB (cross-process or post-completion)
+    const dbResult = await this.outputRepository.get(taskId);
+    if (dbResult.ok && dbResult.value) {
+      const output = dbResult.value;
+      // Apply tail slicing if requested
+      if (tail && tail > 0) {
+        return ok({
+          taskId: output.taskId,
+          stdout: output.stdout.slice(-tail),
+          stderr: output.stderr.slice(-tail),
+          totalSize: output.totalSize,
+        });
+      }
+      return ok(output);
+    }
+
+    // No output anywhere — return empty
     return this.outputCapture.getOutput(taskId, tail);
   }
 

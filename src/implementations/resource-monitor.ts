@@ -8,7 +8,7 @@ import { Configuration } from '../core/configuration.js';
 import { SystemResources } from '../core/domain.js';
 import { BackbeatError, ErrorCode } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
-import { Logger, ResourceMonitor } from '../core/interfaces.js';
+import { Logger, ResourceMonitor, WorkerRepository } from '../core/interfaces.js';
 import { err, ok, Result, tryCatchAsync } from '../core/result.js';
 
 export class SystemResourceMonitor implements ResourceMonitor {
@@ -32,6 +32,7 @@ export class SystemResourceMonitor implements ResourceMonitor {
 
   constructor(
     config: Configuration,
+    private readonly workerRepository: WorkerRepository,
     private readonly eventBus?: EventBus,
     private readonly logger?: Logger,
   ) {
@@ -70,19 +71,29 @@ export class SystemResourceMonitor implements ResourceMonitor {
     );
   }
 
-  async canSpawnWorker(): Promise<Result<boolean>> {
-    // Clean up old spawn timestamps (outside settling window)
+  /**
+   * Remove spawn timestamps older than the settling window.
+   * Prevents unbounded array growth and gives accurate settling count.
+   */
+  private pruneExpiredTimestamps(): void {
     const now = Date.now();
     this.recentSpawnTimestamps = this.recentSpawnTimestamps.filter((t) => now - t < this.settlingWindowMs);
+  }
+
+  async canSpawnWorker(): Promise<Result<boolean>> {
+    this.pruneExpiredTimestamps();
     const settlingWorkers = this.recentSpawnTimestamps.length;
 
-    // Check max workers limit first (include settling workers)
-    const effectiveWorkerCount = this.workerCount + settlingWorkers;
-    if (effectiveWorkerCount >= this.maxWorkers) {
-      this.logger?.debug('Cannot spawn: Max workers limit reached (including settling)', {
-        currentWorkers: this.workerCount,
-        settlingWorkers,
-        effectiveWorkerCount,
+    // MAX WORKERS: Use DB count (accurate global truth) — no settling adjustment needed
+    // DB count already includes just-spawned workers (INSERT happens after spawn)
+    const globalResult = this.workerRepository.getGlobalCount();
+    if (!globalResult.ok) {
+      this.logger?.error('Failed to get global worker count', globalResult.error);
+      return ok(false); // Fail safe: don't spawn if we can't check
+    }
+    if (globalResult.value >= this.maxWorkers) {
+      this.logger?.debug('Cannot spawn: Max workers limit reached (global DB count)', {
+        globalWorkerCount: globalResult.value,
         maxWorkers: this.maxWorkers,
       });
       return ok(false);
@@ -165,10 +176,8 @@ export class SystemResourceMonitor implements ResourceMonitor {
    * Call this immediately after spawning a worker to track it during settling period
    */
   recordSpawn(): void {
-    const now = Date.now();
-    // Clean up expired timestamps to prevent unbounded array growth
-    this.recentSpawnTimestamps = this.recentSpawnTimestamps.filter((t) => now - t < this.settlingWindowMs);
-    this.recentSpawnTimestamps.push(now);
+    this.pruneExpiredTimestamps();
+    this.recentSpawnTimestamps.push(Date.now());
     this.logger?.debug('Recorded spawn for settling tracking', {
       settlingWorkers: this.recentSpawnTimestamps.length,
       settlingWindowMs: this.settlingWindowMs,

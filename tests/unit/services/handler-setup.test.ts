@@ -9,6 +9,7 @@ import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Container } from '../../../src/core/container';
 import { InMemoryEventBus } from '../../../src/core/events/event-bus';
+import { ok } from '../../../src/core/result';
 import { InMemoryAgentRegistry } from '../../../src/implementations/agent-registry';
 import { SQLiteCheckpointRepository } from '../../../src/implementations/checkpoint-repository';
 import { Database } from '../../../src/implementations/database';
@@ -26,6 +27,7 @@ import {
   setupEventHandlers,
 } from '../../../src/services/handler-setup';
 import { createTestConfiguration } from '../../fixtures/factories';
+import { createMockOutputRepository, createMockWorkerRepository } from '../../fixtures/mocks';
 import { TestLogger, TestProcessSpawner } from '../../fixtures/test-doubles';
 
 describe('handler-setup', () => {
@@ -58,7 +60,13 @@ describe('handler-setup', () => {
     container.registerValue('outputCapture', new BufferedOutputCapture(config.maxOutputBuffer, eventBus));
 
     // Resource monitor with mocked system resources
-    const resourceMonitor = new SystemResourceMonitor(config, eventBus, logger.child({ module: 'ResourceMonitor' }));
+    const mockWorkerRepo = createMockWorkerRepository();
+    const resourceMonitor = new SystemResourceMonitor(
+      config,
+      mockWorkerRepo,
+      eventBus,
+      logger.child({ module: 'ResourceMonitor' }),
+    );
     container.registerValue('resourceMonitor', resourceMonitor);
 
     // Worker pool with test spawner wrapped in AgentRegistry
@@ -69,6 +77,8 @@ describe('handler-setup', () => {
       logger.child({ module: 'WorkerPool' }),
       eventBus,
       new BufferedOutputCapture(config.maxOutputBuffer, eventBus),
+      mockWorkerRepo,
+      createMockOutputRepository(),
     );
     container.registerValue('workerPool', workerPool);
 

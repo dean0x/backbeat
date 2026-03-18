@@ -3,7 +3,7 @@
  * Validates task retry behavior and tracking
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Configuration } from '../../src/core/configuration.js';
 import { createTask, isTerminalState, Priority, Task, TaskId, TaskRequest, TaskStatus } from '../../src/core/domain.js';
 import { ErrorCode } from '../../src/core/errors.js';
@@ -18,6 +18,7 @@ import { PersistenceHandler } from '../../src/services/handlers/persistence-hand
 import { QueueHandler } from '../../src/services/handlers/queue-handler.js';
 import { TaskManagerService } from '../../src/services/task-manager.js';
 import { BUFFER_SIZES, TIMEOUTS } from '../constants.js';
+import { createMockOutputRepository } from '../fixtures/mocks.js';
 import { TestLogger } from '../fixtures/test-doubles.js';
 
 describe('Retry Functionality', () => {
@@ -50,7 +51,14 @@ describe('Retry Functionality', () => {
     const outputCapture = new BufferedOutputCapture(BUFFER_SIZES.MEDIUM, eventBus);
 
     // Initialize task manager with hybrid architecture: direct repository + event bus
-    taskManager = new TaskManagerService(eventBus, logger, config, repository, outputCapture);
+    taskManager = new TaskManagerService(
+      eventBus,
+      logger,
+      config,
+      repository,
+      outputCapture,
+      createMockOutputRepository(),
+    );
 
     // Set up persistence handler for task save on TaskDelegated
     const dependencyRepo = new SQLiteDependencyRepository(database);

@@ -7,7 +7,15 @@
  */
 
 import type { ChildProcess } from 'child_process';
-import type { SystemResources, Task, TaskId, TaskOutput, Worker, WorkerId } from '../../src/core/domain';
+import type {
+  SystemResources,
+  Task,
+  TaskId,
+  TaskOutput,
+  Worker,
+  WorkerId,
+  WorkerRegistration,
+} from '../../src/core/domain';
 import { taskNotFound } from '../../src/core/errors';
 import type {
   EventBus,
@@ -18,6 +26,7 @@ import type {
   TaskQueue,
   TaskRepository,
   WorkerPool,
+  WorkerRepository,
 } from '../../src/core/interfaces';
 import type { Result } from '../../src/core/result';
 import { err, ok } from '../../src/core/result';
@@ -691,5 +700,81 @@ export class TestOutputCapture implements OutputCapture {
 
   getOutputCount(): number {
     return this.outputs.size;
+  }
+}
+
+/**
+ * TestWorkerRepository - In-memory worker repository for testing
+ */
+export class TestWorkerRepository implements WorkerRepository {
+  private workers = new Map<WorkerId, WorkerRegistration>();
+  private registerError: Error | null = null;
+
+  register(registration: WorkerRegistration): Result<void, Error> {
+    if (this.registerError) {
+      return err(this.registerError);
+    }
+    // Check UNIQUE constraint on taskId
+    for (const existing of this.workers.values()) {
+      if (existing.taskId === registration.taskId) {
+        return err(new Error(`UNIQUE constraint failed: workers.task_id`));
+      }
+    }
+    this.workers.set(registration.workerId, registration);
+    return ok(undefined);
+  }
+
+  unregister(workerId: WorkerId): Result<void, Error> {
+    this.workers.delete(workerId);
+    return ok(undefined);
+  }
+
+  findByTaskId(taskId: TaskId): Result<WorkerRegistration | null, Error> {
+    for (const reg of this.workers.values()) {
+      if (reg.taskId === taskId) return ok(reg);
+    }
+    return ok(null);
+  }
+
+  findByOwnerPid(ownerPid: number): Result<readonly WorkerRegistration[], Error> {
+    const matches = Array.from(this.workers.values()).filter((r) => r.ownerPid === ownerPid);
+    return ok(matches);
+  }
+
+  findAll(): Result<readonly WorkerRegistration[], Error> {
+    return ok(Array.from(this.workers.values()));
+  }
+
+  getGlobalCount(): Result<number, Error> {
+    return ok(this.workers.size);
+  }
+
+  deleteByOwnerPid(ownerPid: number): Result<number, Error> {
+    let deleted = 0;
+    for (const [id, reg] of this.workers.entries()) {
+      if (reg.ownerPid === ownerPid) {
+        this.workers.delete(id);
+        deleted++;
+      }
+    }
+    return ok(deleted);
+  }
+
+  // Test helpers
+  setRegisterError(error: Error | null): void {
+    this.registerError = error;
+  }
+
+  getRegistrationCount(): number {
+    return this.workers.size;
+  }
+
+  hasRegistration(workerId: WorkerId): boolean {
+    return this.workers.has(workerId);
+  }
+
+  clear(): void {
+    this.workers.clear();
+    this.registerError = null;
   }
 }

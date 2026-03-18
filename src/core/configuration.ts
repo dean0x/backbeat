@@ -40,6 +40,8 @@ export const ConfigurationSchema = z.object({
   settlingWindowMs: z.number().min(5000).max(60000).default(15000), // Default: 15s settling window for newly spawned workers
   // Storage configuration
   fileStorageThresholdBytes: z.number().min(1024).max(10485760).default(102400), // Default: 100KB threshold
+  // Output flushing configuration
+  outputFlushIntervalMs: z.number().min(500).max(30000).default(5000), // Default: flush output every 5 seconds
   // Retry behavior configuration
   retryInitialDelayMs: z.number().min(100).max(10000).default(1000), // Default: 1 second initial delay
   retryMaxDelayMs: z.number().min(5000).max(300000).default(30000), // Default: 30 second max delay
@@ -72,6 +74,8 @@ const DEFAULT_CONFIG: Configuration = {
   settlingWindowMs: 15000, // Default: 15s settling window for newly spawned workers
   // Storage defaults
   fileStorageThresholdBytes: 102400, // Default: 100KB threshold for file storage
+  // Output flushing defaults
+  outputFlushIntervalMs: 5000, // Default: flush output every 5 seconds
   // Retry behavior defaults
   retryInitialDelayMs: 1000, // Default: 1 second initial retry delay
   retryMaxDelayMs: 30000, // Default: 30 second maximum retry delay
@@ -121,6 +125,8 @@ export function loadConfiguration(): Configuration {
     envConfig.settlingWindowMs = parseEnvNumber(process.env.WORKER_SETTLING_WINDOW_MS, 0);
   if (process.env.FILE_STORAGE_THRESHOLD_BYTES)
     envConfig.fileStorageThresholdBytes = parseEnvNumber(process.env.FILE_STORAGE_THRESHOLD_BYTES, 0);
+  if (process.env.OUTPUT_FLUSH_INTERVAL_MS)
+    envConfig.outputFlushIntervalMs = parseEnvNumber(process.env.OUTPUT_FLUSH_INTERVAL_MS, 0);
   if (process.env.RETRY_INITIAL_DELAY_MS)
     envConfig.retryInitialDelayMs = parseEnvNumber(process.env.RETRY_INITIAL_DELAY_MS, 0);
   if (process.env.RETRY_MAX_DELAY_MS) envConfig.retryMaxDelayMs = parseEnvNumber(process.env.RETRY_MAX_DELAY_MS, 0);

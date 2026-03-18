@@ -120,6 +120,21 @@ export interface Worker {
   readonly memoryUsage: number;
 }
 
+/**
+ * Worker registration for cross-process coordination
+ * ARCHITECTURE: Dedicated type for DB coordination — separate from Worker which has
+ * ephemeral per-process fields (cpuUsage, memoryUsage). WorkerRegistration tracks
+ * ownerPid and agent for cross-process visibility and PID-based recovery.
+ */
+export interface WorkerRegistration {
+  readonly workerId: WorkerId;
+  readonly taskId: TaskId;
+  readonly pid: number;
+  readonly ownerPid: number;
+  readonly agent: string;
+  readonly startedAt: number;
+}
+
 export interface SystemResources {
   readonly cpuUsage: number; // 0-100
   readonly availableMemory: number; // bytes

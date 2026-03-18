@@ -11,7 +11,7 @@ import { InMemoryAgentRegistry } from '../../../src/implementations/agent-regist
 import { EventDrivenWorkerPool } from '../../../src/implementations/event-driven-worker-pool';
 import { ProcessSpawnerAdapter } from '../../../src/implementations/process-spawner-adapter';
 import { TaskFactory } from '../../fixtures/factories';
-import { createMockLogger } from '../../fixtures/mocks';
+import { createMockLogger, createMockOutputRepository, createMockWorkerRepository } from '../../fixtures/mocks';
 
 // --- Mock Factories ---
 
@@ -94,6 +94,8 @@ describe('EventDrivenWorkerPool', () => {
   let logger: Logger;
   let eventBus: EventBus;
   let outputCapture: OutputCapture;
+  let workerRepository: ReturnType<typeof createMockWorkerRepository>;
+  let outputRepository: ReturnType<typeof createMockOutputRepository>;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -104,11 +106,21 @@ describe('EventDrivenWorkerPool', () => {
     logger = createMockLogger();
     eventBus = createTestEventBus();
     outputCapture = createMockOutputCapture();
+    workerRepository = createMockWorkerRepository();
+    outputRepository = createMockOutputRepository();
 
     // Wrap ProcessSpawner in AgentRegistry for backward compatibility
     agentRegistry = new InMemoryAgentRegistry([new ProcessSpawnerAdapter(spawner)]);
 
-    pool = new EventDrivenWorkerPool(agentRegistry, monitor, logger, eventBus, outputCapture);
+    pool = new EventDrivenWorkerPool(
+      agentRegistry,
+      monitor,
+      logger,
+      eventBus,
+      outputCapture,
+      workerRepository,
+      outputRepository,
+    );
   });
 
   afterEach(() => {
@@ -180,7 +192,15 @@ describe('EventDrivenWorkerPool', () => {
         list: vi.fn().mockReturnValue([]),
         dispose: vi.fn(),
       } as unknown as AgentRegistry;
-      const failPool = new EventDrivenWorkerPool(failRegistry, monitor, logger, eventBus, outputCapture);
+      const failPool = new EventDrivenWorkerPool(
+        failRegistry,
+        monitor,
+        logger,
+        eventBus,
+        outputCapture,
+        workerRepository,
+        outputRepository,
+      );
       const task = buildTask();
 
       const result = await failPool.spawn(task);
@@ -203,7 +223,15 @@ describe('EventDrivenWorkerPool', () => {
         dispose: vi.fn(),
       };
       const failRegistry = new InMemoryAgentRegistry([failAdapter]);
-      const failPool = new EventDrivenWorkerPool(failRegistry, monitor, logger, eventBus, outputCapture);
+      const failPool = new EventDrivenWorkerPool(
+        failRegistry,
+        monitor,
+        logger,
+        eventBus,
+        outputCapture,
+        workerRepository,
+        outputRepository,
+      );
       const task = buildTask();
 
       const result = await failPool.spawn(task);
@@ -611,6 +639,70 @@ describe('EventDrivenWorkerPool', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       expect(monitor.decrementWorkerCount as ReturnType<typeof vi.fn>).toHaveBeenCalled();
+    });
+  });
+
+  // --- WorkerRepository integration ---
+
+  describe('workerRepository integration', () => {
+    it('should register worker in workerRepository on spawn', async () => {
+      const task = buildTask();
+
+      const result = await pool.spawn(task);
+
+      expect(result.ok).toBe(true);
+      expect(workerRepository.register).toHaveBeenCalledOnce();
+      expect(workerRepository.register).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workerId: WorkerId(`worker-${mockProcess.pid}`),
+          taskId: task.id,
+          pid: mockProcess.pid,
+          ownerPid: process.pid,
+          agent: 'claude',
+        }),
+      );
+    });
+
+    it('should unregister worker from workerRepository on kill', async () => {
+      const task = buildTask();
+      const spawnResult = await pool.spawn(task);
+      if (!spawnResult.ok) return;
+
+      await pool.kill(spawnResult.value.id);
+
+      expect(workerRepository.unregister).toHaveBeenCalledOnce();
+      expect(workerRepository.unregister).toHaveBeenCalledWith(spawnResult.value.id);
+    });
+
+    it('should unregister worker from workerRepository on process exit', async () => {
+      const task = buildTask();
+      const spawnResult = await pool.spawn(task);
+      if (!spawnResult.ok) return;
+
+      mockProcess.emit('exit', 0);
+      // Flush the async onExit chain (flushOutput -> clear -> finally -> handleWorkerCompletion)
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(workerRepository.unregister).toHaveBeenCalledOnce();
+      expect(workerRepository.unregister).toHaveBeenCalledWith(spawnResult.value.id);
+    });
+
+    it('should return error when workerRepository.register fails (UNIQUE constraint)', async () => {
+      const registrationError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'UNIQUE constraint failed: workers.task_id');
+      workerRepository.register.mockReturnValue(err(registrationError));
+
+      const task = buildTask();
+
+      const result = await pool.spawn(task);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBe(registrationError);
+      // Worker should NOT remain in pool after registration failure
+      expect(pool.getWorkerCount()).toBe(0);
+      // Process should have been killed
+      expect(mockProcess.kill).toHaveBeenCalledWith('SIGTERM');
     });
   });
 });

@@ -3,10 +3,10 @@
  * Handles loading tasks from database and emits events for recovery actions
  */
 
-import { TaskStatus } from '../core/domain.js';
+import { isTerminalState, Task, TaskStatus } from '../core/domain.js';
 import { EventBus } from '../core/events/event-bus.js';
-import { Logger, TaskQueue, TaskRepository } from '../core/interfaces.js';
-import { err, ok, Result } from '../core/result.js';
+import { Logger, TaskQueue, TaskRepository, WorkerRepository } from '../core/interfaces.js';
+import { ok, Result } from '../core/result.js';
 
 export class RecoveryManager {
   constructor(
@@ -14,25 +14,37 @@ export class RecoveryManager {
     private readonly queue: TaskQueue,
     private readonly eventBus: EventBus,
     private readonly logger: Logger,
+    private readonly workerRepository: WorkerRepository,
   ) {}
 
   /**
-   * Recover tasks on startup
-   * - Re-queue QUEUED tasks
-   * - Mark RUNNING tasks as FAILED (crashed)
+   * Check if a process is alive using signal 0 (existence check).
+   * Returns true if the process exists, false if it doesn't.
    */
+  private isProcessAlive(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (e) {
+      // EPERM means the process exists but we lack permission to signal it
+      if ((e as NodeJS.ErrnoException).code === 'EPERM') {
+        return true;
+      }
+      // ESRCH means the process does not exist
+      return false;
+    }
+  }
+
   async recover(): Promise<Result<void>> {
     this.logger.info('Starting recovery process');
 
-    // First, cleanup old completed tasks (older than 7 days)
-    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-    const cleanupResult = await this.repository.cleanupOldTasks(sevenDaysMs);
+    // Phase 0: Clean dead worker registrations (must run before Phase 3)
+    await this.cleanDeadWorkerRegistrations();
 
-    if (cleanupResult.ok && cleanupResult.value > 0) {
-      this.logger.info('Cleaned up old completed tasks', { count: cleanupResult.value });
-    }
+    // Phase 1: Cleanup old completed tasks
+    await this.cleanupOldCompletedTasks();
 
-    // Get only QUEUED and RUNNING tasks (non-terminal states that need recovery)
+    // Fetch non-terminal tasks for recovery
     const queuedResult = await this.repository.findByStatus(TaskStatus.QUEUED);
     const runningResult = await this.repository.findByStatus(TaskStatus.RUNNING);
 
@@ -46,11 +58,86 @@ export class RecoveryManager {
       return runningResult;
     }
 
-    let queuedCount = 0;
-    let failedCount = 0;
+    // Phase 2 & 3: Recover tasks
+    const queuedCount = await this.recoverQueuedTasks(queuedResult.value);
+    const failedCount = await this.recoverRunningTasks(runningResult.value);
 
-    // Re-queue QUEUED tasks (check for duplicates first)
-    for (const task of queuedResult.value) {
+    this.logger.info('Recovery complete', {
+      queuedTasks: queuedResult.value.length,
+      runningTasks: runningResult.value.length,
+      requeued: queuedCount,
+      markedFailed: failedCount,
+    });
+
+    return ok(undefined);
+  }
+
+  private async cleanDeadWorkerRegistrations(): Promise<void> {
+    const allWorkers = this.workerRepository.findAll();
+    if (!allWorkers.ok) return;
+
+    for (const reg of allWorkers.value) {
+      if (!this.isProcessAlive(reg.ownerPid)) {
+        const unregResult = this.workerRepository.unregister(reg.workerId);
+        if (!unregResult.ok) {
+          this.logger.error('Failed to unregister dead worker', unregResult.error, {
+            workerId: reg.workerId,
+          });
+        }
+
+        // Guard: only update non-terminal tasks
+        const taskResult = await this.repository.findById(reg.taskId);
+        if (!taskResult.ok) {
+          this.logger.error('Failed to look up task for dead worker', taskResult.error, {
+            taskId: reg.taskId,
+          });
+          continue;
+        }
+
+        if (taskResult.value !== null && isTerminalState(taskResult.value.status)) {
+          this.logger.info('Dead worker row cleaned, task already terminal', {
+            workerId: reg.workerId,
+            taskId: reg.taskId,
+            currentStatus: taskResult.value.status,
+            deadPid: reg.ownerPid,
+          });
+          continue;
+        }
+
+        // Task is non-terminal (or deleted) — mark as FAILED
+        const updateResult = await this.repository.update(reg.taskId, {
+          status: TaskStatus.FAILED,
+          completedAt: Date.now(),
+          exitCode: -1, // Crash indicator
+        });
+        if (updateResult.ok) {
+          this.logger.info('Cleaned up dead worker and failed its task', {
+            workerId: reg.workerId,
+            taskId: reg.taskId,
+            deadPid: reg.ownerPid,
+          });
+        } else {
+          this.logger.error('Failed to mark dead worker task as failed', updateResult.error, {
+            taskId: reg.taskId,
+          });
+        }
+      }
+    }
+  }
+
+  private async cleanupOldCompletedTasks(): Promise<void> {
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    const cleanupResult = await this.repository.cleanupOldTasks(sevenDaysMs);
+
+    if (cleanupResult.ok && cleanupResult.value > 0) {
+      this.logger.info('Cleaned up old completed tasks', { count: cleanupResult.value });
+    }
+  }
+
+  private async recoverQueuedTasks(tasks: readonly Task[]): Promise<number> {
+    let queuedCount = 0;
+
+    for (const task of tasks) {
       // Safety check: don't re-queue if already in queue
       if (this.queue.contains(task.id)) {
         this.logger.warn('Task already in queue, skipping re-queue', { taskId: task.id });
@@ -78,99 +165,76 @@ export class RecoveryManager {
       }
     }
 
-    /**
-     * CRITICAL: Stale task detection - DO NOT REMOVE without proper justification
-     *
-     * WHY THIS EXISTS:
-     * Tasks stuck in RUNNING status are typically from crashed workers or server shutdowns.
-     * Without this check, every server restart would re-queue ALL old running tasks,
-     * causing a fork-bomb scenario where dozens of claude-code processes spawn simultaneously.
-     *
-     * WHAT IT DOES:
-     * - Tasks older than 30 minutes are considered "stale" (definitely crashed)
-     * - Recent tasks (< 30 min) might be legitimate restarts, so we re-queue them
-     * - Stale tasks are marked as FAILED instead of being re-queued
-     *
-     * REMOVAL CRITERIA:
-     * Only remove this if you have implemented one of these alternatives:
-     * 1. Proper graceful shutdown that marks all RUNNING tasks as FAILED
-     * 2. Worker heartbeat system that detects crashed workers in real-time
-     * 3. Separate task recovery queue with spawn rate limiting
-     *
-     * INCIDENT REFERENCE: 2025-10-04
-     * Removing spawn delay caused 7 stale tasks to spawn simultaneously → system crash
-     */
-    const STALE_TASK_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+    return queuedCount;
+  }
+
+  /**
+   * PID-BASED RECOVERY for RUNNING tasks
+   *
+   * WHY THIS EXISTS:
+   * Tasks stuck in RUNNING status are typically from crashed workers or server shutdowns.
+   * Without this check, every server restart would re-queue ALL old running tasks,
+   * causing a fork-bomb scenario where dozens of claude-code processes spawn simultaneously.
+   *
+   * WHAT IT DOES:
+   * - Checks if the task has a worker row in the workers table
+   * - If worker row exists and ownerPid is alive → leave it alone (running in another process)
+   * - If no worker row, or ownerPid is dead → mark FAILED immediately (definitively crashed)
+   *
+   * REPLACES: 30-minute staleness heuristic (pre-v1.0).
+   * PID-based detection is definitive — no false positives from short tasks,
+   * no 30-minute wait for long-crashed tasks.
+   *
+   * INCIDENT REFERENCE: 2025-10-04
+   * Removing spawn delay caused 7 stale tasks to spawn simultaneously → system crash
+   * PID-based detection prevents this by marking crashed tasks immediately.
+   */
+  private async recoverRunningTasks(tasks: readonly Task[]): Promise<number> {
     const now = Date.now();
+    let failedCount = 0;
 
-    // Mark RUNNING tasks as FAILED (crashed during execution)
-    for (const task of runningResult.value) {
-      // CRITICAL: Use startedAt for RUNNING tasks (updatedAt not persisted to DB)
-      // For RUNNING tasks, startedAt is the most accurate timestamp for staleness detection
-      const taskAge = now - (task.startedAt || task.createdAt);
-      const isStale = taskAge > STALE_TASK_THRESHOLD_MS;
+    for (const task of tasks) {
+      const workerResult = this.workerRepository.findByTaskId(task.id);
+      const workerRegistration = workerResult.ok ? workerResult.value : null;
 
-      if (isStale) {
-        // Stale task - definitely crashed, mark as failed
-        const updateResult = await this.repository.update(task.id, {
-          status: TaskStatus.FAILED,
-          completedAt: now,
-          exitCode: -1, // Indicates crash
+      if (workerRegistration !== null && this.isProcessAlive(workerRegistration.ownerPid)) {
+        // Worker is alive in another process — leave it alone
+        this.logger.info('Running task has live worker in another process, skipping', {
+          taskId: task.id,
+          ownerPid: workerRegistration.ownerPid,
         });
+        continue;
+      }
 
-        if (updateResult.ok) {
-          failedCount++;
-          this.logger.info('Marked stale crashed task as failed', {
-            taskId: task.id,
-            ageMinutes: Math.round(taskAge / 60000),
-          });
-        } else {
-          this.logger.error('Failed to update stale crashed task', updateResult.error, {
-            taskId: task.id,
-          });
-        }
+      // Guard: verify task is still RUNNING (TOCTOU — another process may have completed it)
+      const freshResult = await this.repository.findById(task.id);
+      if (freshResult.ok && freshResult.value !== null && isTerminalState(freshResult.value.status)) {
+        this.logger.info('Running task already terminal, skipping recovery', {
+          taskId: task.id,
+          currentStatus: freshResult.value.status,
+        });
+        continue;
+      }
+
+      // No live worker — definitively crashed, mark as failed
+      const updateResult = await this.repository.update(task.id, {
+        status: TaskStatus.FAILED,
+        completedAt: now,
+        exitCode: -1, // Indicates crash
+      });
+
+      if (updateResult.ok) {
+        failedCount++;
+        this.logger.info('Marked crashed task as failed (no live worker)', {
+          taskId: task.id,
+        });
       } else {
-        // Recent task - might be legitimate restart, re-queue for recovery
-        // Safety check: don't re-queue if already in queue
-        if (this.queue.contains(task.id)) {
-          this.logger.warn('Task already in queue, skipping re-queue', { taskId: task.id });
-          continue;
-        }
-
-        const enqueueResult = this.queue.enqueue(task);
-
-        if (enqueueResult.ok) {
-          queuedCount++;
-          this.logger.info('Re-queued recent running task for recovery', {
-            taskId: task.id,
-            ageMinutes: Math.round(taskAge / 60000),
-          });
-
-          // Emit TaskQueued event to trigger worker spawning
-          const queuedEventResult = await this.eventBus.emit('TaskQueued', {
-            taskId: task.id,
-          });
-
-          if (!queuedEventResult.ok) {
-            this.logger.error('Failed to emit TaskQueued event for recovered task', queuedEventResult.error, {
-              taskId: task.id,
-            });
-          }
-        } else {
-          this.logger.error('Failed to re-queue recent running task', enqueueResult.error, {
-            taskId: task.id,
-          });
-        }
+        this.logger.error('Failed to update crashed task', updateResult.error, {
+          taskId: task.id,
+        });
       }
     }
 
-    this.logger.info('Recovery complete', {
-      queuedTasks: queuedResult.value.length,
-      runningTasks: runningResult.value.length,
-      requeued: queuedCount,
-      markedFailed: failedCount,
-    });
-
-    return ok(undefined);
+    return failedCount;
   }
 }
