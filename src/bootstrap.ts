@@ -14,6 +14,7 @@ import {
   DependencyRepository,
   Logger,
   OutputCapture,
+  OutputRepository,
   ProcessSpawner,
   ResourceMonitor,
   ScheduleRepository,
@@ -24,7 +25,6 @@ import {
   TaskRepository,
   TransactionRunner,
   WorkerPool,
-  OutputRepository,
   WorkerRepository,
 } from './core/interfaces.js';
 import { err, ok, Result } from './core/result.js';

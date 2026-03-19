@@ -9,8 +9,8 @@ import path from 'path';
 import { Configuration } from '../core/configuration.js';
 import { TaskId, TaskOutput } from '../core/domain.js';
 import { BackbeatError, ErrorCode } from '../core/errors.js';
-import { err, ok, Result, tryCatchAsync } from '../core/result.js';
 import { OutputRepository } from '../core/interfaces.js';
+import { err, ok, Result, tryCatchAsync } from '../core/result.js';
 import { Database } from './database.js';
 
 export class SQLiteOutputRepository implements OutputRepository {
