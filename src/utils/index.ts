@@ -1,6 +1,5 @@
 /**
  * Utility module exports
- * ARCHITECTURE: Barrel file for clean imports
  */
 
 // Output measurement utilities
