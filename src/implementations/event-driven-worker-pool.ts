@@ -94,40 +94,12 @@ export class EventDrivenWorkerPool implements WorkerPool {
     }
 
     const { process: childProcess, pid } = spawnResult.value;
-    const workerId = WorkerId(`worker-${pid}`);
 
-    // Create worker state
-    const worker: WorkerState = {
-      id: workerId,
-      taskId: task.id,
-      pid,
-      startedAt: Date.now(),
-      cpuUsage: 0,
-      memoryUsage: 0,
-      process: childProcess,
-      task,
-    };
-
-    // Store worker
-    this.workers.set(workerId, worker);
-    this.taskToWorker.set(task.id, workerId);
-
-    // Register in DB for cross-process coordination
-    const regResult = this.workerRepository.register({
-      workerId,
-      taskId: task.id,
-      pid,
-      ownerPid: process.pid,
-      agent: agentProvider,
-      startedAt: Date.now(),
-    });
-    if (!regResult.ok) {
-      // UNIQUE violation = another process already owns this task (Edge Case J)
-      childProcess.kill('SIGTERM');
-      this.workers.delete(workerId);
-      this.taskToWorker.delete(task.id);
-      return err(regResult.error);
+    const registerResult = this.registerWorker(task, childProcess, pid, agentProvider);
+    if (!registerResult.ok) {
+      return registerResult;
     }
+    const worker = registerResult.value;
 
     // Set up timeout if task has one
     this.setupTimeoutForWorker(worker);
@@ -230,6 +202,49 @@ export class EventDrivenWorkerPool implements WorkerPool {
 
     const worker = this.workers.get(workerId);
     return ok(worker || null);
+  }
+
+  /**
+   * Create worker state, store in maps, and register in DB.
+   * Returns the worker or rolls back on UNIQUE violation (Edge Case J).
+   */
+  private registerWorker(
+    task: Task,
+    childProcess: ChildProcess,
+    pid: number,
+    agentProvider: string,
+  ): Result<WorkerState> {
+    const workerId = WorkerId(`worker-${pid}`);
+    const worker: WorkerState = {
+      id: workerId,
+      taskId: task.id,
+      pid,
+      startedAt: Date.now(),
+      cpuUsage: 0,
+      memoryUsage: 0,
+      process: childProcess,
+      task,
+    };
+
+    this.workers.set(workerId, worker);
+    this.taskToWorker.set(task.id, workerId);
+
+    const regResult = this.workerRepository.register({
+      workerId,
+      taskId: task.id,
+      pid,
+      ownerPid: process.pid,
+      agent: agentProvider,
+      startedAt: Date.now(),
+    });
+    if (!regResult.ok) {
+      childProcess.kill('SIGTERM');
+      this.workers.delete(workerId);
+      this.taskToWorker.delete(task.id);
+      return err(regResult.error);
+    }
+
+    return ok(worker);
   }
 
   /**
