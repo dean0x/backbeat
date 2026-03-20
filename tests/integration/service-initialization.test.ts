@@ -387,8 +387,8 @@ describe('Integration: Service initialization', () => {
   describe('BootstrapMode flag derivation', () => {
     it.each([
       ['server', { skipResourceMonitoring: false, skipScheduleExecutor: false, skipRecovery: false }],
-      ['cli',    { skipResourceMonitoring: false, skipScheduleExecutor: true,  skipRecovery: true  }],
-      ['run',    { skipResourceMonitoring: true,  skipScheduleExecutor: true,  skipRecovery: false }],
+      ['cli', { skipResourceMonitoring: false, skipScheduleExecutor: true, skipRecovery: true }],
+      ['run', { skipResourceMonitoring: true, skipScheduleExecutor: true, skipRecovery: false }],
     ] as const)('mode "%s" produces correct flags', (mode, expected) => {
       expect(deriveModeFlags(mode)).toEqual(expected);
     });
