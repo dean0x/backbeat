@@ -3,7 +3,7 @@ import { Priority, ScheduleId, ScheduleStatus, ScheduleType } from '../../core/d
 import type { ScheduleExecution, ScheduleRepository, ScheduleService } from '../../core/interfaces.js';
 import { toMissedRunPolicy } from '../../services/schedule-manager.js';
 import { validatePath } from '../../utils/validation.js';
-import { withReadOnlyContext, withServices } from '../services.js';
+import { exitOnError, exitOnNull, withReadOnlyContext, withServices } from '../services.js';
 import * as ui from '../ui.js';
 
 export async function handleScheduleCommand(subCmd: string | undefined, scheduleArgs: string[]): Promise<void> {
@@ -58,7 +58,7 @@ export async function handleScheduleCommand(subCmd: string | undefined, schedule
   process.exit(0);
 }
 
-async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]) {
+async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]): Promise<void> {
   let promptWords: string[] = [];
   let scheduleType: 'cron' | 'one_time' | undefined;
   let cronExpression: string | undefined;
@@ -194,23 +194,18 @@ async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]) 
       agent,
     });
 
-    if (result.ok) {
-      ui.success(`Scheduled pipeline created: ${result.value.id}`);
-      const details = [
-        `Type: ${result.value.scheduleType}`,
-        `Steps: ${result.value.pipelineSteps?.length ?? 0}`,
-        `Status: ${result.value.status}`,
-      ];
-      if (result.value.nextRunAt) details.push(`Next run: ${new Date(result.value.nextRunAt).toISOString()}`);
-      if (result.value.cronExpression) details.push(`Cron: ${result.value.cronExpression}`);
-      if (agent) details.push(`Agent: ${agent}`);
-      ui.info(details.join(' | '));
-      process.exit(0);
-    } else {
-      ui.error(`Failed to create scheduled pipeline: ${result.error.message}`);
-      process.exit(1);
-    }
-    return;
+    const pipeline = exitOnError(result, undefined, 'Failed to create scheduled pipeline');
+    ui.success(`Scheduled pipeline created: ${pipeline.id}`);
+    const details = [
+      `Type: ${pipeline.scheduleType}`,
+      `Steps: ${pipeline.pipelineSteps?.length ?? 0}`,
+      `Status: ${pipeline.status}`,
+    ];
+    if (pipeline.nextRunAt) details.push(`Next run: ${new Date(pipeline.nextRunAt).toISOString()}`);
+    if (pipeline.cronExpression) details.push(`Cron: ${pipeline.cronExpression}`);
+    if (agent) details.push(`Agent: ${agent}`);
+    ui.info(details.join(' | '));
+    process.exit(0);
   }
 
   // Guard: --step without --pipeline is a user error
@@ -242,19 +237,15 @@ async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]) 
     agent,
   });
 
-  if (result.ok) {
-    ui.success(`Schedule created: ${result.value.id}`);
-    const details = [`Type: ${result.value.scheduleType}`, `Status: ${result.value.status}`];
-    if (result.value.nextRunAt) details.push(`Next run: ${new Date(result.value.nextRunAt).toISOString()}`);
-    if (result.value.cronExpression) details.push(`Cron: ${result.value.cronExpression}`);
-    if (result.value.afterScheduleId) details.push(`After: ${result.value.afterScheduleId}`);
-    if (agent) details.push(`Agent: ${agent}`);
-    ui.info(details.join(' | '));
-    process.exit(0);
-  } else {
-    ui.error(`Failed to create schedule: ${result.error.message}`);
-    process.exit(1);
-  }
+  const created = exitOnError(result, undefined, 'Failed to create schedule');
+  ui.success(`Schedule created: ${created.id}`);
+  const details = [`Type: ${created.scheduleType}`, `Status: ${created.status}`];
+  if (created.nextRunAt) details.push(`Next run: ${new Date(created.nextRunAt).toISOString()}`);
+  if (created.cronExpression) details.push(`Cron: ${created.cronExpression}`);
+  if (created.afterScheduleId) details.push(`After: ${created.afterScheduleId}`);
+  if (agent) details.push(`Agent: ${agent}`);
+  ui.info(details.join(' | '));
+  process.exit(0);
 }
 
 async function scheduleList(repo: ScheduleRepository, scheduleArgs: string[]): Promise<void> {
@@ -287,23 +278,18 @@ async function scheduleList(repo: ScheduleRepository, scheduleArgs: string[]): P
   }
 
   const result = statusValue ? await repo.findByStatus(statusValue, limit) : await repo.findAll(limit);
+  const schedules = exitOnError(result, undefined, 'Failed to list schedules');
 
-  if (result.ok) {
-    const schedules = result.value;
-    if (schedules.length === 0) {
-      ui.info('No schedules found');
-    } else {
-      for (const s of schedules) {
-        const nextRun = s.nextRunAt ? new Date(s.nextRunAt).toISOString() : 'none';
-        ui.step(
-          `${ui.dim(s.id)}  ${ui.colorStatus(s.status.padEnd(10))}  ${s.scheduleType}  runs: ${s.runCount}${s.maxRuns ? '/' + s.maxRuns : ''}  next: ${nextRun}`,
-        );
-      }
-      ui.info(`${schedules.length} schedule${schedules.length === 1 ? '' : 's'}`);
-    }
+  if (schedules.length === 0) {
+    ui.info('No schedules found');
   } else {
-    ui.error(`Failed to list schedules: ${result.error.message}`);
-    process.exit(1);
+    for (const s of schedules) {
+      const nextRun = s.nextRunAt ? new Date(s.nextRunAt).toISOString() : 'none';
+      ui.step(
+        `${ui.dim(s.id)}  ${ui.colorStatus(s.status.padEnd(10))}  ${s.scheduleType}  runs: ${s.runCount}${s.maxRuns ? '/' + s.maxRuns : ''}  next: ${nextRun}`,
+      );
+    }
+    ui.info(`${schedules.length} schedule${schedules.length === 1 ? '' : 's'}`);
   }
 }
 
@@ -322,26 +308,13 @@ async function scheduleGet(repo: ScheduleRepository, scheduleArgs: string[]): Pr
   }
 
   const scheduleResult = await repo.findById(ScheduleId(scheduleId));
-  if (!scheduleResult.ok) {
-    ui.error(`Failed to get schedule: ${scheduleResult.error.message}`);
-    process.exit(1);
-  }
-  if (!scheduleResult.value) {
-    ui.error(`Schedule ${scheduleId} not found`);
-    process.exit(1);
-  }
-
-  const schedule = scheduleResult.value;
+  const found = exitOnError(scheduleResult, undefined, 'Failed to get schedule');
+  const schedule = exitOnNull(found, undefined, `Schedule ${scheduleId} not found`);
 
   let history: readonly ScheduleExecution[] | undefined;
   if (includeHistory) {
     const historyResult = await repo.getExecutionHistory(ScheduleId(scheduleId), historyLimit);
-    if (historyResult.ok) {
-      history = historyResult.value;
-    } else {
-      ui.error(`Failed to fetch execution history: ${historyResult.error.message}`);
-      process.exit(1);
-    }
+    history = exitOnError(historyResult, undefined, 'Failed to fetch execution history');
   }
 
   const lines: string[] = [];
@@ -386,7 +359,7 @@ async function scheduleGet(repo: ScheduleRepository, scheduleArgs: string[]): Pr
   }
 }
 
-async function scheduleCancel(service: ScheduleService, scheduleArgs: string[]) {
+async function scheduleCancel(service: ScheduleService, scheduleArgs: string[]): Promise<void> {
   let cancelTasks = false;
   const filteredArgs: string[] = [];
 
@@ -406,17 +379,13 @@ async function scheduleCancel(service: ScheduleService, scheduleArgs: string[]) 
   const reason = filteredArgs.slice(1).join(' ') || undefined;
 
   const result = await service.cancelSchedule(ScheduleId(scheduleId), reason, cancelTasks);
-  if (result.ok) {
-    ui.success(`Schedule ${scheduleId} cancelled`);
-    if (cancelTasks) ui.info('In-flight tasks also cancelled');
-    if (reason) ui.info(`Reason: ${reason}`);
-  } else {
-    ui.error(`Failed to cancel schedule: ${result.error.message}`);
-    process.exit(1);
-  }
+  exitOnError(result, undefined, 'Failed to cancel schedule');
+  ui.success(`Schedule ${scheduleId} cancelled`);
+  if (cancelTasks) ui.info('In-flight tasks also cancelled');
+  if (reason) ui.info(`Reason: ${reason}`);
 }
 
-async function schedulePause(service: ScheduleService, scheduleArgs: string[]) {
+async function schedulePause(service: ScheduleService, scheduleArgs: string[]): Promise<void> {
   const scheduleId = scheduleArgs[0];
   if (!scheduleId) {
     ui.error('Usage: beat schedule pause <schedule-id>');
@@ -424,15 +393,11 @@ async function schedulePause(service: ScheduleService, scheduleArgs: string[]) {
   }
 
   const result = await service.pauseSchedule(ScheduleId(scheduleId));
-  if (result.ok) {
-    ui.success(`Schedule ${scheduleId} paused`);
-  } else {
-    ui.error(`Failed to pause schedule: ${result.error.message}`);
-    process.exit(1);
-  }
+  exitOnError(result, undefined, 'Failed to pause schedule');
+  ui.success(`Schedule ${scheduleId} paused`);
 }
 
-async function scheduleResume(service: ScheduleService, scheduleArgs: string[]) {
+async function scheduleResume(service: ScheduleService, scheduleArgs: string[]): Promise<void> {
   const scheduleId = scheduleArgs[0];
   if (!scheduleId) {
     ui.error('Usage: beat schedule resume <schedule-id>');
@@ -440,10 +405,6 @@ async function scheduleResume(service: ScheduleService, scheduleArgs: string[]) 
   }
 
   const result = await service.resumeSchedule(ScheduleId(scheduleId));
-  if (result.ok) {
-    ui.success(`Schedule ${scheduleId} resumed`);
-  } else {
-    ui.error(`Failed to resume schedule: ${result.error.message}`);
-    process.exit(1);
-  }
+  exitOnError(result, undefined, 'Failed to resume schedule');
+  ui.success(`Schedule ${scheduleId} resumed`);
 }

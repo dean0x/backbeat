@@ -1,7 +1,7 @@
 import { TaskId } from '../../core/domain.js';
 import { taskNotFound } from '../../core/errors.js';
 import type { ReadOnlyContext } from '../read-only-context.js';
-import { errorMessage, withReadOnlyContext } from '../services.js';
+import { errorMessage, exitOnError, exitOnNull, withReadOnlyContext } from '../services.js';
 import * as ui from '../ui.js';
 
 export async function getTaskLogs(taskId: string, tail?: number): Promise<void> {
@@ -13,31 +13,20 @@ export async function getTaskLogs(taskId: string, tail?: number): Promise<void> 
 
     // Validate task exists
     const taskResult = await ctx.taskRepository.findById(TaskId(taskId));
-    if (!taskResult.ok) {
-      s.stop('Failed');
-      ui.error(`Failed to get task logs: ${taskResult.error.message}`);
-      process.exit(1);
-    }
-    if (!taskResult.value) {
-      s.stop('Not found');
-      ui.error(`Failed to get task logs: ${taskNotFound(taskId).message}`);
-      process.exit(1);
-    }
+    exitOnNull(
+      exitOnError(taskResult, s, 'Failed to get task logs'),
+      s,
+      `Failed to get task logs: ${taskNotFound(taskId).message}`,
+    );
 
     // Read output directly from repository (skip in-memory OutputCapture — always empty for CLI)
     const outputResult = await ctx.outputRepository.get(TaskId(taskId));
-    if (!outputResult.ok) {
-      s.stop('Failed');
-      ui.error(`Failed to get task logs: ${outputResult.error.message}`);
-      process.exit(1);
-    }
+    const output = exitOnError(outputResult, s, 'Failed to get task logs');
 
-    if (!outputResult.value) {
+    if (!output) {
       s.stop('No output captured');
       return;
     }
-
-    const output = outputResult.value;
 
     // Apply tail slicing if requested
     let stdoutLines = output.stdout || [];
