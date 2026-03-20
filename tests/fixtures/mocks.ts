@@ -5,6 +5,7 @@ import type {
   EventBus,
   Logger,
   OutputCapture,
+  OutputRepository,
   ProcessSpawner,
   ResourceMonitor,
   TaskQueue,
@@ -13,7 +14,6 @@ import type {
 } from '../../src/core/interfaces';
 import type { Result } from '../../src/core/result';
 import { ok } from '../../src/core/result';
-import type { OutputRepository } from '../../src/implementations/output-repository';
 import { createMockTask, createMockWorker } from './mock-data.js';
 
 export const createMockLogger = (): Logger => ({

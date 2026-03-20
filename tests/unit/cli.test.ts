@@ -42,9 +42,14 @@ import type {
   TaskFailedEvent,
   TaskTimeoutEvent,
 } from '../../src/core/events/events';
-import type { ScheduleRepository, ScheduleService, TaskManager, TaskRepository } from '../../src/core/interfaces';
+import type {
+  OutputRepository,
+  ScheduleRepository,
+  ScheduleService,
+  TaskManager,
+  TaskRepository,
+} from '../../src/core/interfaces';
 import { err, ok, type Result } from '../../src/core/result';
-import type { OutputRepository } from '../../src/implementations/output-repository';
 import { TaskFactory } from '../fixtures/factories';
 
 // Test constants

@@ -25,9 +25,15 @@ import {
 } from '../core/domain.js';
 import { BackbeatError, ErrorCode, taskNotFound } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
-import { CheckpointRepository, Logger, OutputCapture, TaskManager, TaskRepository } from '../core/interfaces.js';
+import {
+  CheckpointRepository,
+  Logger,
+  OutputCapture,
+  OutputRepository,
+  TaskManager,
+  TaskRepository,
+} from '../core/interfaces.js';
 import { err, ok, Result } from '../core/result.js';
-import { OutputRepository } from '../implementations/output-repository.js';
 import { linesByteSize } from '../utils/output.js';
 
 export class TaskManagerService implements TaskManager {

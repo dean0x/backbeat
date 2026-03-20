@@ -12,10 +12,16 @@ import { AgentRegistry } from '../core/agents.js';
 import { Task, TaskId, Worker, WorkerId } from '../core/domain.js';
 import { BackbeatError, ErrorCode, taskTimeout } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
-import { Logger, OutputCapture, ResourceMonitor, WorkerPool, WorkerRepository } from '../core/interfaces.js';
+import {
+  Logger,
+  OutputCapture,
+  OutputRepository,
+  ResourceMonitor,
+  WorkerPool,
+  WorkerRepository,
+} from '../core/interfaces.js';
 import { err, ok, Result } from '../core/result.js';
 import { ProcessConnector } from '../services/process-connector.js';
-import { OutputRepository } from './output-repository.js';
 
 interface WorkerState extends Worker {
   process: ChildProcess;

@@ -5,8 +5,7 @@
 
 import { ChildProcess } from 'child_process';
 import { TaskId } from '../core/domain.js';
-import { Logger, OutputCapture } from '../core/interfaces.js';
-import { OutputRepository } from '../implementations/output-repository.js';
+import { Logger, OutputCapture, OutputRepository } from '../core/interfaces.js';
 
 function toError(e: unknown): Error {
   return e instanceof Error ? e : new Error(String(e));

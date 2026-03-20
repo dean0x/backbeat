@@ -9,15 +9,9 @@ import path from 'path';
 import { Configuration } from '../core/configuration.js';
 import { TaskId, TaskOutput } from '../core/domain.js';
 import { BackbeatError, ErrorCode } from '../core/errors.js';
+import { OutputRepository } from '../core/interfaces.js';
 import { err, ok, Result, tryCatchAsync } from '../core/result.js';
 import { Database } from './database.js';
-
-export interface OutputRepository {
-  save(taskId: TaskId, output: TaskOutput): Promise<Result<void>>;
-  append(taskId: TaskId, stream: 'stdout' | 'stderr', data: string): Promise<Result<void>>;
-  get(taskId: TaskId): Promise<Result<TaskOutput | null>>;
-  delete(taskId: TaskId): Promise<Result<void>>;
-}
 
 export class SQLiteOutputRepository implements OutputRepository {
   private readonly db: SQLite.Database;

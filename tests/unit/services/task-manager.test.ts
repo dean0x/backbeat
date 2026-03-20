@@ -13,9 +13,14 @@ import type { Task, TaskCheckpoint, TaskRequest } from '../../../src/core/domain
 import { Priority, TaskId, TaskStatus } from '../../../src/core/domain';
 import { BackbeatError, ErrorCode } from '../../../src/core/errors';
 import type { EventBus } from '../../../src/core/events/event-bus';
-import type { CheckpointRepository, Logger, OutputCapture, TaskRepository } from '../../../src/core/interfaces';
+import type {
+  CheckpointRepository,
+  Logger,
+  OutputCapture,
+  OutputRepository,
+  TaskRepository,
+} from '../../../src/core/interfaces';
 import { err, ok } from '../../../src/core/result';
-import type { OutputRepository } from '../../../src/implementations/output-repository';
 import { TaskManagerService } from '../../../src/services/task-manager';
 import { ConfigFactory } from '../../fixtures/factories';
 import { createMockLogger, createMockOutputRepository } from '../../fixtures/mocks';

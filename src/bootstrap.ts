@@ -10,37 +10,58 @@ import { BackbeatError, ErrorCode } from './core/errors.js';
 import { EventBus, InMemoryEventBus } from './core/events/event-bus.js';
 import {
   CheckpointRepository,
-  Config,
   DependencyRepository,
   Logger,
   OutputCapture,
+  OutputRepository,
   ProcessSpawner,
   ResourceMonitor,
   ScheduleRepository,
   ScheduleService,
+  SyncScheduleOperations,
   TaskManager,
   TaskQueue,
   TaskRepository,
+  TransactionRunner,
   WorkerPool,
   WorkerRepository,
 } from './core/interfaces.js';
 import { err, ok, Result } from './core/result.js';
 
 /**
- * Options for bootstrapping the application
- * Use dependency injection to provide test doubles instead of environment variables
+ * Bootstrap mode determines which subsystems are initialized.
+ * - 'server': All subsystems (MCP daemon — recovery, executor, monitoring)
+ * - 'cli': Skip executor + recovery (mutation commands: cancel, retry, schedule ops)
+ * - 'run': Skip executor + monitoring (single-task `beat run` with crash recovery)
  */
+export type BootstrapMode = 'server' | 'cli' | 'run';
+
+export interface ModeFlags {
+  skipResourceMonitoring: boolean;
+  skipScheduleExecutor: boolean;
+  skipRecovery: boolean;
+}
+
+/**
+ * Derive subsystem flags from a BootstrapMode.
+ *
+ * Pure function — no side effects, safe for unit testing.
+ */
+export function deriveModeFlags(mode: BootstrapMode): ModeFlags {
+  return {
+    skipResourceMonitoring: mode === 'run',
+    skipScheduleExecutor: mode === 'cli' || mode === 'run',
+    skipRecovery: mode === 'cli',
+  };
+}
+
 export interface BootstrapOptions {
-  /** Custom ProcessSpawner implementation (e.g., NoOpProcessSpawner for tests) */
+  /** Bootstrap mode controlling which subsystems are initialized (default: 'server') */
+  mode?: BootstrapMode;
+  /** Custom ProcessSpawner (e.g., NoOpProcessSpawner for tests) */
   processSpawner?: ProcessSpawner;
-  /** Custom ResourceMonitor implementation (e.g., TestResourceMonitor for tests) */
+  /** Custom ResourceMonitor (e.g., TestResourceMonitor for tests) */
   resourceMonitor?: ResourceMonitor;
-  /** Skip starting resource monitoring (useful for tests to prevent CPU/memory overhead) */
-  skipResourceMonitoring?: boolean;
-  /** Skip starting ScheduleExecutor (for short-lived CLI commands that exit before workers finish) */
-  skipScheduleExecutor?: boolean;
-  /** Skip running RecoveryManager on startup (for short-lived CLI commands) */
-  skipRecovery?: boolean;
 }
 
 // Adapters
@@ -60,7 +81,7 @@ import { EventDrivenWorkerPool } from './implementations/event-driven-worker-poo
 import { GeminiAdapter } from './implementations/gemini-adapter.js';
 import { ConsoleLogger, LogLevel, StructuredLogger } from './implementations/logger.js';
 import { BufferedOutputCapture } from './implementations/output-capture.js';
-import { OutputRepository, SQLiteOutputRepository } from './implementations/output-repository.js';
+import { SQLiteOutputRepository } from './implementations/output-repository.js';
 import { ClaudeProcessSpawner } from './implementations/process-spawner.js';
 import { ProcessSpawnerAdapter } from './implementations/process-spawner-adapter.js';
 import { SystemResourceMonitor } from './implementations/resource-monitor.js';
@@ -75,20 +96,6 @@ import { RecoveryManager } from './services/recovery-manager.js';
 import { ScheduleExecutor } from './services/schedule-executor.js';
 import { ScheduleManagerService } from './services/schedule-manager.js';
 import { TaskManagerService } from './services/task-manager.js';
-
-// Convert new configuration format to existing Config interface
-const getConfig = (): Config => {
-  const config = loadConfiguration();
-  return {
-    maxOutputBuffer: config.maxOutputBuffer,
-    taskTimeout: config.timeout, // Note: renamed from timeout to taskTimeout
-    cpuCoresReserved: config.cpuCoresReserved,
-    memoryReserve: config.memoryReserve,
-    logLevel: config.logLevel,
-    maxListenersPerEvent: config.maxListenersPerEvent,
-    maxTotalSubscriptions: config.maxTotalSubscriptions,
-  };
-};
 
 /**
  * Helper for dependency injection in factory functions
@@ -131,6 +138,9 @@ const getFromContainerSafe = <T>(container: Container, key: string): Result<T> =
  * ARCHITECTURE: Returns Result instead of throwing - follows Result pattern
  */
 export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<Container>> {
+  const mode = options.mode ?? 'server';
+  const { skipResourceMonitoring, skipScheduleExecutor, skipRecovery } = deriveModeFlags(mode);
+
   const container = new Container();
   const config = loadConfiguration();
 
@@ -318,12 +328,10 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
       getFromContainer<Logger>(container, 'logger').child({ module: 'ResourceMonitor' }),
     );
 
-    // Skip resource monitoring if requested (e.g., in tests to prevent CPU/memory overhead)
-    if (!options.skipResourceMonitoring) {
-      // Start monitoring after a brief delay to allow system startup
+    if (!skipResourceMonitoring) {
       setTimeout(() => monitor.startMonitoring(), 2000);
     } else {
-      logger.info('Skipping resource monitoring (skipResourceMonitoring=true)');
+      logger.info(`Skipping resource monitoring (mode=${mode})`);
     }
 
     return monitor;
@@ -414,7 +422,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
   });
 
   // Run recovery on startup (skip for short-lived CLI commands)
-  if (!options.skipRecovery) {
+  if (!skipRecovery) {
     const recoveryResult = container.get('recoveryManager');
     if (recoveryResult.ok) {
       const recovery = recoveryResult.value as RecoveryManager;
@@ -425,24 +433,26 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
       });
     }
   } else {
-    logger.info('Skipping recovery (skipRecovery=true)');
+    logger.info(`Skipping recovery (mode=${mode})`);
   }
 
   // Register schedule executor for task scheduling (v0.4.0)
   // ARCHITECTURE: ScheduleExecutor runs timer-based tick loop for due schedules
   // Uses factory pattern (ScheduleExecutor.create()) to keep constructor pure
   container.registerSingleton('scheduleExecutor', () => {
-    const scheduleRepoResult = container.get<ScheduleRepository>('scheduleRepository');
+    const scheduleRepoResult = container.get<ScheduleRepository & SyncScheduleOperations>('scheduleRepository');
     const eventBusResult = container.get<EventBus>('eventBus');
+    const databaseResult = container.get<TransactionRunner>('database');
     const loggerResult = container.get<Logger>('logger');
 
-    if (!scheduleRepoResult.ok || !eventBusResult.ok || !loggerResult.ok) {
+    if (!scheduleRepoResult.ok || !eventBusResult.ok || !databaseResult.ok || !loggerResult.ok) {
       throw new Error('Failed to get dependencies for ScheduleExecutor');
     }
 
     const createResult = ScheduleExecutor.create(
       scheduleRepoResult.value,
       eventBusResult.value,
+      databaseResult.value,
       loggerResult.value.child({ module: 'ScheduleExecutor' }),
     );
 
@@ -456,7 +466,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
   // Initialize schedule executor after recovery completes
   // ARCHITECTURE: Starts the 60-second tick loop for checking due schedules
   // Skip for short-lived CLI commands — only the MCP server daemon needs the executor
-  if (!options?.skipScheduleExecutor) {
+  if (!skipScheduleExecutor) {
     const executorResult = container.get<ScheduleExecutor>('scheduleExecutor');
     if (executorResult.ok) {
       const executor = executorResult.value;
@@ -470,7 +480,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
       logger.error('Failed to get ScheduleExecutor', executorResult.error);
     }
   } else {
-    logger.info('Skipping ScheduleExecutor (skipScheduleExecutor=true)');
+    logger.info(`Skipping ScheduleExecutor (mode=${mode})`);
   }
 
   logger.info('Bootstrap complete');

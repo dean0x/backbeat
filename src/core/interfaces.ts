@@ -346,19 +346,6 @@ export interface Logger {
 }
 
 /**
- * Configuration
- */
-export interface Config {
-  readonly maxOutputBuffer: number;
-  readonly taskTimeout: number;
-  readonly cpuCoresReserved: number; // Number of CPU cores to keep free
-  readonly memoryReserve: number;
-  readonly logLevel: 'debug' | 'info' | 'warn' | 'error';
-  readonly maxListenersPerEvent?: number; // Configurable EventBus limit
-  readonly maxTotalSubscriptions?: number; // Configurable EventBus limit
-}
-
-/**
  * Event emitter for task events
  */
 export interface TaskEventEmitter {
@@ -462,6 +449,32 @@ export interface CheckpointRepository {
  */
 export interface CheckpointLookup {
   findLatest(taskId: TaskId): Promise<Result<TaskCheckpoint | null>>;
+}
+
+/**
+ * Output persistence for task stdout/stderr
+ * Pattern: Repository pattern — all repo interfaces live in core/interfaces.ts
+ */
+export interface OutputRepository {
+  /**
+   * Persist a full output snapshot for a task
+   */
+  save(taskId: TaskId, output: TaskOutput): Promise<Result<void>>;
+
+  /**
+   * Append incremental stream data (stdout or stderr) to stored output
+   */
+  append(taskId: TaskId, stream: 'stdout' | 'stderr', data: string): Promise<Result<void>>;
+
+  /**
+   * Retrieve stored output for a task
+   */
+  get(taskId: TaskId): Promise<Result<TaskOutput | null>>;
+
+  /**
+   * Remove stored output for a task
+   */
+  delete(taskId: TaskId): Promise<Result<void>>;
 }
 
 /**

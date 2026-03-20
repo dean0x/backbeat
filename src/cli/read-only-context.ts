@@ -13,10 +13,9 @@
  */
 
 import { loadConfiguration } from '../core/configuration.js';
-import type { ScheduleRepository, TaskRepository } from '../core/interfaces.js';
+import type { OutputRepository, ScheduleRepository, TaskRepository } from '../core/interfaces.js';
 import { Result, tryCatch } from '../core/result.js';
 import { Database } from '../implementations/database.js';
-import type { OutputRepository } from '../implementations/output-repository.js';
 import { SQLiteOutputRepository } from '../implementations/output-repository.js';
 import { SQLiteScheduleRepository } from '../implementations/schedule-repository.js';
 import { SQLiteTaskRepository } from '../implementations/task-repository.js';
