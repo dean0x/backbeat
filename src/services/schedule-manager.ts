@@ -27,15 +27,8 @@ import { EventBus } from '../core/events/event-bus.js';
 import { Logger, ScheduleExecution, ScheduleRepository, ScheduleService } from '../core/interfaces.js';
 import { err, ok, Result } from '../core/result.js';
 import { getNextRunTime, isValidTimezone, validateCronExpression } from '../utils/cron.js';
+import { truncatePrompt } from '../utils/format.js';
 import { validatePath } from '../utils/validation.js';
-
-/** Truncate a prompt string to maxLen characters, appending '...' if truncated */
-function truncatePrompt(prompt: string, maxLen: number): string {
-  if (prompt.length <= maxLen) {
-    return prompt;
-  }
-  return prompt.substring(0, maxLen) + '...';
-}
 
 /**
  * Map missedRunPolicy string to MissedRunPolicy enum

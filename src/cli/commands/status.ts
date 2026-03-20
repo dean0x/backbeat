@@ -1,5 +1,6 @@
 import { TaskId } from '../../core/domain.js';
 import { taskNotFound } from '../../core/errors.js';
+import { truncatePrompt } from '../../utils/format.js';
 import type { ReadOnlyContext } from '../read-only-context.js';
 import { errorMessage, exitOnError, exitOnNull, withReadOnlyContext } from '../services.js';
 import * as ui from '../ui.js';
@@ -58,7 +59,7 @@ export async function getTaskStatus(taskId?: string): Promise<void> {
         s.stop(`${tasks.length} task${tasks.length === 1 ? '' : 's'}`);
 
         for (const task of tasks) {
-          const prompt = task.prompt.substring(0, 50) + (task.prompt.length > 50 ? '...' : '');
+          const prompt = truncatePrompt(task.prompt, 50);
           ui.step(`${ui.dim(task.id)}  ${ui.colorStatus(task.status.padEnd(10))}  ${prompt}`);
         }
       } else {
