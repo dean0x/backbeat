@@ -725,4 +725,322 @@ describe('LoopHandler - Behavioral Tests', () => {
       expect(mockCheckpointRepo.findLatest).toHaveBeenCalled();
     });
   });
+
+  describe('Fix H — Task failure atomicity', () => {
+    it('should atomically persist iteration fail and consecutiveFailures', async () => {
+      const loop = await createAndEmitLoop({ maxConsecutiveFailures: 5 });
+
+      const taskId = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskFailed', {
+        taskId: taskId!,
+        error: { message: 'Task crashed', code: 'SYSTEM_ERROR' },
+        exitCode: 1,
+      });
+      await flushEventLoop();
+
+      // Both iteration status and loop consecutiveFailures should be committed
+      const iteration = await getLatestIteration(loop.id);
+      // Latest iteration is now iteration 2 (next started), so find iteration 1
+      const allIters = await loopRepo.getIterations(loop.id, 10);
+      expect(allIters.ok).toBe(true);
+      const iter1 = allIters.value.find((i) => i.iterationNumber === 1);
+      expect(iter1!.status).toBe('fail');
+      expect(iter1!.exitCode).toBe(1);
+      expect(iter1!.errorMessage).toBe('Task crashed');
+
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.consecutiveFailures).toBe(1);
+      expect(updatedLoop!.currentIteration).toBe(2);
+    });
+
+    it('should mark loop FAILED when task failure transaction fails', async () => {
+      const loop = await createAndEmitLoop({ maxConsecutiveFailures: 5 });
+
+      // Spy on updateIterationSync to throw (simulating transaction failure)
+      const origUpdateIterationSync = loopRepo.updateIterationSync.bind(loopRepo);
+      let callCount = 0;
+      vi.spyOn(loopRepo, 'updateIterationSync').mockImplementation((iter) => {
+        callCount++;
+        // First call is from handleTaskTerminal's atomic transaction
+        if (callCount === 1) {
+          throw new Error('Simulated DB write failure');
+        }
+        return origUpdateIterationSync(iter);
+      });
+
+      const taskId = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskFailed', {
+        taskId: taskId!,
+        error: { message: 'Task crashed', code: 'SYSTEM_ERROR' },
+        exitCode: 1,
+      });
+      await flushEventLoop();
+
+      // Loop should be FAILED (not stuck in RUNNING)
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.status).toBe(LoopStatus.FAILED);
+    });
+  });
+
+  describe('Fix I — recordAndContinue tx failure marks loop FAILED', () => {
+    it('should mark loop FAILED when recordAndContinue transaction fails', async () => {
+      // Exit condition fails → enters recordAndContinue path
+      mockEvaluator.evaluate.mockResolvedValue({ passed: false, exitCode: 1, error: 'test failed' });
+
+      const loop = await createAndEmitLoop({ maxConsecutiveFailures: 5 });
+
+      // updateIterationSync is called inside recordAndContinue's transaction
+      const origUpdateIterationSync = loopRepo.updateIterationSync.bind(loopRepo);
+      let callCount = 0;
+      vi.spyOn(loopRepo, 'updateIterationSync').mockImplementation((iter) => {
+        callCount++;
+        // First updateIterationSync call is inside recordAndContinue
+        if (callCount === 1) {
+          throw new Error('Simulated DB write failure');
+        }
+        return origUpdateIterationSync(iter);
+      });
+
+      const taskId = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // Loop should be FAILED (not stuck in RUNNING)
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.status).toBe(LoopStatus.FAILED);
+    });
+  });
+
+  describe('Fix J — Recovery with terminal iterations', () => {
+    // Helper: set up a loop + iteration in specific states to simulate crash-window
+    async function setupCrashWindowScenario(overrides: {
+      iterationStatus: string;
+      loopOverrides?: Partial<Loop>;
+      taskStatus?: TaskStatus;
+    }) {
+      const loop = createLoop(
+        {
+          prompt: 'test recovery',
+          strategy: LoopStrategy.RETRY,
+          exitCondition: 'true',
+          maxIterations: 10,
+          maxConsecutiveFailures: 3,
+          ...overrides.loopOverrides,
+        },
+        '/tmp',
+      );
+      await loopRepo.save(loop);
+
+      // Set currentIteration=1
+      const updatedLoop = {
+        ...loop,
+        currentIteration: 1,
+        updatedAt: Date.now(),
+        ...(overrides.loopOverrides ?? {}),
+      };
+      await loopRepo.update(updatedLoop);
+
+      // Create task in specified state
+      const { createTask } = await import('../../../../src/core/domain.js');
+      const taskId = TaskId(`task-recovery-${loop.id}`);
+      const task = {
+        ...createTask({ prompt: 'test', workingDirectory: '/tmp' }),
+        id: taskId,
+        status: overrides.taskStatus ?? TaskStatus.COMPLETED,
+      };
+      await taskRepo.save(task);
+
+      // Record iteration with specified terminal status
+      await loopRepo.recordIteration({
+        id: 0,
+        loopId: loop.id,
+        iterationNumber: 1,
+        taskId,
+        status: overrides.iterationStatus as LoopIteration['status'],
+        startedAt: Date.now(),
+        completedAt: Date.now(),
+      });
+
+      return { loop: updatedLoop, taskId };
+    }
+
+    it('should complete loop when recovering pass iteration', async () => {
+      const { loop } = await setupCrashWindowScenario({ iterationStatus: 'pass' });
+
+      // Create fresh handler — triggers recovery
+      const freshEventBus = new InMemoryEventBus(createTestConfiguration(), new TestLogger());
+      await LoopHandler.create(
+        loopRepo,
+        taskRepo,
+        createMockCheckpointRepo(),
+        freshEventBus,
+        database,
+        mockEvaluator,
+        new TestLogger(),
+      );
+
+      const recoveredLoop = await getLoop(loop.id);
+      expect(recoveredLoop!.status).toBe(LoopStatus.COMPLETED);
+
+      freshEventBus.dispose();
+    });
+
+    it('should start next iteration when recovering fail iteration below max', async () => {
+      const { loop } = await setupCrashWindowScenario({
+        iterationStatus: 'fail',
+        loopOverrides: { maxConsecutiveFailures: 5, consecutiveFailures: 1 },
+      });
+
+      const freshEventBus = new InMemoryEventBus(createTestConfiguration(), new TestLogger());
+      await LoopHandler.create(
+        loopRepo,
+        taskRepo,
+        createMockCheckpointRepo(),
+        freshEventBus,
+        database,
+        mockEvaluator,
+        new TestLogger(),
+      );
+
+      const recoveredLoop = await getLoop(loop.id);
+      expect(recoveredLoop!.status).toBe(LoopStatus.RUNNING);
+      expect(recoveredLoop!.currentIteration).toBe(2);
+
+      freshEventBus.dispose();
+    });
+
+    it('should fail loop when recovering fail iteration at max consecutiveFailures', async () => {
+      const { loop } = await setupCrashWindowScenario({
+        iterationStatus: 'fail',
+        loopOverrides: { maxConsecutiveFailures: 3, consecutiveFailures: 3 },
+      });
+
+      const freshEventBus = new InMemoryEventBus(createTestConfiguration(), new TestLogger());
+      await LoopHandler.create(
+        loopRepo,
+        taskRepo,
+        createMockCheckpointRepo(),
+        freshEventBus,
+        database,
+        mockEvaluator,
+        new TestLogger(),
+      );
+
+      const recoveredLoop = await getLoop(loop.id);
+      expect(recoveredLoop!.status).toBe(LoopStatus.FAILED);
+
+      freshEventBus.dispose();
+    });
+
+    it('should start next iteration when recovering keep iteration', async () => {
+      const { loop } = await setupCrashWindowScenario({
+        iterationStatus: 'keep',
+        loopOverrides: {
+          strategy: LoopStrategy.OPTIMIZE,
+          consecutiveFailures: 0,
+        },
+      });
+
+      const freshEventBus = new InMemoryEventBus(createTestConfiguration(), new TestLogger());
+      await LoopHandler.create(
+        loopRepo,
+        taskRepo,
+        createMockCheckpointRepo(),
+        freshEventBus,
+        database,
+        mockEvaluator,
+        new TestLogger(),
+      );
+
+      const recoveredLoop = await getLoop(loop.id);
+      expect(recoveredLoop!.status).toBe(LoopStatus.RUNNING);
+      expect(recoveredLoop!.currentIteration).toBe(2);
+
+      freshEventBus.dispose();
+    });
+  });
+
+  describe('Fix K — Retry pass path atomicity', () => {
+    it('should atomically persist pass iteration and loop completion', async () => {
+      mockEvaluator.evaluate.mockResolvedValue({ passed: true, exitCode: 0 });
+
+      const loop = await createAndEmitLoop();
+      const taskId = await getLatestTaskId(loop.id);
+
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // Both should be committed atomically
+      const iteration = await getLatestIteration(loop.id);
+      expect(iteration!.status).toBe('pass');
+      expect(iteration!.exitCode).toBe(0);
+
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.status).toBe(LoopStatus.COMPLETED);
+    });
+  });
+
+  describe('Fix L — Recovery CANCELLED path continues loop', () => {
+    it('should mark cancelled iteration and start next iteration during recovery', async () => {
+      // Set up loop with RUNNING status, running iteration, but CANCELLED task
+      const loop = createLoop(
+        {
+          prompt: 'test recovery cancelled',
+          strategy: LoopStrategy.RETRY,
+          exitCondition: 'true',
+          maxIterations: 10,
+          maxConsecutiveFailures: 3,
+        },
+        '/tmp',
+      );
+      await loopRepo.save(loop);
+
+      const updatedLoop = { ...loop, currentIteration: 1, updatedAt: Date.now() };
+      await loopRepo.update(updatedLoop);
+
+      const { createTask: ct } = await import('../../../../src/core/domain.js');
+      const taskId = TaskId(`task-cancelled-recovery-${loop.id}`);
+      const task = {
+        ...ct({ prompt: 'test', workingDirectory: '/tmp' }),
+        id: taskId,
+        status: TaskStatus.CANCELLED,
+      };
+      await taskRepo.save(task);
+
+      // Record iteration as 'running' (crash before marking cancelled)
+      await loopRepo.recordIteration({
+        id: 0,
+        loopId: loop.id,
+        iterationNumber: 1,
+        taskId,
+        status: 'running',
+        startedAt: Date.now(),
+      });
+
+      // Create fresh handler — triggers recovery
+      const freshEventBus = new InMemoryEventBus(createTestConfiguration(), new TestLogger());
+      await LoopHandler.create(
+        loopRepo,
+        taskRepo,
+        createMockCheckpointRepo(),
+        freshEventBus,
+        database,
+        mockEvaluator,
+        new TestLogger(),
+      );
+
+      // Iteration should be marked cancelled
+      const allIters = await loopRepo.getIterations(loop.id, 10);
+      expect(allIters.ok).toBe(true);
+      const iter1 = allIters.value.find((i) => i.iterationNumber === 1);
+      expect(iter1!.status).toBe('cancelled');
+
+      // Next iteration should have started
+      const recoveredLoop = await getLoop(loop.id);
+      expect(recoveredLoop!.status).toBe(LoopStatus.RUNNING);
+      expect(recoveredLoop!.currentIteration).toBe(2);
+
+      freshEventBus.dispose();
+    });
+  });
 });

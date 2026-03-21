@@ -222,29 +222,29 @@ export class LoopHandler extends BaseEventHandler {
         const failedEvent = event as TaskFailedEvent;
         const newConsecutiveFailures = loop.consecutiveFailures + 1;
 
-        // Record iteration as 'fail'
-        await this.loopRepo.updateIteration({
-          ...iteration,
-          status: 'fail',
-          exitCode: failedEvent.exitCode,
-          errorMessage: failedEvent.error?.message ?? 'Task failed',
-          completedAt: Date.now(),
+        // Atomic: iteration fail + consecutiveFailures in single transaction
+        const updatedLoop = updateLoop(loop, { consecutiveFailures: newConsecutiveFailures });
+        const txResult = this.database.runInTransaction(() => {
+          this.loopRepo.updateIterationSync({
+            ...iteration,
+            status: 'fail',
+            exitCode: failedEvent.exitCode,
+            errorMessage: failedEvent.error?.message ?? 'Task failed',
+            completedAt: Date.now(),
+          });
+          this.loopRepo.updateSync(updatedLoop);
         });
 
-        // Check maxConsecutiveFailures limit
+        if (!txResult.ok) {
+          this.logger.error('Failed to persist task failure', txResult.error, { loopId });
+          await this.completeLoop(loop, LoopStatus.FAILED, 'Failed to persist task failure');
+          return ok(undefined);
+        }
+
+        // Post-commit: check limits or schedule next
         if (loop.maxConsecutiveFailures > 0 && newConsecutiveFailures >= loop.maxConsecutiveFailures) {
-          this.logger.info('Loop reached max consecutive failures', {
-            loopId,
-            consecutiveFailures: newConsecutiveFailures,
-            maxConsecutiveFailures: loop.maxConsecutiveFailures,
-          });
-          await this.completeLoop(loop, LoopStatus.FAILED, 'Max consecutive failures reached', {
-            consecutiveFailures: newConsecutiveFailures,
-          });
+          await this.completeLoop(updatedLoop, LoopStatus.FAILED, 'Max consecutive failures reached');
         } else {
-          // Update consecutive failures and continue
-          const updatedLoop = updateLoop(loop, { consecutiveFailures: newConsecutiveFailures });
-          await this.loopRepo.update(updatedLoop);
           await this.scheduleNextIteration(updatedLoop);
         }
 
@@ -599,14 +599,29 @@ export class LoopHandler extends BaseEventHandler {
    */
   private async handleRetryResult(loop: Loop, iteration: LoopIteration, evalResult: EvalResult): Promise<void> {
     if (evalResult.passed) {
-      // Exit condition passed — mark iteration as 'pass', complete loop
-      await this.loopRepo.updateIteration({
-        ...iteration,
-        status: 'pass',
-        exitCode: evalResult.exitCode,
-        completedAt: Date.now(),
+      // Atomic: iteration pass + loop completion in single transaction
+      const txResult = this.database.runInTransaction(() => {
+        this.loopRepo.updateIterationSync({
+          ...iteration,
+          status: 'pass',
+          exitCode: evalResult.exitCode,
+          completedAt: Date.now(),
+        });
+        this.loopRepo.updateSync(
+          updateLoop(loop, {
+            status: LoopStatus.COMPLETED,
+            completedAt: Date.now(),
+          }),
+        );
       });
 
+      if (!txResult.ok) {
+        this.logger.error('Failed to persist pass result', txResult.error, { loopId: loop.id });
+        await this.completeLoop(loop, LoopStatus.FAILED, 'Failed to persist pass result');
+        return;
+      }
+
+      // Post-commit: cleanup (timer, event) — double-write on loop row is harmless
       await this.completeLoop(loop, LoopStatus.COMPLETED, 'Exit condition passed');
       return;
     }
@@ -840,6 +855,7 @@ export class LoopHandler extends BaseEventHandler {
 
     if (!txResult.ok) {
       this.logger.error('Failed to record iteration result', txResult.error, { loopId: loop.id });
+      await this.completeLoop(loop, LoopStatus.FAILED, 'Failed to persist iteration result');
       return;
     }
 
@@ -984,25 +1000,30 @@ export class LoopHandler extends BaseEventHandler {
 
     await this.cancelRemainingPipelineTasks(iteration.pipelineTaskIds, taskId, loopId);
 
-    // Mark iteration as failed
-    await this.loopRepo.updateIteration({
-      ...iteration,
-      status: 'fail',
-      exitCode: failedEvent.exitCode,
-      errorMessage: `Pipeline step failed: ${failedEvent.error?.message ?? 'Task failed'}`,
-      completedAt: Date.now(),
+    // Atomic: iteration fail + consecutiveFailures in single transaction
+    const newConsecutiveFailures = loop.consecutiveFailures + 1;
+    const updatedLoop = updateLoop(loop, { consecutiveFailures: newConsecutiveFailures });
+    const txResult = this.database.runInTransaction(() => {
+      this.loopRepo.updateIterationSync({
+        ...iteration,
+        status: 'fail',
+        exitCode: failedEvent.exitCode,
+        errorMessage: `Pipeline step failed: ${failedEvent.error?.message ?? 'Task failed'}`,
+        completedAt: Date.now(),
+      });
+      this.loopRepo.updateSync(updatedLoop);
     });
 
-    // Increment consecutive failures and check limits
-    const newConsecutiveFailures = loop.consecutiveFailures + 1;
+    if (!txResult.ok) {
+      this.logger.error('Failed to persist pipeline step failure', txResult.error, { loopId });
+      await this.completeLoop(loop, LoopStatus.FAILED, 'Failed to persist pipeline step failure');
+      return ok(undefined);
+    }
 
+    // Post-commit: check limits or schedule next
     if (loop.maxConsecutiveFailures > 0 && newConsecutiveFailures >= loop.maxConsecutiveFailures) {
-      await this.completeLoop(loop, LoopStatus.FAILED, 'Max consecutive failures reached', {
-        consecutiveFailures: newConsecutiveFailures,
-      });
+      await this.completeLoop(updatedLoop, LoopStatus.FAILED, 'Max consecutive failures reached');
     } else {
-      const updatedLoop = updateLoop(loop, { consecutiveFailures: newConsecutiveFailures });
-      await this.loopRepo.update(updatedLoop);
       await this.scheduleNextIteration(updatedLoop);
     }
 
@@ -1135,8 +1156,28 @@ export class LoopHandler extends BaseEventHandler {
 
     const latestIteration = iterationsResult.value[0];
 
-    // Iteration already has a terminal status — no recovery needed
+    // Iteration is terminal but loop is still RUNNING — server crashed between
+    // DB commit and the post-commit action (completeLoop or scheduleNextIteration).
+    // Re-derive the correct action from the iteration's terminal status.
     if (latestIteration.status !== 'running') {
+      this.logger.info('Recovering loop with terminal iteration', {
+        loopId: loop.id,
+        iterationStatus: latestIteration.status,
+        iterationNumber: latestIteration.iterationNumber,
+      });
+
+      if (latestIteration.status === 'pass') {
+        // Exit condition was satisfied — complete the loop
+        await this.completeLoop(loop, LoopStatus.COMPLETED, 'Recovered: exit condition already passed');
+        return;
+      }
+
+      // fail / discard / crash / keep / cancelled — check termination, then continue
+      // Loop's consecutiveFailures is already correct (committed atomically with iteration)
+      if (await this.checkTerminationConditions(loop, loop.consecutiveFailures)) {
+        return;
+      }
+      await this.startNextIteration(loop);
       return;
     }
 
@@ -1181,29 +1222,42 @@ export class LoopHandler extends BaseEventHandler {
 
     if (task.status === TaskStatus.FAILED) {
       const newConsecutiveFailures = loop.consecutiveFailures + 1;
-      await this.loopRepo.updateIteration({
-        ...latestIteration,
-        status: 'fail',
-        completedAt: Date.now(),
+
+      // Atomic: iteration fail + consecutiveFailures in single transaction
+      const updatedLoop = updateLoop(loop, { consecutiveFailures: newConsecutiveFailures });
+      const txResult = this.database.runInTransaction(() => {
+        this.loopRepo.updateIterationSync({
+          ...latestIteration,
+          status: 'fail',
+          completedAt: Date.now(),
+        });
+        this.loopRepo.updateSync(updatedLoop);
       });
 
+      if (!txResult.ok) {
+        this.logger.error('Failed to persist recovery failure', txResult.error, { loopId: loop.id });
+        await this.completeLoop(loop, LoopStatus.FAILED, 'Failed to persist recovery failure');
+        return;
+      }
+
+      // Post-commit: check limits or schedule next
       if (loop.maxConsecutiveFailures > 0 && newConsecutiveFailures >= loop.maxConsecutiveFailures) {
-        await this.completeLoop(loop, LoopStatus.FAILED, 'Max consecutive failures reached (recovered)', {
-          consecutiveFailures: newConsecutiveFailures,
-        });
+        await this.completeLoop(updatedLoop, LoopStatus.FAILED, 'Max consecutive failures reached (recovered)');
       } else {
-        const updatedLoop = updateLoop(loop, { consecutiveFailures: newConsecutiveFailures });
-        await this.loopRepo.update(updatedLoop);
         await this.scheduleNextIteration(updatedLoop);
       }
       return;
     }
 
-    // CANCELLED — mark iteration as cancelled
+    // CANCELLED — mark iteration as cancelled and continue
     await this.loopRepo.updateIteration({
       ...latestIteration,
       status: 'cancelled',
       completedAt: Date.now(),
     });
+    if (await this.checkTerminationConditions(loop, loop.consecutiveFailures)) {
+      return;
+    }
+    await this.startNextIteration(loop);
   }
 }
