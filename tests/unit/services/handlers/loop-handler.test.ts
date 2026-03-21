@@ -88,11 +88,6 @@ describe('LoopHandler - Behavioral Tests', () => {
     eventBus = new InMemoryEventBus(config, logger);
 
     database = new Database(':memory:');
-    // ARCHITECTURE: Disable FK constraints for handler tests because LoopHandler
-    // records iterations (with task_id) before PersistenceHandler saves the task.
-    // In the real system, both handlers run in the same event pipeline.
-    // In isolation tests, we don't have PersistenceHandler.
-    database.getDatabase().pragma('foreign_keys = OFF');
 
     loopRepo = new SQLiteLoopRepository(database);
     taskRepo = new SQLiteTaskRepository(database);

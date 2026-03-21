@@ -432,7 +432,7 @@ export class LoopHandler extends BaseEventHandler {
       workingDirectory: loop.workingDirectory,
     });
 
-    // Record iteration in DB
+    // Build iteration record
     const iteration: LoopIteration = {
       id: 0, // Auto-increment
       loopId,
@@ -441,12 +441,26 @@ export class LoopHandler extends BaseEventHandler {
       status: 'running',
       startedAt: Date.now(),
     };
-    await this.loopRepo.recordIteration(iteration);
 
-    // Track task → loop mapping
+    // Atomic: save task BEFORE recording iteration (FK constraint: iteration.task_id -> tasks.id)
+    const txResult = this.database.runInTransaction(() => {
+      this.taskRepo.saveSync(task);
+      this.loopRepo.recordIterationSync(iteration);
+    });
+
+    if (!txResult.ok) {
+      this.logger.error('Failed to save task and record iteration atomically', txResult.error, {
+        loopId,
+        iterationNumber,
+        taskId: task.id,
+      });
+      return;
+    }
+
+    // Track task → loop mapping AFTER successful transaction
     this.taskToLoop.set(task.id, loopId);
 
-    // Emit TaskDelegated event
+    // Emit TaskDelegated event AFTER transaction commit
     const emitResult = await this.eventBus.emit('TaskDelegated', { task });
     if (!emitResult.ok) {
       this.logger.error('Failed to emit TaskDelegated for loop iteration', emitResult.error, {

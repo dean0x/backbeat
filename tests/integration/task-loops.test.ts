@@ -57,10 +57,6 @@ describe('Integration: Task Loops - End-to-End Flow', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'backbeat-loop-test-'));
 
     database = new Database(':memory:');
-    // ARCHITECTURE: Disable FK constraints because LoopHandler records iterations
-    // (with task_id FK) before PersistenceHandler saves the task to the tasks table.
-    // In a full bootstrap, both handlers run in the same event pipeline.
-    database.getDatabase().pragma('foreign_keys = OFF');
 
     loopRepo = new SQLiteLoopRepository(database);
     taskRepo = new SQLiteTaskRepository(database);
