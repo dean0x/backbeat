@@ -536,7 +536,7 @@ export interface LoopRepository {
   /**
    * Find loop by ID
    */
-  findById(id: LoopId): Promise<Result<Loop | undefined>>;
+  findById(id: LoopId): Promise<Result<Loop | null>>;
 
   /**
    * Find loops with optional pagination
@@ -590,7 +590,7 @@ export interface LoopRepository {
    * Find iteration by the task ID it spawned
    * ARCHITECTURE: Used by loop handler to correlate task completion events back to iterations
    */
-  findIterationByTaskId(taskId: TaskId): Promise<Result<LoopIteration | undefined>>;
+  findIterationByTaskId(taskId: TaskId): Promise<Result<LoopIteration | null>>;
 
   /**
    * Find all currently running iterations across all active loops
@@ -620,7 +620,7 @@ export interface LoopRepository {
 export interface SyncLoopOperations {
   updateSync(loop: Loop): void;
   recordIterationSync(iteration: LoopIteration): void;
-  findByIdSync(id: LoopId): Loop | undefined;
+  findByIdSync(id: LoopId): Loop | null;
   updateIterationSync(iteration: LoopIteration): void;
 }
 

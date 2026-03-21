@@ -280,11 +280,11 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
     );
   }
 
-  async findById(id: LoopId): Promise<Result<Loop | undefined>> {
+  async findById(id: LoopId): Promise<Result<Loop | null>> {
     return tryCatchAsync(
       async () => {
         const row = this.findByIdStmt.get(id) as LoopRow | undefined;
-        if (!row) return undefined;
+        if (!row) return null;
         return this.rowToLoop(row);
       },
       operationErrorHandler('find loop', { loopId: id }),
@@ -375,11 +375,11 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
     );
   }
 
-  async findIterationByTaskId(taskId: TaskId): Promise<Result<LoopIteration | undefined>> {
+  async findIterationByTaskId(taskId: TaskId): Promise<Result<LoopIteration | null>> {
     return tryCatchAsync(
       async () => {
         const row = this.findIterationByTaskIdStmt.get(taskId) as LoopIterationRow | undefined;
-        if (!row) return undefined;
+        if (!row) return null;
         return this.rowToIteration(row);
       },
       operationErrorHandler('find iteration by task ID', { taskId }),
@@ -436,9 +436,9 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
     );
   }
 
-  findByIdSync(id: LoopId): Loop | undefined {
+  findByIdSync(id: LoopId): Loop | null {
     const row = this.findByIdStmt.get(id) as LoopRow | undefined;
-    if (!row) return undefined;
+    if (!row) return null;
     return this.rowToLoop(row);
   }
 
