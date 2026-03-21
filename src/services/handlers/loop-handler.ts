@@ -861,7 +861,11 @@ export class LoopHandler extends BaseEventHandler {
   }
 
   /**
-   * Compare scores respecting optimize direction
+   * Compare scores respecting optimize direction.
+   * Uses strict comparison — equal scores are NOT "better".
+   * This prevents infinite loops when a deterministic metric produces the same
+   * score repeatedly. Equal scores increment consecutiveFailures, eventually
+   * triggering maxConsecutiveFailures completion.
    */
   private isScoreBetter(newScore: number, bestScore: number, direction?: OptimizeDirection): boolean {
     if (direction === OptimizeDirection.MINIMIZE) {
