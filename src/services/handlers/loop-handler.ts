@@ -6,7 +6,8 @@
  *   and crash recovery — all driven by events from task completion/failure
  */
 
-import { execSync } from 'child_process';
+import { exec as cpExec } from 'child_process';
+import { promisify } from 'util';
 import type { Loop, LoopIteration, Task } from '../../core/domain.js';
 import {
   createTask,
@@ -39,6 +40,8 @@ import type {
   TransactionRunner,
 } from '../../core/interfaces.js';
 import { err, ok, type Result } from '../../core/result.js';
+
+const execAsync = promisify(cpExec);
 
 /**
  * Exit condition evaluation result
@@ -255,7 +258,7 @@ export class LoopHandler extends BaseEventHandler {
       }
 
       // Task COMPLETED — run exit condition evaluation
-      const evalResult = this.evaluateExitCondition(loop, taskId);
+      const evalResult = await this.evaluateExitCondition(loop, taskId);
 
       await this.handleIterationResult(loop, iteration, evalResult);
 
@@ -564,11 +567,11 @@ export class LoopHandler extends BaseEventHandler {
 
   /**
    * Evaluate the exit condition for an iteration
-   * ARCHITECTURE: Uses child_process.execSync with injected env vars (R11)
+   * ARCHITECTURE: Uses child_process.exec (async via promisify) with injected env vars (R11)
    * - Retry strategy: exit code 0 = pass, non-zero = fail
    * - Optimize strategy: parse last non-empty line of stdout as score
    */
-  private evaluateExitCondition(loop: Loop, taskId: TaskId): EvalResult {
+  private async evaluateExitCondition(loop: Loop, taskId: TaskId): Promise<EvalResult> {
     const env = {
       ...process.env,
       BACKBEAT_LOOP_ID: loop.id,
@@ -577,12 +580,10 @@ export class LoopHandler extends BaseEventHandler {
     };
 
     try {
-      const stdout = execSync(loop.exitCondition, {
+      const { stdout } = await execAsync(loop.exitCondition, {
         cwd: loop.workingDirectory,
         timeout: loop.evalTimeout,
-        encoding: 'utf-8',
         env,
-        stdio: ['pipe', 'pipe', 'pipe'],
       });
 
       if (loop.strategy === LoopStrategy.RETRY) {
@@ -606,13 +607,13 @@ export class LoopHandler extends BaseEventHandler {
 
       return { passed: true, score, exitCode: 0 };
     } catch (execError: unknown) {
-      const error = execError as { status?: number; stderr?: string; message?: string };
+      const error = execError as { code?: number; stderr?: string; message?: string };
 
       if (loop.strategy === LoopStrategy.RETRY) {
         // Non-zero exit or timeout → fail
         return {
           passed: false,
-          exitCode: error.status ?? 1,
+          exitCode: error.code ?? 1,
           error: error.stderr || error.message || 'Exit condition failed',
         };
       }
@@ -621,7 +622,7 @@ export class LoopHandler extends BaseEventHandler {
       return {
         passed: false,
         error: error.stderr || error.message || 'Exit condition evaluation failed',
-        exitCode: error.status,
+        exitCode: error.code,
       };
     }
   }
@@ -873,33 +874,39 @@ export class LoopHandler extends BaseEventHandler {
     loopUpdate: Partial<Loop>,
     evalResult?: { score?: number; exitCode?: number; errorMessage?: string },
   ): Promise<void> {
-    // 1. Update iteration in DB
-    await this.loopRepo.updateIteration({
-      ...iteration,
-      status: iterationStatus,
-      score: evalResult?.score ?? iteration.score,
-      exitCode: evalResult?.exitCode ?? iteration.exitCode,
-      errorMessage: evalResult?.errorMessage ?? iteration.errorMessage,
-      completedAt: Date.now(),
+    const updatedLoop = updateLoop(loop, loopUpdate);
+
+    // Atomic: both DB writes in single transaction
+    const txResult = this.database.runInTransaction(() => {
+      this.loopRepo.updateIterationSync({
+        ...iteration,
+        status: iterationStatus,
+        score: evalResult?.score ?? iteration.score,
+        exitCode: evalResult?.exitCode ?? iteration.exitCode,
+        errorMessage: evalResult?.errorMessage ?? iteration.errorMessage,
+        completedAt: Date.now(),
+      });
+      this.loopRepo.updateSync(updatedLoop);
     });
 
-    // 2. Emit LoopIterationCompleted event
+    if (!txResult.ok) {
+      this.logger.error('Failed to record iteration result', txResult.error, { loopId: loop.id });
+      return;
+    }
+
+    // Event AFTER commit (matches schedule-handler pattern)
     await this.eventBus.emit('LoopIterationCompleted', {
       loopId: loop.id,
       iterationNumber: iteration.iterationNumber,
       result: { ...iteration, status: iterationStatus },
     });
 
-    // 3. Apply loop update + persist
-    const updatedLoop = updateLoop(loop, loopUpdate);
-    await this.loopRepo.update(updatedLoop);
-
-    // 4. Check termination conditions (using updated loop for correct state)
+    // Check termination conditions (using updated loop for correct state)
     if (await this.checkTerminationConditions(updatedLoop, consecutiveFailures)) {
       return;
     }
 
-    // 5. Schedule next iteration
+    // Schedule next iteration
     await this.scheduleNextIteration(updatedLoop);
   }
 
@@ -1067,7 +1074,7 @@ export class LoopHandler extends BaseEventHandler {
           });
 
           if (task.status === TaskStatus.COMPLETED) {
-            const evalResult = this.evaluateExitCondition(loop, task.id);
+            const evalResult = await this.evaluateExitCondition(loop, task.id);
             await this.handleIterationResult(loop, latestIteration, evalResult);
           } else if (task.status === TaskStatus.FAILED) {
             // Record as fail and continue

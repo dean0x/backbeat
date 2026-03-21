@@ -7,7 +7,7 @@
  * from inner handlers and logs them rather than propagating. Tests verify state and events
  * rather than thrown exceptions.
  *
- * Exit condition evaluation uses child_process.execSync, mocked via vi.mock.
+ * Exit condition evaluation uses child_process.exec (async via promisify), mocked via vi.mock.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -30,13 +30,35 @@ import { createTestConfiguration } from '../../../fixtures/factories.js';
 import { TestLogger } from '../../../fixtures/test-doubles.js';
 import { flushEventLoop } from '../../../utils/event-helpers.js';
 
-// Mock child_process.execSync for exit condition evaluation
+// Mock child_process.exec for exit condition evaluation (async via promisify)
 vi.mock('child_process', () => ({
-  execSync: vi.fn(),
+  exec: vi.fn(),
 }));
 
 // Import after mock setup
-import { execSync } from 'child_process';
+import { exec } from 'child_process';
+
+/**
+ * Helper: mock async exec (via promisify) to succeed with given stdout
+ * promisify(exec) calls exec(cmd, opts, callback) — mock the callback-based API
+ */
+function mockExecSuccess(stdout: string): void {
+  vi.mocked(exec).mockImplementation((_cmd: unknown, _opts: unknown, callback: unknown) => {
+    (callback as (err: null, result: { stdout: string; stderr: string }) => void)(null, { stdout, stderr: '' });
+    return {} as ReturnType<typeof exec>;
+  });
+}
+
+/**
+ * Helper: mock async exec (via promisify) to fail with given exit code and stderr
+ */
+function mockExecFailure(exitCode: number, stderr: string): void {
+  vi.mocked(exec).mockImplementation((_cmd: unknown, _opts: unknown, callback: unknown) => {
+    const error = Object.assign(new Error(stderr), { code: exitCode, stdout: '', stderr });
+    (callback as (err: Error, result: { stdout: string; stderr: string }) => void)(error, { stdout: '', stderr });
+    return {} as ReturnType<typeof exec>;
+  });
+}
 
 /**
  * Minimal mock checkpoint repository
@@ -76,8 +98,8 @@ describe('LoopHandler - Behavioral Tests', () => {
     taskRepo = new SQLiteTaskRepository(database);
     mockCheckpointRepo = createMockCheckpointRepo();
 
-    // Reset execSync mock
-    vi.mocked(execSync).mockReset();
+    // Reset exec mock
+    vi.mocked(exec).mockReset();
 
     const handlerResult = await LoopHandler.create(loopRepo, taskRepo, mockCheckpointRepo, eventBus, database, logger);
     if (!handlerResult.ok) {
@@ -177,7 +199,7 @@ describe('LoopHandler - Behavioral Tests', () => {
 
     it('should complete loop when exit condition passes (exit code 0)', async () => {
       // Mock: exit condition succeeds
-      vi.mocked(execSync).mockReturnValue('success\n');
+      mockExecSuccess('success\n');
 
       const loop = await createAndEmitLoop();
       const taskId = await getLatestTaskId(loop.id);
@@ -199,12 +221,7 @@ describe('LoopHandler - Behavioral Tests', () => {
 
     it('should start next iteration when exit condition fails (non-zero exit code)', async () => {
       // Mock: exit condition fails
-      vi.mocked(execSync).mockImplementation(() => {
-        const error = new Error('Exit condition failed') as Error & { status: number; stderr: string };
-        error.status = 1;
-        error.stderr = 'test failed';
-        throw error;
-      });
+      mockExecFailure(1, 'test failed');
 
       const loop = await createAndEmitLoop();
       const taskId = await getLatestTaskId(loop.id);
@@ -222,12 +239,7 @@ describe('LoopHandler - Behavioral Tests', () => {
 
     it('should complete loop when max iterations reached', async () => {
       // Mock: exit condition always fails
-      vi.mocked(execSync).mockImplementation(() => {
-        const error = new Error('Fail') as Error & { status: number; stderr: string };
-        error.status = 1;
-        error.stderr = 'fail';
-        throw error;
-      });
+      mockExecFailure(1, 'fail');
 
       const loop = await createAndEmitLoop({ maxIterations: 2 });
 
@@ -293,7 +305,7 @@ describe('LoopHandler - Behavioral Tests', () => {
   describe('Optimize strategy', () => {
     it('should keep first iteration as baseline (R5)', async () => {
       // Mock: exit condition returns score
-      vi.mocked(execSync).mockReturnValue('42.5\n');
+      mockExecSuccess('42.5\n');
 
       const loop = await createAndEmitLoop({
         strategy: LoopStrategy.OPTIMIZE,
@@ -322,7 +334,7 @@ describe('LoopHandler - Behavioral Tests', () => {
 
     it('should keep better score and update bestScore (maximize)', async () => {
       // First iteration: score 10
-      vi.mocked(execSync).mockReturnValue('10\n');
+      mockExecSuccess('10\n');
 
       const loop = await createAndEmitLoop({
         strategy: LoopStrategy.OPTIMIZE,
@@ -335,7 +347,7 @@ describe('LoopHandler - Behavioral Tests', () => {
       await flushEventLoop();
 
       // Second iteration: score 20 (better)
-      vi.mocked(execSync).mockReturnValue('20\n');
+      mockExecSuccess('20\n');
       const taskId2 = await getLatestTaskId(loop.id);
       await eventBus.emit('TaskCompleted', { taskId: taskId2!, exitCode: 0, duration: 100 });
       await flushEventLoop();
@@ -347,7 +359,7 @@ describe('LoopHandler - Behavioral Tests', () => {
 
     it('should discard worse score and increment consecutiveFailures (maximize)', async () => {
       // First iteration: score 50
-      vi.mocked(execSync).mockReturnValue('50\n');
+      mockExecSuccess('50\n');
 
       const loop = await createAndEmitLoop({
         strategy: LoopStrategy.OPTIMIZE,
@@ -361,7 +373,7 @@ describe('LoopHandler - Behavioral Tests', () => {
       await flushEventLoop();
 
       // Second iteration: score 30 (worse for maximize)
-      vi.mocked(execSync).mockReturnValue('30\n');
+      mockExecSuccess('30\n');
       const taskId2 = await getLatestTaskId(loop.id);
       await eventBus.emit('TaskCompleted', { taskId: taskId2!, exitCode: 0, duration: 100 });
       await flushEventLoop();
@@ -380,7 +392,7 @@ describe('LoopHandler - Behavioral Tests', () => {
 
     it('should crash iteration on NaN score (R5)', async () => {
       // Mock: exit condition returns non-numeric output
-      vi.mocked(execSync).mockReturnValue('not-a-number\n');
+      mockExecSuccess('not-a-number\n');
 
       const loop = await createAndEmitLoop({
         strategy: LoopStrategy.OPTIMIZE,
@@ -402,7 +414,7 @@ describe('LoopHandler - Behavioral Tests', () => {
 
     it('should work with minimize direction (lower is better)', async () => {
       // First iteration: score 100
-      vi.mocked(execSync).mockReturnValue('100\n');
+      mockExecSuccess('100\n');
 
       const loop = await createAndEmitLoop({
         strategy: LoopStrategy.OPTIMIZE,
@@ -415,7 +427,7 @@ describe('LoopHandler - Behavioral Tests', () => {
       await flushEventLoop();
 
       // Second iteration: score 50 (better for minimize)
-      vi.mocked(execSync).mockReturnValue('50\n');
+      mockExecSuccess('50\n');
       const taskId2 = await getLatestTaskId(loop.id);
       await eventBus.emit('TaskCompleted', { taskId: taskId2!, exitCode: 0, duration: 100 });
       await flushEventLoop();
@@ -447,7 +459,7 @@ describe('LoopHandler - Behavioral Tests', () => {
     });
 
     it('should only trigger evaluation when tail task completes (R4)', async () => {
-      vi.mocked(execSync).mockReturnValue('success\n');
+      mockExecSuccess('success\n');
 
       const loop = await createAndEmitLoop({
         pipelineSteps: ['lint the code', 'run the tests'],
@@ -483,12 +495,7 @@ describe('LoopHandler - Behavioral Tests', () => {
       // Verify that a loop with cooldown > 0 schedules next iteration via setTimeout
       // We test this by checking that the loop remains at iteration 1 after exit condition
       // fails (because the next iteration is delayed by cooldown, not started immediately)
-      vi.mocked(execSync).mockImplementation(() => {
-        const error = new Error('fail') as Error & { status: number; stderr: string };
-        error.status = 1;
-        error.stderr = 'fail';
-        throw error;
-      });
+      mockExecFailure(1, 'fail');
 
       // Use large cooldown to ensure the next iteration doesn't start during test
       const loop = await createAndEmitLoop({ cooldownMs: 999999, maxIterations: 3 });
@@ -586,7 +593,7 @@ describe('LoopHandler - Behavioral Tests', () => {
 
   describe('Eval env vars (R11)', () => {
     it('should inject BACKBEAT_LOOP_ID, BACKBEAT_ITERATION, BACKBEAT_TASK_ID into exit condition env', async () => {
-      vi.mocked(execSync).mockReturnValue('ok\n');
+      mockExecSuccess('ok\n');
 
       const loop = await createAndEmitLoop();
       const taskId = await getLatestTaskId(loop.id);
@@ -595,9 +602,9 @@ describe('LoopHandler - Behavioral Tests', () => {
       await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
       await flushEventLoop();
 
-      // Verify execSync was called with env vars
-      expect(execSync).toHaveBeenCalled();
-      const callArgs = vi.mocked(execSync).mock.calls[0];
+      // Verify exec was called with env vars
+      expect(exec).toHaveBeenCalled();
+      const callArgs = vi.mocked(exec).mock.calls[0];
       const options = callArgs[1] as Record<string, unknown>;
       const env = options.env as Record<string, string>;
 
@@ -611,15 +618,16 @@ describe('LoopHandler - Behavioral Tests', () => {
     it('should enrich prompt with checkpoint when freshContext=false', async () => {
       // Mock: exit condition fails first time, succeeds second
       let callCount = 0;
-      vi.mocked(execSync).mockImplementation(() => {
+      vi.mocked(exec).mockImplementation((_cmd: unknown, _opts: unknown, callback: unknown) => {
         callCount++;
+        const cb = callback as (err: Error | null, result: { stdout: string; stderr: string }) => void;
         if (callCount === 1) {
-          const error = new Error('fail') as Error & { status: number; stderr: string };
-          error.status = 1;
-          error.stderr = 'test failed';
-          throw error;
+          const error = Object.assign(new Error('test failed'), { code: 1, stdout: '', stderr: 'test failed' });
+          cb(error, { stdout: '', stderr: 'test failed' });
+        } else {
+          cb(null, { stdout: 'success\n', stderr: '' });
         }
-        return 'success\n';
+        return {} as ReturnType<typeof exec>;
       });
 
       // Mock checkpoint to return context for previous iteration
