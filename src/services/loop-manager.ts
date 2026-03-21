@@ -129,22 +129,24 @@ export class LoopManagerService implements LoopService {
       );
     }
 
-    // Validate evalTimeout: >= 1000ms (1 second) and <= 300000ms (5 minutes)
-    if (request.evalTimeout !== undefined && request.evalTimeout < 1000) {
-      return err(
-        new BackbeatError(ErrorCode.INVALID_INPUT, 'evalTimeout must be >= 1000ms (1 second minimum)', {
-          field: 'evalTimeout',
-          value: request.evalTimeout,
-        }),
-      );
-    }
-    if (request.evalTimeout !== undefined && request.evalTimeout > 300000) {
-      return err(
-        new BackbeatError(ErrorCode.INVALID_INPUT, 'evalTimeout must be <= 300000ms (5 minute maximum)', {
-          field: 'evalTimeout',
-          value: request.evalTimeout,
-        }),
-      );
+    // Validate evalTimeout: 1000ms (1 second) to 300000ms (5 minutes)
+    if (request.evalTimeout !== undefined) {
+      if (request.evalTimeout < 1000) {
+        return err(
+          new BackbeatError(ErrorCode.INVALID_INPUT, 'evalTimeout must be >= 1000ms (1 second minimum)', {
+            field: 'evalTimeout',
+            value: request.evalTimeout,
+          }),
+        );
+      }
+      if (request.evalTimeout > 300000) {
+        return err(
+          new BackbeatError(ErrorCode.INVALID_INPUT, 'evalTimeout must be <= 300000ms (5 minute maximum)', {
+            field: 'evalTimeout',
+            value: request.evalTimeout,
+          }),
+        );
+      }
     }
 
     // Validate evalDirection: required if optimize, forbidden if retry
