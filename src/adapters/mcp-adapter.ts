@@ -209,19 +209,11 @@ const CreateLoopSchema = z.object({
   prompt: z.string().min(1).max(4000).optional().describe('Task prompt for each iteration'),
   strategy: z.enum(['retry', 'optimize']).describe('Loop strategy'),
   exitCondition: z.string().min(1).describe('Shell command to evaluate after each iteration'),
-  evalDirection: z
-    .enum(['minimize', 'maximize'])
-    .optional()
-    .describe('Score direction for optimize strategy'),
+  evalDirection: z.enum(['minimize', 'maximize']).optional().describe('Score direction for optimize strategy'),
   evalTimeout: z.number().min(1000).optional().default(60000).describe('Eval script timeout in ms'),
   workingDirectory: z.string().optional().describe('Working directory for task and eval'),
   maxIterations: z.number().min(0).optional().default(10).describe('Max iterations (0 = unlimited)'),
-  maxConsecutiveFailures: z
-    .number()
-    .min(0)
-    .optional()
-    .default(3)
-    .describe('Max consecutive failures before stopping'),
+  maxConsecutiveFailures: z.number().min(0).optional().default(3).describe('Max consecutive failures before stopping'),
   cooldownMs: z.number().min(0).optional().default(0).describe('Cooldown between iterations in ms'),
   freshContext: z
     .boolean()
@@ -235,10 +227,7 @@ const CreateLoopSchema = z.object({
     .optional()
     .describe('Pipeline step prompts (creates pipeline loop)'),
   priority: z.enum(['P0', 'P1', 'P2']).optional().describe('Task priority'),
-  agent: z
-    .enum(AGENT_PROVIDERS_TUPLE)
-    .optional()
-    .describe('Agent provider'),
+  agent: z.enum(AGENT_PROVIDERS_TUPLE).optional().describe('Agent provider'),
 });
 
 const LoopStatusSchema = z.object({
@@ -861,7 +850,8 @@ export class MCPAdapter {
                   },
                   exitCondition: {
                     type: 'string',
-                    description: 'Shell command to evaluate after each iteration (exit code 0 = pass for retry, stdout = score for optimize)',
+                    description:
+                      'Shell command to evaluate after each iteration (exit code 0 = pass for retry, stdout = score for optimize)',
                   },
                   evalDirection: {
                     type: 'string',

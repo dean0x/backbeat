@@ -18,8 +18,8 @@ import { configPath, configReset, configSet, configShow } from './cli/commands/c
 import { showHelp } from './cli/commands/help.js';
 import { initCommand } from './cli/commands/init.js';
 import { getTaskLogs } from './cli/commands/logs.js';
-import { handleMcpStart, handleMcpTest, showConfig } from './cli/commands/mcp.js';
 import { handleLoopCommand } from './cli/commands/loop.js';
+import { handleMcpStart, handleMcpTest, showConfig } from './cli/commands/mcp.js';
 import { handlePipelineCommand } from './cli/commands/pipeline.js';
 import { handleResumeCommand } from './cli/commands/resume.js';
 import { retryTask } from './cli/commands/retry.js';

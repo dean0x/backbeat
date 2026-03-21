@@ -141,7 +141,9 @@ async function handleLoopCreate(loopArgs: string[]): Promise<void> {
     process.exit(1);
   }
   if (!untilCmd && !evalCmd) {
-    ui.error('Provide --until <cmd> for retry strategy or --eval <cmd> --direction minimize|maximize for optimize strategy.');
+    ui.error(
+      'Provide --until <cmd> for retry strategy or --eval <cmd> --direction minimize|maximize for optimize strategy.',
+    );
     process.exit(1);
   }
 
@@ -190,7 +192,12 @@ async function handleLoopCreate(loopArgs: string[]): Promise<void> {
     prompt: isPipeline ? undefined : prompt,
     strategy: isOptimize ? LoopStrategy.OPTIMIZE : LoopStrategy.RETRY,
     exitCondition,
-    evalDirection: direction === 'minimize' ? OptimizeDirection.MINIMIZE : direction === 'maximize' ? OptimizeDirection.MAXIMIZE : undefined,
+    evalDirection:
+      direction === 'minimize'
+        ? OptimizeDirection.MINIMIZE
+        : direction === 'maximize'
+          ? OptimizeDirection.MAXIMIZE
+          : undefined,
     evalTimeout,
     workingDirectory,
     maxIterations,
@@ -348,9 +355,7 @@ async function handleLoopGet(loopArgs: string[]): Promise<void> {
           const score = iter.score !== undefined ? ` | score: ${iter.score}` : '';
           const task = iter.taskId ? ` | task: ${iter.taskId}` : '';
           const error = iter.errorMessage ? ` | error: ${iter.errorMessage}` : '';
-          process.stderr.write(
-            `  #${iter.iterationNumber} ${ui.colorStatus(iter.status)}${score}${task}${error}\n`,
-          );
+          process.stderr.write(`  #${iter.iterationNumber} ${ui.colorStatus(iter.status)}${score}${task}${error}\n`);
         }
       } else {
         ui.info('No iterations yet');
