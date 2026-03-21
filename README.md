@@ -85,6 +85,10 @@ Once configured, use these MCP tools:
 | **ResumeTask** | Resume a failed/completed task with checkpoint context | `ResumeTask({ taskId, additionalContext? })` |
 | **CreatePipeline** | Create sequential task pipelines | `CreatePipeline({ steps: [...] })` |
 | **SchedulePipeline** | Create recurring/one-time scheduled pipelines | `SchedulePipeline({ steps: [...], cronExpression: "0 9 * * *" })` |
+| **CreateLoop** | Create iterative loops (retry or optimize strategy) | `CreateLoop({ prompt: "...", strategy: "retry", exitCondition: "npm test" })` |
+| **LoopStatus** | Get loop details and iteration history | `LoopStatus({ loopId })` |
+| **ListLoops** | List loops with optional status filter | `ListLoops({ status: "running" })` |
+| **CancelLoop** | Cancel an active loop (optionally cancel in-flight tasks) | `CancelLoop({ loopId, cancelTasks: true })` |
 
 ### CLI Commands
 
@@ -106,6 +110,11 @@ Once configured, use these MCP tools:
 | `beat schedule resume <id>` | Resume a paused schedule |
 | `beat schedule cancel <id>` | Cancel a schedule |
 | `beat pipeline <prompt> ...` | Create chained one-time schedules |
+| `beat loop <prompt> --until <cmd>` | Create a retry loop (run until condition passes) |
+| `beat loop <prompt> --eval <cmd>` | Create an optimize loop (score-based) |
+| `beat loop list` | List loops with optional status filter |
+| `beat loop get <loop-id>` | Get loop details and iteration history |
+| `beat loop cancel <loop-id>` | Cancel a loop |
 | `beat config show\|set\|reset\|path` | Manage configuration |
 | `beat help` | Show help |
 
@@ -319,7 +328,7 @@ backbeat/
 - [x] v0.4.0 - Task scheduling and task resumption
 - [x] v0.5.0 - Multi-agent support (Claude, Codex, Gemini)
 - [x] v0.6.0 - Architectural simplification + scheduled pipelines
-- [ ] v0.7.0 - Task/pipeline loops
+- [x] v0.7.0 - Task/pipeline loops
 
 See **[ROADMAP.md](./docs/ROADMAP.md)** for detailed plans and timelines.
 

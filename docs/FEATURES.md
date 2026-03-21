@@ -2,7 +2,7 @@
 
 This document lists all features that are **currently implemented and working** in Backbeat.
 
-Last Updated: March 2026
+Last Updated: March 2026 (v0.7.0)
 
 ## ✅ Core Task Delegation
 
@@ -154,8 +154,8 @@ Last Updated: March 2026
 
 ### Design Patterns (v0.6.0 Hybrid Event Model)
 - **Hybrid Event-Driven Architecture**: Commands (state changes) flow through EventBus; queries use direct repository access
-- **Event Handlers**: Specialized handlers (Persistence, Queue, Worker, Dependency, Schedule, Checkpoint)
-- **Singleton EventBus**: Shared event bus across all system components (25 events)
+- **Event Handlers**: Specialized handlers (Persistence, Queue, Worker, Dependency, Schedule, Checkpoint, Loop)
+- **Singleton EventBus**: Shared event bus across all system components (29 events)
 - **Dependency Injection**: Container-based DI with Result types
 - **Result Pattern**: No exceptions in business logic
 - **Immutable Domain**: Readonly data structures
@@ -288,6 +288,51 @@ Last Updated: March 2026
 - **Dependency Failure Cascade**: Failed/cancelled upstream tasks now cascade cancellation to dependents (was incorrectly unblocking them)
 - **Queue Handler Race Condition**: Fast-path check prevents blocked tasks from being prematurely enqueued
 
+## ✅ Task/Pipeline Loops (v0.7.0)
+
+### MCP Tools
+- **CreateLoop**: Create an iterative loop that runs a task repeatedly until an exit condition is met (retry or optimize strategy)
+- **LoopStatus**: Get loop details including optional iteration history
+- **ListLoops**: List loops with optional status filter and pagination
+- **CancelLoop**: Cancel an active loop, optionally cancelling in-flight iteration tasks
+
+### Loop Strategies
+- **Retry**: Run a task until an exit condition passes — shell command returning exit code 0 ends the loop
+- **Optimize**: Run a task, score output with eval script, keep improvements — seek the best score across iterations (minimize or maximize direction)
+
+### Single Task Loops
+- **Task Prompt**: Each iteration runs the same prompt (or enriched with checkpoint context if `freshContext` is false)
+- **Exit Condition**: Shell command evaluated after each iteration to determine pass/fail or score
+
+### Pipeline Loops
+- **Multi-Step Iterations**: Repeat a full pipeline (2–20 steps) per iteration instead of a single task
+- **Linear Dependencies**: Each pipeline step depends on the previous step within the iteration
+- **Same Exit Condition**: Evaluated after all pipeline steps complete
+
+### Configuration
+- **Max Iterations**: Safety cap on iteration count (0 = unlimited, default: 10)
+- **Max Consecutive Failures**: Stop after N consecutive failures (default: 3)
+- **Cooldown**: Delay between iterations in milliseconds (default: 0)
+- **Eval Timeout**: Timeout for exit condition evaluation (default: 60s, minimum: 1s)
+- **Fresh Context**: Each iteration gets a fresh agent context (default: true) or continues from previous checkpoint
+
+### CLI Commands (v0.7.0)
+- `beat loop <prompt> --until <cmd>`: Create a retry loop (run until shell command exits 0)
+- `beat loop <prompt> --eval <cmd> --direction minimize|maximize`: Create an optimize loop (score-based)
+- `beat loop --pipeline --step "..." --step "..." --until <cmd>`: Create a pipeline loop
+- `beat loop list [--status <status>]`: List loops with optional status filter
+- `beat loop get <loop-id> [--history]`: Get loop details and iteration history
+- `beat loop cancel <loop-id> [--cancel-tasks] [reason]`: Cancel a loop with optional task cancellation
+
+### Event-Driven Integration
+- **LoopCreated**: Emitted when a new loop is created
+- **LoopIterationCompleted**: Emitted when an iteration finishes with its result (pass/fail/keep/discard/crash)
+- **LoopCompleted**: Emitted when the loop reaches its exit condition or max iterations
+- **LoopCancelled**: Emitted when a loop is cancelled
+
+### Database Schema
+- **Migration 10**: `loops` table for loop definitions and state, `loop_iterations` table for per-iteration execution records
+
 ## ❌ NOT Implemented (Despite Some Documentation Claims)
 - **Distributed Processing**: Single-server only
 - **Web UI**: No dashboard interface
@@ -296,6 +341,28 @@ Last Updated: March 2026
 - **REST API**: MCP protocol only
 
 ---
+
+---
+
+## 🆕 What's New in v0.7.0
+
+### Task/Pipeline Loops
+- **`CreateLoop` MCP Tool**: Create retry or optimize loops for single tasks or pipelines (2–20 steps)
+- **Retry Strategy**: Run a task until an exit condition shell command returns exit code 0
+- **Optimize Strategy**: Score iterations with an eval script, keep improvements (minimize or maximize)
+- **Pipeline Loops**: Repeat a multi-step pipeline per iteration with linear task dependencies
+- **Fresh Context**: Each iteration gets a clean agent context by default, or continues from previous checkpoint
+- **Safety Controls**: Max iterations (0 = unlimited), max consecutive failures, cooldown between iterations
+- **Configurable Eval Timeout**: Exit condition evaluation timeout (default: 60s)
+- **CLI**: `beat loop`, `beat loop list`, `beat loop get`, `beat loop cancel` commands
+- **4 MCP Tools**: `CreateLoop`, `LoopStatus`, `ListLoops`, `CancelLoop`
+
+### Event System
+- **4 New Events**: `LoopCreated`, `LoopIterationCompleted`, `LoopCompleted`, `LoopCancelled`
+- **Loop Handler**: Event-driven iteration engine manages loop lifecycle
+
+### Database
+- **Migration 10**: `loops` and `loop_iterations` tables
 
 ---
 
