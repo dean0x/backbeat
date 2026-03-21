@@ -58,6 +58,7 @@ npm run test:coverage       # With coverage
 - `PersistenceHandler` → database operations
 - `ScheduleHandler` → schedule lifecycle (create, pause, resume, cancel)
 - `ScheduleExecutor` → cron/one-time execution engine (note: has direct repo writes, architectural exception to event-driven pattern)
+- `LoopHandler` → loop iteration engine (retry/optimize strategies, exit condition evaluation)
 
 See `docs/architecture/` for implementation details.
 
@@ -125,6 +126,8 @@ See `docs/TASK-DEPENDENCIES.md` for usage patterns.
 - `workers` table: active worker registrations with ownerPid for crash detection (migration v9)
 - `schedules` table: schedule definitions, cron/one-time config, status, timezone
 - `schedule_executions` table: execution history and audit trail
+- `loops` table: loop definitions, strategy, exit condition, iteration state (migration v10)
+- `loop_iterations` table: per-iteration execution records with scores and results (migration v10)
 
 ### Dependencies
 
@@ -135,7 +138,7 @@ When adding task dependencies:
 
 ### MCP Tools
 
-All tools use PascalCase: `DelegateTask`, `TaskStatus`, `TaskLogs`, `CancelTask`, `ScheduleTask`, `ListSchedules`, `GetSchedule`, `CancelSchedule`, `PauseSchedule`, `ResumeSchedule`, `CreatePipeline`, `SchedulePipeline`
+All tools use PascalCase: `DelegateTask`, `TaskStatus`, `TaskLogs`, `CancelTask`, `ScheduleTask`, `ListSchedules`, `GetSchedule`, `CancelSchedule`, `PauseSchedule`, `ResumeSchedule`, `CreatePipeline`, `SchedulePipeline`, `CreateLoop`, `LoopStatus`, `ListLoops`, `CancelLoop`
 
 ## File Locations
 
@@ -158,6 +161,9 @@ Quick reference for common operations:
 | Schedule executor | `src/services/schedule-executor.ts` |
 | Schedule manager | `src/services/schedule-manager.ts` |
 | Cron utilities | `src/utils/cron.ts` |
+| Loop repository | `src/implementations/loop-repository.ts` |
+| Loop handler | `src/services/handlers/loop-handler.ts` |
+| Loop manager | `src/services/loop-manager.ts` |
 
 ## Documentation Structure
 

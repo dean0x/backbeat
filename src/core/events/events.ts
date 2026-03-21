@@ -2,7 +2,7 @@
  * Event type definitions for the hybrid event-driven architecture.
  * Commands flow through events (TaskDelegated, TaskQueued, etc.).
  * Queries use direct repository access (no query events).
- * 25 event types remain after Phase 1 simplification.
+ * 29 event types after adding loop events (v0.7.0).
  */
 
 import {

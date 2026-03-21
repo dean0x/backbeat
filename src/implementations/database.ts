@@ -611,6 +611,7 @@ export class Database implements TransactionRunner {
 
           // Performance indexes for loop queries
           db.exec(`
+            CREATE INDEX IF NOT EXISTS idx_loops_status ON loops(status);
             CREATE INDEX IF NOT EXISTS idx_loop_iterations_loop_id ON loop_iterations(loop_id);
             CREATE INDEX IF NOT EXISTS idx_loop_iterations_task_id ON loop_iterations(task_id);
             CREATE INDEX IF NOT EXISTS idx_loop_iterations_status ON loop_iterations(status);
