@@ -1936,9 +1936,7 @@ describe('MCPAdapter - Loop Tools', () => {
     });
 
     it('should propagate service errors', async () => {
-      mockLoopService.setCreateLoopResult(
-        err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Failed to create loop', {})),
-      );
+      mockLoopService.setCreateLoopResult(err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Failed to create loop', {})));
 
       const result = await simulateCreateLoop(mockLoopService, {
         exitCondition: 'true',
@@ -1995,9 +1993,7 @@ describe('MCPAdapter - Loop Tools', () => {
     });
 
     it('should propagate service errors', async () => {
-      mockLoopService.setGetLoopResult(
-        err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Loop not found', {})),
-      );
+      mockLoopService.setGetLoopResult(err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Loop not found', {})));
 
       const result = await simulateLoopStatus(mockLoopService, { loopId: 'non-existent' });
 
@@ -2063,9 +2059,7 @@ describe('MCPAdapter - Loop Tools', () => {
     });
 
     it('should propagate service errors', async () => {
-      mockLoopService.setCancelLoopResult(
-        err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Loop not found', {})),
-      );
+      mockLoopService.setCancelLoopResult(err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Loop not found', {})));
 
       const result = await simulateCancelLoop(mockLoopService, { loopId: 'non-existent' });
 

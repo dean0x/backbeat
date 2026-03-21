@@ -366,7 +366,11 @@ describe('LoopHandler - Behavioral Tests', () => {
 
     it('should crash iteration on NaN score (R5)', async () => {
       // Mock: exit condition returns non-numeric output
-      mockEvaluator.evaluate.mockResolvedValue({ passed: false, error: 'Invalid score: not-a-number (must be a finite number)', exitCode: 0 });
+      mockEvaluator.evaluate.mockResolvedValue({
+        passed: false,
+        error: 'Invalid score: not-a-number (must be a finite number)',
+        exitCode: 0,
+      });
 
       const loop = await createAndEmitLoop({
         strategy: LoopStrategy.OPTIMIZE,
