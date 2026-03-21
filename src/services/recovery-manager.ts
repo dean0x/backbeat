@@ -6,7 +6,14 @@
 import { isTerminalState, Task, TaskStatus } from '../core/domain.js';
 import { BackbeatError, ErrorCode } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
-import { DependencyRepository, Logger, LoopRepository, TaskQueue, TaskRepository, WorkerRepository } from '../core/interfaces.js';
+import {
+  DependencyRepository,
+  Logger,
+  LoopRepository,
+  TaskQueue,
+  TaskRepository,
+  WorkerRepository,
+} from '../core/interfaces.js';
 import { ok, Result } from '../core/result.js';
 
 export class RecoveryManager {

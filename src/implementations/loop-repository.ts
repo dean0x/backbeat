@@ -329,14 +329,11 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
   }
 
   async cleanupOldLoops(olderThanMs: number): Promise<Result<number>> {
-    return tryCatchAsync(
-      async () => {
-        const cutoff = Date.now() - olderThanMs;
-        const result = this.cleanupOldLoopsStmt.run(cutoff);
-        return result.changes;
-      },
-      operationErrorHandler('cleanup old loops'),
-    );
+    return tryCatchAsync(async () => {
+      const cutoff = Date.now() - olderThanMs;
+      const result = this.cleanupOldLoopsStmt.run(cutoff);
+      return result.changes;
+    }, operationErrorHandler('cleanup old loops'));
   }
 
   // ============================================================================
