@@ -125,7 +125,7 @@ describe('SQLiteLoopRepository - Unit Tests', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      expect(result.value).toBeUndefined();
+      expect(result.value).toBeNull();
     });
 
     it('should handle optimize strategy with evalDirection', async () => {
@@ -321,7 +321,7 @@ describe('SQLiteLoopRepository - Unit Tests', () => {
       expect(findResult.ok).toBe(true);
       if (!findResult.ok) return;
 
-      expect(findResult.value).toBeUndefined();
+      expect(findResult.value).toBeNull();
     });
 
     it('should cascade delete iterations when loop is deleted', async () => {
@@ -431,7 +431,7 @@ describe('SQLiteLoopRepository - Unit Tests', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      expect(result.value).toBeUndefined();
+      expect(result.value).toBeNull();
     });
   });
 
@@ -552,9 +552,9 @@ describe('SQLiteLoopRepository - Unit Tests', () => {
       expect(found!.consecutiveFailures).toBe(1);
     });
 
-    it('findByIdSync should return undefined when not found', () => {
+    it('findByIdSync should return null when not found', () => {
       const found = repo.findByIdSync(LoopId('no-such-loop'));
-      expect(found).toBeUndefined();
+      expect(found).toBeNull();
     });
 
     it('recordIterationSync should record an iteration', async () => {
