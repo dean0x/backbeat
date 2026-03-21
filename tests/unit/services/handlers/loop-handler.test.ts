@@ -7,7 +7,7 @@
  * from inner handlers and logs them rather than propagating. Tests verify state and events
  * rather than thrown exceptions.
  *
- * Exit condition evaluation uses child_process.exec (async via promisify), mocked via vi.mock.
+ * Exit condition evaluation uses injected ExitConditionEvaluator (DI pattern).
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,6 +22,7 @@ import {
   TaskStatus,
 } from '../../../../src/core/domain.js';
 import { InMemoryEventBus } from '../../../../src/core/events/event-bus.js';
+import type { ExitConditionEvaluator } from '../../../../src/core/interfaces.js';
 import { Database } from '../../../../src/implementations/database.js';
 import { SQLiteLoopRepository } from '../../../../src/implementations/loop-repository.js';
 import { SQLiteTaskRepository } from '../../../../src/implementations/task-repository.js';
@@ -29,36 +30,6 @@ import { LoopHandler } from '../../../../src/services/handlers/loop-handler.js';
 import { createTestConfiguration } from '../../../fixtures/factories.js';
 import { TestLogger } from '../../../fixtures/test-doubles.js';
 import { flushEventLoop } from '../../../utils/event-helpers.js';
-
-// Mock child_process.exec for exit condition evaluation (async via promisify)
-vi.mock('child_process', () => ({
-  exec: vi.fn(),
-}));
-
-// Import after mock setup
-import { exec } from 'child_process';
-
-/**
- * Helper: mock async exec (via promisify) to succeed with given stdout
- * promisify(exec) calls exec(cmd, opts, callback) — mock the callback-based API
- */
-function mockExecSuccess(stdout: string): void {
-  vi.mocked(exec).mockImplementation((_cmd: unknown, _opts: unknown, callback: unknown) => {
-    (callback as (err: null, result: { stdout: string; stderr: string }) => void)(null, { stdout, stderr: '' });
-    return {} as ReturnType<typeof exec>;
-  });
-}
-
-/**
- * Helper: mock async exec (via promisify) to fail with given exit code and stderr
- */
-function mockExecFailure(exitCode: number, stderr: string): void {
-  vi.mocked(exec).mockImplementation((_cmd: unknown, _opts: unknown, callback: unknown) => {
-    const error = Object.assign(new Error(stderr), { code: exitCode, stdout: '', stderr });
-    (callback as (err: Error, result: { stdout: string; stderr: string }) => void)(error, { stdout: '', stderr });
-    return {} as ReturnType<typeof exec>;
-  });
-}
 
 /**
  * Minimal mock checkpoint repository
@@ -81,6 +52,7 @@ describe('LoopHandler - Behavioral Tests', () => {
   let database: Database;
   let logger: TestLogger;
   let mockCheckpointRepo: ReturnType<typeof createMockCheckpointRepo>;
+  let mockEvaluator: ExitConditionEvaluator & { evaluate: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     logger = new TestLogger();
@@ -92,11 +64,17 @@ describe('LoopHandler - Behavioral Tests', () => {
     loopRepo = new SQLiteLoopRepository(database);
     taskRepo = new SQLiteTaskRepository(database);
     mockCheckpointRepo = createMockCheckpointRepo();
+    mockEvaluator = { evaluate: vi.fn().mockResolvedValue({ passed: true, exitCode: 0 }) };
 
-    // Reset exec mock
-    vi.mocked(exec).mockReset();
-
-    const handlerResult = await LoopHandler.create(loopRepo, taskRepo, mockCheckpointRepo, eventBus, database, logger);
+    const handlerResult = await LoopHandler.create(
+      loopRepo,
+      taskRepo,
+      mockCheckpointRepo,
+      eventBus,
+      database,
+      mockEvaluator,
+      logger,
+    );
     if (!handlerResult.ok) {
       throw new Error(`Failed to create LoopHandler: ${handlerResult.error.message}`);
     }
@@ -164,6 +142,7 @@ describe('LoopHandler - Behavioral Tests', () => {
         createMockCheckpointRepo(),
         freshEventBus,
         freshDb,
+        { evaluate: vi.fn().mockResolvedValue({ passed: true, exitCode: 0 }) },
         freshLogger,
       );
 
@@ -194,7 +173,7 @@ describe('LoopHandler - Behavioral Tests', () => {
 
     it('should complete loop when exit condition passes (exit code 0)', async () => {
       // Mock: exit condition succeeds
-      mockExecSuccess('success\n');
+      mockEvaluator.evaluate.mockResolvedValue({ passed: true, exitCode: 0 });
 
       const loop = await createAndEmitLoop();
       const taskId = await getLatestTaskId(loop.id);
@@ -216,7 +195,7 @@ describe('LoopHandler - Behavioral Tests', () => {
 
     it('should start next iteration when exit condition fails (non-zero exit code)', async () => {
       // Mock: exit condition fails
-      mockExecFailure(1, 'test failed');
+      mockEvaluator.evaluate.mockResolvedValue({ passed: false, exitCode: 1, error: 'test failed' });
 
       const loop = await createAndEmitLoop();
       const taskId = await getLatestTaskId(loop.id);
@@ -234,7 +213,7 @@ describe('LoopHandler - Behavioral Tests', () => {
 
     it('should complete loop when max iterations reached', async () => {
       // Mock: exit condition always fails
-      mockExecFailure(1, 'fail');
+      mockEvaluator.evaluate.mockResolvedValue({ passed: false, exitCode: 1, error: 'fail' });
 
       const loop = await createAndEmitLoop({ maxIterations: 2 });
 
@@ -300,7 +279,7 @@ describe('LoopHandler - Behavioral Tests', () => {
   describe('Optimize strategy', () => {
     it('should keep first iteration as baseline (R5)', async () => {
       // Mock: exit condition returns score
-      mockExecSuccess('42.5\n');
+      mockEvaluator.evaluate.mockResolvedValue({ passed: true, score: 42.5, exitCode: 0 });
 
       const loop = await createAndEmitLoop({
         strategy: LoopStrategy.OPTIMIZE,
@@ -329,7 +308,7 @@ describe('LoopHandler - Behavioral Tests', () => {
 
     it('should keep better score and update bestScore (maximize)', async () => {
       // First iteration: score 10
-      mockExecSuccess('10\n');
+      mockEvaluator.evaluate.mockResolvedValue({ passed: true, score: 10, exitCode: 0 });
 
       const loop = await createAndEmitLoop({
         strategy: LoopStrategy.OPTIMIZE,
@@ -342,7 +321,7 @@ describe('LoopHandler - Behavioral Tests', () => {
       await flushEventLoop();
 
       // Second iteration: score 20 (better)
-      mockExecSuccess('20\n');
+      mockEvaluator.evaluate.mockResolvedValue({ passed: true, score: 20, exitCode: 0 });
       const taskId2 = await getLatestTaskId(loop.id);
       await eventBus.emit('TaskCompleted', { taskId: taskId2!, exitCode: 0, duration: 100 });
       await flushEventLoop();
@@ -354,7 +333,7 @@ describe('LoopHandler - Behavioral Tests', () => {
 
     it('should discard worse score and increment consecutiveFailures (maximize)', async () => {
       // First iteration: score 50
-      mockExecSuccess('50\n');
+      mockEvaluator.evaluate.mockResolvedValue({ passed: true, score: 50, exitCode: 0 });
 
       const loop = await createAndEmitLoop({
         strategy: LoopStrategy.OPTIMIZE,
@@ -368,7 +347,7 @@ describe('LoopHandler - Behavioral Tests', () => {
       await flushEventLoop();
 
       // Second iteration: score 30 (worse for maximize)
-      mockExecSuccess('30\n');
+      mockEvaluator.evaluate.mockResolvedValue({ passed: true, score: 30, exitCode: 0 });
       const taskId2 = await getLatestTaskId(loop.id);
       await eventBus.emit('TaskCompleted', { taskId: taskId2!, exitCode: 0, duration: 100 });
       await flushEventLoop();
@@ -387,7 +366,7 @@ describe('LoopHandler - Behavioral Tests', () => {
 
     it('should crash iteration on NaN score (R5)', async () => {
       // Mock: exit condition returns non-numeric output
-      mockExecSuccess('not-a-number\n');
+      mockEvaluator.evaluate.mockResolvedValue({ passed: false, error: 'Invalid score: not-a-number (must be a finite number)', exitCode: 0 });
 
       const loop = await createAndEmitLoop({
         strategy: LoopStrategy.OPTIMIZE,
@@ -409,7 +388,7 @@ describe('LoopHandler - Behavioral Tests', () => {
 
     it('should work with minimize direction (lower is better)', async () => {
       // First iteration: score 100
-      mockExecSuccess('100\n');
+      mockEvaluator.evaluate.mockResolvedValue({ passed: true, score: 100, exitCode: 0 });
 
       const loop = await createAndEmitLoop({
         strategy: LoopStrategy.OPTIMIZE,
@@ -422,7 +401,7 @@ describe('LoopHandler - Behavioral Tests', () => {
       await flushEventLoop();
 
       // Second iteration: score 50 (better for minimize)
-      mockExecSuccess('50\n');
+      mockEvaluator.evaluate.mockResolvedValue({ passed: true, score: 50, exitCode: 0 });
       const taskId2 = await getLatestTaskId(loop.id);
       await eventBus.emit('TaskCompleted', { taskId: taskId2!, exitCode: 0, duration: 100 });
       await flushEventLoop();
@@ -454,7 +433,7 @@ describe('LoopHandler - Behavioral Tests', () => {
     });
 
     it('should only trigger evaluation when tail task completes (R4)', async () => {
-      mockExecSuccess('success\n');
+      mockEvaluator.evaluate.mockResolvedValue({ passed: true, exitCode: 0 });
 
       const loop = await createAndEmitLoop({
         pipelineSteps: ['lint the code', 'run the tests'],
@@ -590,7 +569,7 @@ describe('LoopHandler - Behavioral Tests', () => {
       // Verify that a loop with cooldown > 0 schedules next iteration via setTimeout
       // We test this by checking that the loop remains at iteration 1 after exit condition
       // fails (because the next iteration is delayed by cooldown, not started immediately)
-      mockExecFailure(1, 'fail');
+      mockEvaluator.evaluate.mockResolvedValue({ passed: false, exitCode: 1, error: 'fail' });
 
       // Use large cooldown to ensure the next iteration doesn't start during test
       const loop = await createAndEmitLoop({ cooldownMs: 999999, maxIterations: 3 });
@@ -674,6 +653,7 @@ describe('LoopHandler - Behavioral Tests', () => {
         createMockCheckpointRepo(),
         freshEventBus,
         database,
+        { evaluate: vi.fn().mockResolvedValue({ passed: true, exitCode: 0 }) },
         new TestLogger(),
       );
 
@@ -686,9 +666,9 @@ describe('LoopHandler - Behavioral Tests', () => {
     });
   });
 
-  describe('Eval env vars (R11)', () => {
-    it('should inject BACKBEAT_LOOP_ID, BACKBEAT_ITERATION, BACKBEAT_TASK_ID into exit condition env', async () => {
-      mockExecSuccess('ok\n');
+  describe('ExitConditionEvaluator DI', () => {
+    it('should call evaluator with correct loop and taskId on task completion', async () => {
+      mockEvaluator.evaluate.mockResolvedValue({ passed: true, exitCode: 0 });
 
       const loop = await createAndEmitLoop();
       const taskId = await getLatestTaskId(loop.id);
@@ -697,33 +677,20 @@ describe('LoopHandler - Behavioral Tests', () => {
       await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
       await flushEventLoop();
 
-      // Verify exec was called with env vars
-      expect(exec).toHaveBeenCalled();
-      const callArgs = vi.mocked(exec).mock.calls[0];
-      const options = callArgs[1] as Record<string, unknown>;
-      const env = options.env as Record<string, string>;
-
-      expect(env.BACKBEAT_LOOP_ID).toBe(loop.id);
-      expect(env.BACKBEAT_ITERATION).toBeDefined();
-      expect(env.BACKBEAT_TASK_ID).toBe(taskId!);
+      // Verify evaluator was called with loop and taskId
+      expect(mockEvaluator.evaluate).toHaveBeenCalledTimes(1);
+      const [calledLoop, calledTaskId] = mockEvaluator.evaluate.mock.calls[0];
+      expect(calledLoop.id).toBe(loop.id);
+      expect(calledTaskId).toBe(taskId!);
     });
   });
 
   describe('Context enrichment (R2)', () => {
     it('should enrich prompt with checkpoint when freshContext=false', async () => {
       // Mock: exit condition fails first time, succeeds second
-      let callCount = 0;
-      vi.mocked(exec).mockImplementation((_cmd: unknown, _opts: unknown, callback: unknown) => {
-        callCount++;
-        const cb = callback as (err: Error | null, result: { stdout: string; stderr: string }) => void;
-        if (callCount === 1) {
-          const error = Object.assign(new Error('test failed'), { code: 1, stdout: '', stderr: 'test failed' });
-          cb(error, { stdout: '', stderr: 'test failed' });
-        } else {
-          cb(null, { stdout: 'success\n', stderr: '' });
-        }
-        return {} as ReturnType<typeof exec>;
-      });
+      mockEvaluator.evaluate
+        .mockResolvedValueOnce({ passed: false, exitCode: 1, error: 'test failed' })
+        .mockResolvedValueOnce({ passed: true, exitCode: 0 });
 
       // Mock checkpoint to return context for previous iteration
       mockCheckpointRepo.findLatest.mockResolvedValue({

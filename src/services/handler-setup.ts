@@ -28,6 +28,7 @@ import {
 import { err, ok, Result } from '../core/result.js';
 import { CheckpointHandler } from './handlers/checkpoint-handler.js';
 import { DependencyHandler } from './handlers/dependency-handler.js';
+import { ShellExitConditionEvaluator } from './exit-condition-evaluator.js';
 import { LoopHandler } from './handlers/loop-handler.js';
 import { PersistenceHandler } from './handlers/persistence-handler.js';
 import { QueueHandler } from './handlers/queue-handler.js';
@@ -318,6 +319,7 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
     deps.checkpointRepository,
     eventBus,
     deps.database,
+    new ShellExitConditionEvaluator(),
     childLogger('LoopHandler'),
   );
   if (!loopHandlerResult.ok) {

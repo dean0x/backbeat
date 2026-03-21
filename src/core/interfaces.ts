@@ -639,3 +639,23 @@ export interface LoopService {
   listLoops(status?: LoopStatus, limit?: number, offset?: number): Promise<Result<readonly Loop[]>>;
   cancelLoop(loopId: LoopId, reason?: string, cancelTasks?: boolean): Promise<Result<void>>;
 }
+
+/**
+ * Exit condition evaluation result
+ * ARCHITECTURE: Discriminated by strategy — retry returns pass/fail, optimize returns score
+ */
+export interface EvalResult {
+  readonly passed: boolean;
+  readonly score?: number;
+  readonly exitCode?: number;
+  readonly error?: string;
+}
+
+/**
+ * Exit condition evaluator abstraction for dependency injection
+ * ARCHITECTURE: Decouples loop handler from child_process for testability
+ * Pattern: Strategy pattern — implementations can use shell exec, HTTP, etc.
+ */
+export interface ExitConditionEvaluator {
+  evaluate(loop: Loop, taskId: TaskId): Promise<EvalResult>;
+}

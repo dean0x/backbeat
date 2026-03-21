@@ -6,8 +6,6 @@
  *   and crash recovery — all driven by events from task completion/failure
  */
 
-import { exec as cpExec } from 'child_process';
-import { promisify } from 'util';
 import type { Loop, LoopIteration, Task } from '../../core/domain.js';
 import {
   createTask,
@@ -32,6 +30,8 @@ import type {
 import { BaseEventHandler } from '../../core/events/handlers.js';
 import type {
   CheckpointRepository,
+  EvalResult,
+  ExitConditionEvaluator,
   Logger,
   LoopRepository,
   SyncLoopOperations,
@@ -40,19 +40,6 @@ import type {
   TransactionRunner,
 } from '../../core/interfaces.js';
 import { err, ok, type Result } from '../../core/result.js';
-
-const execAsync = promisify(cpExec);
-
-/**
- * Exit condition evaluation result
- * ARCHITECTURE: Discriminated by strategy — retry returns pass/fail, optimize returns score
- */
-interface EvalResult {
-  readonly passed: boolean;
-  readonly score?: number;
-  readonly exitCode?: number;
-  readonly error?: string;
-}
 
 export class LoopHandler extends BaseEventHandler {
   // In-memory state (rebuilt from DB on restart)
@@ -70,6 +57,7 @@ export class LoopHandler extends BaseEventHandler {
     private readonly checkpointRepo: CheckpointRepository,
     private readonly eventBus: EventBus,
     private readonly database: TransactionRunner,
+    private readonly exitConditionEvaluator: ExitConditionEvaluator,
     logger: Logger,
   ) {
     super(logger, 'LoopHandler');
@@ -86,11 +74,20 @@ export class LoopHandler extends BaseEventHandler {
     checkpointRepo: CheckpointRepository,
     eventBus: EventBus,
     database: TransactionRunner,
+    exitConditionEvaluator: ExitConditionEvaluator,
     logger: Logger,
   ): Promise<Result<LoopHandler, BackbeatError>> {
     const handlerLogger = logger.child ? logger.child({ module: 'LoopHandler' }) : logger;
 
-    const handler = new LoopHandler(loopRepo, taskRepo, checkpointRepo, eventBus, database, handlerLogger);
+    const handler = new LoopHandler(
+      loopRepo,
+      taskRepo,
+      checkpointRepo,
+      eventBus,
+      database,
+      exitConditionEvaluator,
+      handlerLogger,
+    );
 
     // Subscribe to events
     const subscribeResult = handler.subscribeToEvents();
@@ -260,7 +257,7 @@ export class LoopHandler extends BaseEventHandler {
       }
 
       // Task COMPLETED — run exit condition evaluation
-      const evalResult = await this.evaluateExitCondition(loop, taskId);
+      const evalResult = await this.exitConditionEvaluator.evaluate(loop, taskId);
 
       await this.handleIterationResult(loop, iteration, evalResult);
 
@@ -578,72 +575,6 @@ export class LoopHandler extends BaseEventHandler {
       stepCount: steps.length,
       tailTaskId: lastTaskId,
     });
-  }
-
-  // ============================================================================
-  // EXIT CONDITION EVALUATION
-  // ============================================================================
-
-  /**
-   * Evaluate the exit condition for an iteration
-   * ARCHITECTURE: Uses child_process.exec (async via promisify) with injected env vars (R11)
-   * - Retry strategy: exit code 0 = pass, non-zero = fail
-   * - Optimize strategy: parse last non-empty line of stdout as score
-   */
-  private async evaluateExitCondition(loop: Loop, taskId: TaskId): Promise<EvalResult> {
-    const env = {
-      ...process.env,
-      BACKBEAT_LOOP_ID: loop.id,
-      BACKBEAT_ITERATION: String(loop.currentIteration),
-      BACKBEAT_TASK_ID: taskId,
-    };
-
-    try {
-      const { stdout } = await execAsync(loop.exitCondition, {
-        cwd: loop.workingDirectory,
-        timeout: loop.evalTimeout,
-        env,
-      });
-
-      if (loop.strategy === LoopStrategy.RETRY) {
-        // Exit code 0 = pass
-        return { passed: true, exitCode: 0 };
-      }
-
-      // OPTIMIZE strategy: parse last non-empty line as score (R11)
-      const lines = stdout.split('\n').filter((line) => line.trim().length > 0);
-      if (lines.length === 0) {
-        return { passed: false, error: 'No output from exit condition for optimize strategy' };
-      }
-
-      const lastLine = lines[lines.length - 1].trim();
-      const score = Number.parseFloat(lastLine);
-
-      if (!Number.isFinite(score)) {
-        // NaN or Infinity → crash
-        return { passed: false, error: `Invalid score: ${lastLine} (must be a finite number)`, exitCode: 0 };
-      }
-
-      return { passed: true, score, exitCode: 0 };
-    } catch (execError: unknown) {
-      const error = execError as { code?: number; stderr?: string; message?: string };
-
-      if (loop.strategy === LoopStrategy.RETRY) {
-        // Non-zero exit or timeout → fail
-        return {
-          passed: false,
-          exitCode: error.code ?? 1,
-          error: error.stderr || error.message || 'Exit condition failed',
-        };
-      }
-
-      // OPTIMIZE strategy: exec failure → crash
-      return {
-        passed: false,
-        error: error.stderr || error.message || 'Exit condition evaluation failed',
-        exitCode: error.code,
-      };
-    }
   }
 
   // ============================================================================
@@ -1226,7 +1157,7 @@ export class LoopHandler extends BaseEventHandler {
           });
 
           if (task.status === TaskStatus.COMPLETED) {
-            const evalResult = await this.evaluateExitCondition(loop, task.id);
+            const evalResult = await this.exitConditionEvaluator.evaluate(loop, task.id);
             await this.handleIterationResult(loop, latestIteration, evalResult);
           } else if (task.status === TaskStatus.FAILED) {
             // Record as fail and continue

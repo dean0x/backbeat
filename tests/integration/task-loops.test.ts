@@ -22,6 +22,7 @@ import { InMemoryEventBus } from '../../src/core/events/event-bus.js';
 import { Database } from '../../src/implementations/database.js';
 import { SQLiteLoopRepository } from '../../src/implementations/loop-repository.js';
 import { SQLiteTaskRepository } from '../../src/implementations/task-repository.js';
+import { ShellExitConditionEvaluator } from '../../src/services/exit-condition-evaluator.js';
 import { LoopHandler } from '../../src/services/handlers/loop-handler.js';
 import { LoopManagerService } from '../../src/services/loop-manager.js';
 import { createTestConfiguration } from '../fixtures/factories.js';
@@ -68,6 +69,7 @@ describe('Integration: Task Loops - End-to-End Flow', () => {
       createMockCheckpointRepo(),
       eventBus,
       database,
+      new ShellExitConditionEvaluator(),
       logger,
     );
     if (!handlerResult.ok) {
