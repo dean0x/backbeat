@@ -10,6 +10,13 @@ Nothing yet.
 
 ---
 
+## [0.7.1] - 2026-03-22
+
+### 🐛 Bug Fixes
+- **Missing `picocolors` dependency**: CLI commands crashed on global npm installs with `ERR_MODULE_NOT_FOUND` — `picocolors` was used but not declared in `package.json`
+
+---
+
 ## [0.7.0] - 2026-03-22
 
 ### 🚀 Features
