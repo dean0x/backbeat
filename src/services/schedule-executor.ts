@@ -10,6 +10,8 @@ import { MissedRunPolicy, ScheduleStatus, ScheduleType } from '../core/domain.js
 import { BackbeatError, ErrorCode } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
 import type {
+  LoopCancelledEvent,
+  LoopCompletedEvent,
   ScheduleExecutedEvent,
   TaskCancelledEvent,
   TaskCompletedEvent,
@@ -134,6 +136,17 @@ export class ScheduleExecutor {
 
       this.eventBus.subscribe<TaskTimeoutEvent>('TaskTimeout', async (event) => {
         this.clearRunningScheduleByTask(event.taskId);
+      }),
+
+      // Loop lifecycle events — clear running state for parent schedule
+      // ARCHITECTURE: loopId is stored in the taskId slot of runningSchedules when
+      // ScheduleHandler emits ScheduleExecuted for a loop trigger
+      this.eventBus.subscribe<LoopCompletedEvent>('LoopCompleted', async (event) => {
+        this.clearRunningScheduleByTask(event.loopId);
+      }),
+
+      this.eventBus.subscribe<LoopCancelledEvent>('LoopCancelled', async (event) => {
+        this.clearRunningScheduleByTask(event.loopId);
       }),
     ];
 

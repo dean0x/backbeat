@@ -271,6 +271,7 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
     deps.taskRepository,
     eventBus,
     deps.database,
+    deps.loopRepository,
     childLogger('ScheduleHandler'),
   );
   if (!scheduleHandlerResult.ok) {

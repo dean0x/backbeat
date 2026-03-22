@@ -21,6 +21,7 @@ import { EventBus } from '../core/events/event-bus.js';
 import { Logger, LoopRepository, LoopService } from '../core/interfaces.js';
 import { err, ok, Result } from '../core/result.js';
 import { truncatePrompt } from '../utils/format.js';
+import { captureGitState } from '../utils/git-state.js';
 import { validatePath } from '../utils/validation.js';
 
 export class LoopManagerService implements LoopService {
@@ -176,6 +177,35 @@ export class LoopManagerService implements LoopService {
     if (!agentResult.ok) return agentResult;
 
     // ========================================================================
+    // Git branch validation (v0.8.0)
+    // If gitBranch is set, verify working directory is a git repo and capture gitBaseBranch
+    // ========================================================================
+
+    let gitBaseBranch: string | undefined;
+    if (request.gitBranch) {
+      const gitStateResult = await captureGitState(validatedWorkingDirectory);
+      if (!gitStateResult.ok) {
+        return err(
+          new BackbeatError(
+            ErrorCode.INVALID_INPUT,
+            `gitBranch requires a git repository: ${gitStateResult.error.message}`,
+            { workingDirectory: validatedWorkingDirectory, gitBranch: request.gitBranch },
+          ),
+        );
+      }
+      if (!gitStateResult.value) {
+        return err(
+          new BackbeatError(
+            ErrorCode.INVALID_INPUT,
+            'gitBranch requires a git repository, but working directory is not a git repo',
+            { workingDirectory: validatedWorkingDirectory, gitBranch: request.gitBranch },
+          ),
+        );
+      }
+      gitBaseBranch = gitStateResult.value.branch;
+    }
+
+    // ========================================================================
     // Create loop via domain factory
     // ========================================================================
 
@@ -187,27 +217,34 @@ export class LoopManagerService implements LoopService {
       validatedWorkingDirectory,
     );
 
+    // If gitBranch was provided, inject gitBaseBranch into the loop
+    // ARCHITECTURE: createLoop sets gitBaseBranch to undefined; we override here
+    // because captureGitState is async (not available in pure domain factory)
+    const loopWithGit = gitBaseBranch ? Object.freeze({ ...loop, gitBaseBranch }) : loop;
+
     const promptSummary = request.prompt
       ? truncatePrompt(request.prompt, 50)
       : `Pipeline (${request.pipelineSteps?.length ?? 0} steps)`;
 
     this.logger.info('Creating loop', {
-      loopId: loop.id,
-      strategy: loop.strategy,
-      maxIterations: loop.maxIterations,
+      loopId: loopWithGit.id,
+      strategy: loopWithGit.strategy,
+      maxIterations: loopWithGit.maxIterations,
       prompt: promptSummary,
+      gitBranch: loopWithGit.gitBranch,
+      gitBaseBranch: loopWithGit.gitBaseBranch,
     });
 
     // Emit event — handler persists the loop
-    const emitResult = await this.eventBus.emit('LoopCreated', { loop });
+    const emitResult = await this.eventBus.emit('LoopCreated', { loop: loopWithGit });
     if (!emitResult.ok) {
       this.logger.error('Failed to emit LoopCreated event', emitResult.error, {
-        loopId: loop.id,
+        loopId: loopWithGit.id,
       });
       return err(emitResult.error);
     }
 
-    return ok(loop);
+    return ok(loopWithGit);
   }
 
   async getLoop(
@@ -249,12 +286,16 @@ export class LoopManagerService implements LoopService {
     if (!lookupResult.ok) return lookupResult;
 
     const loop = lookupResult.value;
-    if (loop.status !== LoopStatus.RUNNING) {
+    if (loop.status !== LoopStatus.RUNNING && loop.status !== LoopStatus.PAUSED) {
       return err(
-        new BackbeatError(ErrorCode.INVALID_OPERATION, `Loop ${loopId} is not running (status: ${loop.status})`, {
-          loopId,
-          status: loop.status,
-        }),
+        new BackbeatError(
+          ErrorCode.INVALID_OPERATION,
+          `Loop ${loopId} is not running or paused (status: ${loop.status})`,
+          {
+            loopId,
+            status: loop.status,
+          },
+        ),
       );
     }
 

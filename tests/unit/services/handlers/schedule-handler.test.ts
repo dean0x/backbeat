@@ -22,6 +22,7 @@ import {
 import { BackbeatError, ErrorCode } from '../../../../src/core/errors';
 import { InMemoryEventBus } from '../../../../src/core/events/event-bus';
 import { Database } from '../../../../src/implementations/database';
+import { SQLiteLoopRepository } from '../../../../src/implementations/loop-repository';
 import { SQLiteScheduleRepository } from '../../../../src/implementations/schedule-repository';
 import { SQLiteTaskRepository } from '../../../../src/implementations/task-repository';
 import { ScheduleHandler } from '../../../../src/services/handlers/schedule-handler';
@@ -34,6 +35,7 @@ describe('ScheduleHandler - Behavioral Tests', () => {
   let eventBus: InMemoryEventBus;
   let scheduleRepo: SQLiteScheduleRepository;
   let taskRepo: SQLiteTaskRepository;
+  let loopRepo: SQLiteLoopRepository;
   let database: Database;
   let logger: TestLogger;
 
@@ -45,8 +47,9 @@ describe('ScheduleHandler - Behavioral Tests', () => {
     database = new Database(':memory:');
     scheduleRepo = new SQLiteScheduleRepository(database);
     taskRepo = new SQLiteTaskRepository(database);
+    loopRepo = new SQLiteLoopRepository(database);
 
-    const handlerResult = await ScheduleHandler.create(scheduleRepo, taskRepo, eventBus, database, logger);
+    const handlerResult = await ScheduleHandler.create(scheduleRepo, taskRepo, eventBus, database, loopRepo, logger);
     if (!handlerResult.ok) {
       throw new Error(`Failed to create ScheduleHandler: ${handlerResult.error.message}`);
     }
@@ -86,11 +89,13 @@ describe('ScheduleHandler - Behavioral Tests', () => {
       const freshDb = new Database(':memory:');
       const freshScheduleRepo = new SQLiteScheduleRepository(freshDb);
       const freshTaskRepo = new SQLiteTaskRepository(freshDb);
+      const freshLoopRepo = new SQLiteLoopRepository(freshDb);
       const result = await ScheduleHandler.create(
         freshScheduleRepo,
         freshTaskRepo,
         freshEventBus,
         freshDb,
+        freshLoopRepo,
         freshLogger,
       );
 
