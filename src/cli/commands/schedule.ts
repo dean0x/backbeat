@@ -32,6 +32,7 @@ type ParsedScheduleCreateArgs =
 
 /**
  * Parse and validate schedule create arguments.
+ * ARCHITECTURE: Pure function — no side effects, returns Result for testability
  */
 export function parseScheduleCreateArgs(scheduleArgs: string[]): Result<ParsedScheduleCreateArgs, string> {
   const promptWords: string[] = [];

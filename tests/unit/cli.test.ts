@@ -2496,6 +2496,7 @@ async function simulateScheduleCreate(
     maxRuns?: number;
     expiresAt?: string;
     afterScheduleId?: string;
+    agent?: string;
   },
 ) {
   const { parseScheduleCreateArgs } = await import('../../src/cli/commands/schedule');
