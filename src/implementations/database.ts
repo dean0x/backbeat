@@ -619,6 +619,68 @@ export class Database implements TransactionRunner {
           `);
         },
       },
+      {
+        version: 11,
+        description:
+          'Add PAUSED to loop status, git/schedule fields to loops/iterations, loopConfig to schedules (v0.8.0)',
+        up: (db) => {
+          // 1. Recreate loops table with 'paused' in status CHECK + new columns
+          // Pattern: Safe table migration with data preservation (same as v2/v3)
+          db.exec(`
+            CREATE TABLE loops_new (
+              id TEXT PRIMARY KEY,
+              strategy TEXT NOT NULL CHECK(strategy IN ('retry', 'optimize')),
+              task_template TEXT NOT NULL,
+              pipeline_steps TEXT,
+              exit_condition TEXT NOT NULL,
+              eval_direction TEXT,
+              eval_timeout INTEGER NOT NULL DEFAULT 60000,
+              working_directory TEXT NOT NULL,
+              max_iterations INTEGER NOT NULL DEFAULT 10,
+              max_consecutive_failures INTEGER NOT NULL DEFAULT 3,
+              cooldown_ms INTEGER NOT NULL DEFAULT 0,
+              fresh_context INTEGER NOT NULL DEFAULT 1,
+              status TEXT NOT NULL DEFAULT 'running'
+                CHECK(status IN ('running', 'paused', 'completed', 'failed', 'cancelled')),
+              current_iteration INTEGER NOT NULL DEFAULT 0,
+              best_score REAL,
+              best_iteration_id INTEGER,
+              consecutive_failures INTEGER NOT NULL DEFAULT 0,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              completed_at INTEGER,
+              git_branch TEXT,
+              git_base_branch TEXT,
+              schedule_id TEXT REFERENCES schedules(id) ON DELETE SET NULL
+            )
+          `);
+
+          // Copy existing data — NULL for new columns
+          db.exec(`
+            INSERT INTO loops_new SELECT *, NULL, NULL, NULL FROM loops
+          `);
+
+          db.exec(`DROP TABLE loops`);
+          db.exec(`ALTER TABLE loops_new RENAME TO loops`);
+
+          // Recreate loops table indexes (dropped with table) + new schedule_id index
+          // NOTE: loop_iterations indexes survive since that table was not recreated
+          db.exec(`
+            CREATE INDEX idx_loops_status ON loops(status);
+            CREATE INDEX idx_loops_schedule_id ON loops(schedule_id);
+          `);
+
+          // 2. Add git fields to loop_iterations
+          db.exec(`ALTER TABLE loop_iterations ADD COLUMN git_branch TEXT`);
+          db.exec(`ALTER TABLE loop_iterations ADD COLUMN git_diff_summary TEXT`);
+
+          // 3. Add loop_config to schedules (JSON: LoopCreateRequest)
+          db.exec(`ALTER TABLE schedules ADD COLUMN loop_config TEXT`);
+
+          // 4. Add loop_id to schedule_executions
+          db.exec(`ALTER TABLE schedule_executions ADD COLUMN loop_id TEXT`);
+        },
+      },
     ];
   }
 

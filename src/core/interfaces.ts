@@ -15,6 +15,7 @@ import {
   ResumeTaskRequest,
   Schedule,
   ScheduleCreateRequest,
+  ScheduledLoopCreateRequest,
   ScheduledPipelineCreateRequest,
   ScheduleId,
   ScheduleStatus,
@@ -255,6 +256,7 @@ export interface ScheduleExecution {
   readonly status: 'pending' | 'triggered' | 'completed' | 'failed' | 'missed' | 'skipped';
   readonly errorMessage?: string; // Error details if status is 'failed' or 'missed'
   readonly pipelineTaskIds?: readonly TaskId[]; // All task IDs from a pipeline trigger (v0.6.0)
+  readonly loopId?: LoopId; // Loop ID created by this execution (v0.8.0)
   readonly createdAt: number;
 }
 
@@ -402,6 +404,7 @@ export interface ScheduleService {
   resumeSchedule(scheduleId: ScheduleId): Promise<Result<void>>;
   createPipeline(request: PipelineCreateRequest): Promise<Result<PipelineResult>>;
   createScheduledPipeline(request: ScheduledPipelineCreateRequest): Promise<Result<Schedule>>;
+  createScheduledLoop(request: ScheduledLoopCreateRequest): Promise<Result<Schedule>>;
 }
 
 /**
@@ -563,6 +566,15 @@ export interface LoopRepository {
   findByStatus(status: LoopStatus, limit?: number, offset?: number): Promise<Result<readonly Loop[]>>;
 
   /**
+   * Find loops by their owning schedule ID
+   * ARCHITECTURE: Used to find loops created by a scheduled loop trigger (v0.8.0)
+   *
+   * @param scheduleId Schedule to find loops for
+   * @returns Loops associated with the schedule, ordered by created_at DESC
+   */
+  findByScheduleId(scheduleId: ScheduleId): Promise<Result<readonly Loop[]>>;
+
+  /**
    * Count total loops
    */
   count(): Promise<Result<number>>;
@@ -638,6 +650,8 @@ export interface LoopService {
   ): Promise<Result<{ loop: Loop; iterations?: readonly LoopIteration[] }>>;
   listLoops(status?: LoopStatus, limit?: number, offset?: number): Promise<Result<readonly Loop[]>>;
   cancelLoop(loopId: LoopId, reason?: string, cancelTasks?: boolean): Promise<Result<void>>;
+  pauseLoop(loopId: LoopId, options?: { force?: boolean }): Promise<Result<void>>;
+  resumeLoop(loopId: LoopId): Promise<Result<void>>;
 }
 
 /**

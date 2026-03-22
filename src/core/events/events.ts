@@ -2,7 +2,7 @@
  * Event type definitions for the hybrid event-driven architecture.
  * Commands flow through events (TaskDelegated, TaskQueued, etc.).
  * Queries use direct repository access (no query events).
- * 29 event types after adding loop events (v0.7.0).
+ * 31 event types after adding loop pause/resume events (v0.8.0).
  */
 
 import {
@@ -226,6 +226,17 @@ export interface LoopCancelledEvent extends BaseEvent {
   reason?: string;
 }
 
+export interface LoopPausedEvent extends BaseEvent {
+  type: 'LoopPaused';
+  loopId: LoopId;
+  force: boolean; // If true, current iteration was cancelled; if false, waits for iteration to finish
+}
+
+export interface LoopResumedEvent extends BaseEvent {
+  type: 'LoopResumed';
+  loopId: LoopId;
+}
+
 /**
  * Union type of all events
  */
@@ -265,7 +276,9 @@ export type BackbeatEvent =
   | LoopCreatedEvent
   | LoopIterationCompletedEvent
   | LoopCompletedEvent
-  | LoopCancelledEvent;
+  | LoopCancelledEvent
+  | LoopPausedEvent
+  | LoopResumedEvent;
 
 /**
  * Event handler function type

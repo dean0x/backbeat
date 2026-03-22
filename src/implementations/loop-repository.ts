@@ -15,6 +15,7 @@ import {
   LoopStatus,
   LoopStrategy,
   OptimizeDirection,
+  ScheduleId,
   TaskId,
   type TaskRequest,
 } from '../core/domain.js';
@@ -42,7 +43,7 @@ const LoopRowSchema = z.object({
   max_consecutive_failures: z.number(),
   cooldown_ms: z.number(),
   fresh_context: z.number(), // SQLite boolean: 0 or 1
-  status: z.enum(['running', 'completed', 'failed', 'cancelled']),
+  status: z.enum(['running', 'paused', 'completed', 'failed', 'cancelled']),
   current_iteration: z.number(),
   best_score: z.number().nullable(),
   best_iteration_id: z.number().nullable(),
@@ -50,6 +51,9 @@ const LoopRowSchema = z.object({
   created_at: z.number(),
   updated_at: z.number(),
   completed_at: z.number().nullable(),
+  git_branch: z.string().nullable(),
+  git_base_branch: z.string().nullable(),
+  schedule_id: z.string().nullable(),
 });
 
 const LoopIterationRowSchema = z.object({
@@ -64,6 +68,8 @@ const LoopIterationRowSchema = z.object({
   error_message: z.string().nullable(),
   started_at: z.number(),
   completed_at: z.number().nullable(),
+  git_branch: z.string().nullable(),
+  git_diff_summary: z.string().nullable(),
 });
 
 /**
@@ -120,6 +126,9 @@ interface LoopRow {
   readonly created_at: number;
   readonly updated_at: number;
   readonly completed_at: number | null;
+  readonly git_branch: string | null;
+  readonly git_base_branch: string | null;
+  readonly schedule_id: string | null;
 }
 
 interface LoopIterationRow {
@@ -134,6 +143,8 @@ interface LoopIterationRow {
   readonly error_message: string | null;
   readonly started_at: number;
   readonly completed_at: number | null;
+  readonly git_branch: string | null;
+  readonly git_diff_summary: string | null;
 }
 
 export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations {
@@ -153,6 +164,7 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
   private readonly getIterationsStmt: SQLite.Statement;
   private readonly findIterationByTaskIdStmt: SQLite.Statement;
   private readonly findRunningIterationsStmt: SQLite.Statement;
+  private readonly findByScheduleIdStmt: SQLite.Statement;
   private readonly cleanupOldLoopsStmt: SQLite.Statement;
 
   constructor(database: Database) {
@@ -164,13 +176,15 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
         eval_direction, eval_timeout, working_directory, max_iterations,
         max_consecutive_failures, cooldown_ms, fresh_context, status,
         current_iteration, best_score, best_iteration_id, consecutive_failures,
-        created_at, updated_at, completed_at
+        created_at, updated_at, completed_at,
+        git_branch, git_base_branch, schedule_id
       ) VALUES (
         @id, @strategy, @taskTemplate, @pipelineSteps, @exitCondition,
         @evalDirection, @evalTimeout, @workingDirectory, @maxIterations,
         @maxConsecutiveFailures, @cooldownMs, @freshContext, @status,
         @currentIteration, @bestScore, @bestIterationId, @consecutiveFailures,
-        @createdAt, @updatedAt, @completedAt
+        @createdAt, @updatedAt, @completedAt,
+        @gitBranch, @gitBaseBranch, @scheduleId
       )
     `);
 
@@ -193,7 +207,10 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
         best_iteration_id = @bestIterationId,
         consecutive_failures = @consecutiveFailures,
         updated_at = @updatedAt,
-        completed_at = @completedAt
+        completed_at = @completedAt,
+        git_branch = @gitBranch,
+        git_base_branch = @gitBaseBranch,
+        schedule_id = @scheduleId
       WHERE id = @id
     `);
 
@@ -220,8 +237,9 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
     this.recordIterationStmt = this.db.prepare(`
       INSERT INTO loop_iterations (
         loop_id, iteration_number, task_id, pipeline_task_ids,
-        status, score, exit_code, error_message, started_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        status, score, exit_code, error_message, started_at, completed_at,
+        git_branch, git_diff_summary
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.updateIterationStmt = this.db.prepare(`
@@ -230,7 +248,9 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
         score = @score,
         exit_code = @exitCode,
         error_message = @errorMessage,
-        completed_at = @completedAt
+        completed_at = @completedAt,
+        git_branch = @gitBranch,
+        git_diff_summary = @gitDiffSummary
       WHERE id = @id
     `);
 
@@ -252,7 +272,12 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
       WHERE l.status = 'running' AND li.status = 'running'
     `);
 
+    this.findByScheduleIdStmt = this.db.prepare(`
+      SELECT * FROM loops WHERE schedule_id = ? ORDER BY created_at DESC
+    `);
+
     // ARCHITECTURE: FK cascade (ON DELETE CASCADE) auto-deletes associated iterations
+    // NOTE: Excludes 'paused' loops — paused loops should survive cleanup
     this.cleanupOldLoopsStmt = this.db.prepare(`
       DELETE FROM loops WHERE status IN ('completed', 'failed', 'cancelled') AND completed_at < ?
     `);
@@ -336,6 +361,16 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
     }, operationErrorHandler('cleanup old loops'));
   }
 
+  async findByScheduleId(scheduleId: ScheduleId): Promise<Result<readonly Loop[]>> {
+    return tryCatchAsync(
+      async () => {
+        const rows = this.findByScheduleIdStmt.all(scheduleId) as LoopRow[];
+        return rows.map((row) => this.rowToLoop(row));
+      },
+      operationErrorHandler('find loops by schedule ID', { scheduleId }),
+    );
+  }
+
   // ============================================================================
   // Iteration CRUD (async, wrapped in tryCatchAsync)
   // ============================================================================
@@ -354,6 +389,8 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
           iteration.errorMessage ?? null,
           iteration.startedAt,
           iteration.completedAt ?? null,
+          iteration.gitBranch ?? null,
+          iteration.gitDiffSummary ?? null,
         );
       },
       operationErrorHandler('record loop iteration', {
@@ -403,6 +440,8 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
           exitCode: iteration.exitCode ?? null,
           errorMessage: iteration.errorMessage ?? null,
           completedAt: iteration.completedAt ?? null,
+          gitBranch: iteration.gitBranch ?? null,
+          gitDiffSummary: iteration.gitDiffSummary ?? null,
         });
       },
       operationErrorHandler('update loop iteration', {
@@ -433,6 +472,8 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
       iteration.errorMessage ?? null,
       iteration.startedAt,
       iteration.completedAt ?? null,
+      iteration.gitBranch ?? null,
+      iteration.gitDiffSummary ?? null,
     );
   }
 
@@ -450,6 +491,8 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
       exitCode: iteration.exitCode ?? null,
       errorMessage: iteration.errorMessage ?? null,
       completedAt: iteration.completedAt ?? null,
+      gitBranch: iteration.gitBranch ?? null,
+      gitDiffSummary: iteration.gitDiffSummary ?? null,
     });
   }
 
@@ -484,6 +527,9 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
       createdAt: loop.createdAt,
       updatedAt: loop.updatedAt,
       completedAt: loop.completedAt ?? null,
+      gitBranch: loop.gitBranch ?? null,
+      gitBaseBranch: loop.gitBaseBranch ?? null,
+      scheduleId: loop.scheduleId ?? null,
     };
   }
 
@@ -533,6 +579,9 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
       bestScore: data.best_score ?? undefined,
       bestIterationId: data.best_iteration_id ?? undefined,
       consecutiveFailures: data.consecutive_failures,
+      gitBranch: data.git_branch ?? undefined,
+      gitBaseBranch: data.git_base_branch ?? undefined,
+      scheduleId: data.schedule_id ? ScheduleId(data.schedule_id) : undefined,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
       completedAt: data.completed_at ?? undefined,
@@ -569,6 +618,8 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
       score: data.score ?? undefined,
       exitCode: data.exit_code ?? undefined,
       errorMessage: data.error_message ?? undefined,
+      gitBranch: data.git_branch ?? undefined,
+      gitDiffSummary: data.git_diff_summary ?? undefined,
       startedAt: data.started_at,
       completedAt: data.completed_at ?? undefined,
     };
@@ -595,6 +646,8 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
     switch (value) {
       case 'running':
         return LoopStatus.RUNNING;
+      case 'paused':
+        return LoopStatus.PAUSED;
       case 'completed':
         return LoopStatus.COMPLETED;
       case 'failed':

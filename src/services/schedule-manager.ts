@@ -15,6 +15,7 @@ import {
   Priority,
   Schedule,
   ScheduleCreateRequest,
+  ScheduledLoopCreateRequest,
   ScheduledPipelineCreateRequest,
   ScheduleId,
   ScheduleStatus,
@@ -471,6 +472,63 @@ export class ScheduleManagerService implements ScheduleService {
     }
 
     return ok({ scheduledAtMs, expiresAtMs, nextRunAt, timezone: tz });
+  }
+
+  async createScheduledLoop(request: ScheduledLoopCreateRequest): Promise<Result<Schedule>> {
+    // Validate timing (reuse shared method)
+    const timingResult = this.validateScheduleTiming(request);
+    if (!timingResult.ok) return timingResult;
+    const { scheduledAtMs, expiresAtMs, nextRunAt, timezone } = timingResult.value;
+
+    // Validate loopConfig basics
+    if (!request.loopConfig.exitCondition || request.loopConfig.exitCondition.trim().length === 0) {
+      return err(
+        new BackbeatError(ErrorCode.INVALID_INPUT, 'loopConfig.exitCondition is required', {
+          field: 'loopConfig.exitCondition',
+        }),
+      );
+    }
+
+    // Build the schedule with loopConfig and a placeholder taskTemplate
+    const schedule = createSchedule({
+      taskTemplate: {
+        prompt: request.loopConfig.prompt ?? '',
+        priority: request.loopConfig.priority,
+        workingDirectory: request.loopConfig.workingDirectory,
+        agent: request.loopConfig.agent,
+      },
+      scheduleType: request.scheduleType,
+      cronExpression: request.cronExpression,
+      scheduledAt: scheduledAtMs,
+      timezone,
+      missedRunPolicy: request.missedRunPolicy,
+      maxRuns: request.maxRuns,
+      expiresAt: expiresAtMs,
+      loopConfig: request.loopConfig,
+    });
+
+    // Inject computed nextRunAt
+    const scheduleWithNext: Schedule = { ...schedule, nextRunAt };
+
+    const promptSummary = request.loopConfig.prompt
+      ? truncatePrompt(request.loopConfig.prompt, 50)
+      : `Loop (${request.loopConfig.strategy})`;
+
+    this.logger.info('Creating scheduled loop', {
+      scheduleId: scheduleWithNext.id,
+      scheduleType: scheduleWithNext.scheduleType,
+      prompt: promptSummary,
+    });
+
+    const emitResult = await this.eventBus.emit('ScheduleCreated', { schedule: scheduleWithNext });
+    if (!emitResult.ok) {
+      this.logger.error('Failed to emit ScheduleCreated event', emitResult.error, {
+        scheduleId: scheduleWithNext.id,
+      });
+      return err(emitResult.error);
+    }
+
+    return ok(scheduleWithNext);
   }
 
   /**

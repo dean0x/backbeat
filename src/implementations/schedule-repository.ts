@@ -9,6 +9,8 @@ import SQLite from 'better-sqlite3';
 import { z } from 'zod';
 import { AGENT_PROVIDERS_TUPLE } from '../core/agents.js';
 import {
+  type LoopCreateRequest,
+  LoopId,
   MissedRunPolicy,
   type PipelineStepRequest,
   Schedule,
@@ -43,6 +45,7 @@ const ScheduleRowSchema = z.object({
   expires_at: z.number().nullable(),
   after_schedule_id: z.string().nullable(),
   pipeline_steps: z.string().nullable(), // JSON serialized PipelineStepRequest[]
+  loop_config: z.string().nullable(), // JSON serialized LoopCreateRequest (v0.8.0)
   created_at: z.number(),
   updated_at: z.number(),
 });
@@ -59,6 +62,7 @@ const ScheduleExecutionRowSchema = z.object({
   status: z.enum(['pending', 'triggered', 'completed', 'failed', 'missed', 'skipped']),
   error_message: z.string().nullable(),
   pipeline_task_ids: z.string().nullable(), // JSON serialized TaskId[]
+  loop_id: z.string().nullable(), // Loop ID created by this execution (v0.8.0)
   created_at: z.number(),
 });
 
@@ -104,6 +108,27 @@ const PipelineStepsSchema = z
   .max(20);
 
 /**
+ * Zod schema for validating loop_config JSON from database
+ * Pattern: Boundary validation for LoopCreateRequest objects (v0.8.0)
+ */
+const LoopConfigSchema = z.object({
+  prompt: z.string().optional(),
+  strategy: z.enum(['retry', 'optimize']),
+  exitCondition: z.string().min(1),
+  evalDirection: z.enum(['minimize', 'maximize']).optional(),
+  evalTimeout: z.number().optional(),
+  workingDirectory: z.string().optional(),
+  maxIterations: z.number().optional(),
+  maxConsecutiveFailures: z.number().optional(),
+  cooldownMs: z.number().optional(),
+  freshContext: z.boolean().optional(),
+  pipelineSteps: z.array(z.string()).optional(),
+  priority: z.enum(['P0', 'P1', 'P2']).optional(),
+  agent: z.enum(AGENT_PROVIDERS_TUPLE).optional(),
+  gitBranch: z.string().optional(),
+});
+
+/**
  * Database row type for schedules table
  * TYPE-SAFETY: Explicit typing instead of Record<string, any>
  */
@@ -123,6 +148,7 @@ interface ScheduleRow {
   readonly expires_at: number | null;
   readonly after_schedule_id: string | null;
   readonly pipeline_steps: string | null;
+  readonly loop_config: string | null;
   readonly created_at: number;
   readonly updated_at: number;
 }
@@ -139,6 +165,7 @@ interface ScheduleExecutionRow {
   readonly status: string;
   readonly error_message: string | null;
   readonly pipeline_task_ids: string | null;
+  readonly loop_id: string | null;
   readonly created_at: number;
 }
 
@@ -167,11 +194,13 @@ export class SQLiteScheduleRepository implements ScheduleRepository, SyncSchedul
       INSERT OR REPLACE INTO schedules (
         id, task_template, schedule_type, cron_expression, scheduled_at,
         timezone, missed_run_policy, status, max_runs, run_count,
-        last_run_at, next_run_at, expires_at, after_schedule_id, pipeline_steps, created_at, updated_at
+        last_run_at, next_run_at, expires_at, after_schedule_id, pipeline_steps, loop_config,
+        created_at, updated_at
       ) VALUES (
         @id, @taskTemplate, @scheduleType, @cronExpression, @scheduledAt,
         @timezone, @missedRunPolicy, @status, @maxRuns, @runCount,
-        @lastRunAt, @nextRunAt, @expiresAt, @afterScheduleId, @pipelineSteps, @createdAt, @updatedAt
+        @lastRunAt, @nextRunAt, @expiresAt, @afterScheduleId, @pipelineSteps, @loopConfig,
+        @createdAt, @updatedAt
       )
     `);
 
@@ -193,6 +222,7 @@ export class SQLiteScheduleRepository implements ScheduleRepository, SyncSchedul
         expires_at = @expiresAt,
         after_schedule_id = @afterScheduleId,
         pipeline_steps = @pipelineSteps,
+        loop_config = @loopConfig,
         updated_at = @updatedAt
       WHERE id = @id
     `);
@@ -227,8 +257,8 @@ export class SQLiteScheduleRepository implements ScheduleRepository, SyncSchedul
 
     this.recordExecutionStmt = this.db.prepare(`
       INSERT INTO schedule_executions (
-        schedule_id, task_id, scheduled_for, executed_at, status, error_message, pipeline_task_ids, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        schedule_id, task_id, scheduled_for, executed_at, status, error_message, pipeline_task_ids, loop_id, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.getExecutionByIdStmt = this.db.prepare(`
@@ -265,6 +295,7 @@ export class SQLiteScheduleRepository implements ScheduleRepository, SyncSchedul
       expiresAt: schedule.expiresAt ?? null,
       afterScheduleId: schedule.afterScheduleId ?? null,
       pipelineSteps: schedule.pipelineSteps ? JSON.stringify(schedule.pipelineSteps) : null,
+      loopConfig: schedule.loopConfig ? JSON.stringify(schedule.loopConfig) : null,
       createdAt: schedule.createdAt,
       updatedAt: schedule.updatedAt,
     };
@@ -343,6 +374,7 @@ export class SQLiteScheduleRepository implements ScheduleRepository, SyncSchedul
       execution.status,
       execution.errorMessage ?? null,
       execution.pipelineTaskIds ? JSON.stringify(execution.pipelineTaskIds) : null,
+      execution.loopId ?? null,
       execution.createdAt,
     );
 
@@ -478,6 +510,7 @@ export class SQLiteScheduleRepository implements ScheduleRepository, SyncSchedul
           execution.status,
           execution.errorMessage ?? null,
           execution.pipelineTaskIds ? JSON.stringify(execution.pipelineTaskIds) : null,
+          execution.loopId ?? null,
           execution.createdAt,
         );
 
@@ -542,6 +575,17 @@ export class SQLiteScheduleRepository implements ScheduleRepository, SyncSchedul
       }
     }
 
+    // Parse loop_config JSON if present (v0.8.0)
+    let loopConfig: LoopCreateRequest | undefined;
+    if (data.loop_config) {
+      try {
+        const parsed = JSON.parse(data.loop_config);
+        loopConfig = LoopConfigSchema.parse(parsed) as LoopCreateRequest;
+      } catch (e) {
+        throw new Error(`Invalid loop_config JSON for schedule ${data.id}: ${e}`);
+      }
+    }
+
     return {
       id: ScheduleId(data.id),
       taskTemplate,
@@ -558,6 +602,7 @@ export class SQLiteScheduleRepository implements ScheduleRepository, SyncSchedul
       expiresAt: data.expires_at ?? undefined,
       afterScheduleId: data.after_schedule_id ? ScheduleId(data.after_schedule_id) : undefined,
       pipelineSteps,
+      loopConfig,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -592,6 +637,7 @@ export class SQLiteScheduleRepository implements ScheduleRepository, SyncSchedul
       status: data.status as ScheduleExecution['status'],
       errorMessage: data.error_message ?? undefined,
       pipelineTaskIds,
+      loopId: data.loop_id ? LoopId(data.loop_id) : undefined,
       createdAt: data.created_at,
     };
   }

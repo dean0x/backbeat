@@ -311,6 +311,62 @@ export class LoopManagerService implements LoopService {
     return ok(undefined);
   }
 
+  async pauseLoop(loopId: LoopId, options?: { force?: boolean }): Promise<Result<void>> {
+    const lookupResult = await this.fetchLoopOrError(loopId);
+    if (!lookupResult.ok) return lookupResult;
+
+    const loop = lookupResult.value;
+    if (loop.status !== LoopStatus.RUNNING) {
+      return err(
+        new BackbeatError(ErrorCode.INVALID_OPERATION, `Loop ${loopId} is not running (status: ${loop.status})`, {
+          loopId,
+          status: loop.status,
+        }),
+      );
+    }
+
+    const force = options?.force ?? false;
+    this.logger.info('Pausing loop', { loopId, force });
+
+    const emitResult = await this.eventBus.emit('LoopPaused', {
+      loopId,
+      force,
+    });
+
+    if (!emitResult.ok) {
+      this.logger.error('Failed to emit LoopPaused event', emitResult.error, { loopId });
+      return err(emitResult.error);
+    }
+
+    return ok(undefined);
+  }
+
+  async resumeLoop(loopId: LoopId): Promise<Result<void>> {
+    const lookupResult = await this.fetchLoopOrError(loopId);
+    if (!lookupResult.ok) return lookupResult;
+
+    const loop = lookupResult.value;
+    if (loop.status !== LoopStatus.PAUSED) {
+      return err(
+        new BackbeatError(ErrorCode.INVALID_OPERATION, `Loop ${loopId} is not paused (status: ${loop.status})`, {
+          loopId,
+          status: loop.status,
+        }),
+      );
+    }
+
+    this.logger.info('Resuming loop', { loopId });
+
+    const emitResult = await this.eventBus.emit('LoopResumed', { loopId });
+
+    if (!emitResult.ok) {
+      this.logger.error('Failed to emit LoopResumed event', emitResult.error, { loopId });
+      return err(emitResult.error);
+    }
+
+    return ok(undefined);
+  }
+
   /**
    * Fetch a loop by ID and return a typed error if not found
    */

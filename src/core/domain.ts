@@ -279,6 +279,7 @@ export interface Schedule {
   readonly expiresAt?: number; // Optional expiration time (epoch ms)
   readonly afterScheduleId?: ScheduleId; // Chain: new tasks depend on this schedule's latest task
   readonly pipelineSteps?: readonly PipelineStepRequest[]; // Pipeline: ordered steps to create on each trigger
+  readonly loopConfig?: LoopCreateRequest; // Loop config if this schedule triggers loop creation (v0.8.0)
   readonly createdAt: number;
   readonly updatedAt: number;
 }
@@ -298,6 +299,7 @@ export interface ScheduleRequest {
   readonly expiresAt?: number; // Optional expiration
   readonly afterScheduleId?: ScheduleId; // Chain: block until after-schedule's latest task completes
   readonly pipelineSteps?: readonly PipelineStepRequest[]; // Pipeline: ordered steps for scheduled pipeline
+  readonly loopConfig?: LoopCreateRequest; // Loop config for scheduled loop creation (v0.8.0)
 }
 
 /**
@@ -341,6 +343,7 @@ export const createSchedule = (request: ScheduleRequest): Schedule => {
     expiresAt: request.expiresAt,
     afterScheduleId: request.afterScheduleId,
     pipelineSteps: request.pipelineSteps,
+    loopConfig: request.loopConfig,
     createdAt: now,
     updatedAt: now,
   });
@@ -423,6 +426,22 @@ export interface ScheduledPipelineCreateRequest {
   readonly agent?: AgentProvider; // shared default for all steps
 }
 
+/**
+ * Request type for creating scheduled loops via ScheduleService
+ * ARCHITECTURE: Flat structure for MCP/CLI consumption
+ * Each trigger creates a fresh loop from the loopConfig
+ */
+export interface ScheduledLoopCreateRequest {
+  readonly loopConfig: LoopCreateRequest;
+  readonly scheduleType: ScheduleType;
+  readonly cronExpression?: string;
+  readonly scheduledAt?: string; // ISO 8601 string (parsed by service)
+  readonly timezone?: string;
+  readonly missedRunPolicy?: MissedRunPolicy;
+  readonly maxRuns?: number;
+  readonly expiresAt?: string; // ISO 8601 string (parsed by service)
+}
+
 export interface PipelineStep {
   readonly index: number;
   readonly scheduleId: ScheduleId;
@@ -473,6 +492,7 @@ export interface ResumeTaskRequest {
  */
 export enum LoopStatus {
   RUNNING = 'running',
+  PAUSED = 'paused',
   COMPLETED = 'completed',
   FAILED = 'failed',
   CANCELLED = 'cancelled',
@@ -521,6 +541,9 @@ export interface Loop {
   readonly bestIterationId?: number;
   readonly consecutiveFailures: number;
   readonly status: LoopStatus;
+  readonly gitBranch?: string; // Branch name for loop iteration work (v0.8.0)
+  readonly gitBaseBranch?: string; // Base branch to diff against (v0.8.0)
+  readonly scheduleId?: ScheduleId; // Owning schedule if created via scheduled loop (v0.8.0)
   readonly createdAt: number;
   readonly updatedAt: number;
   readonly completedAt?: number;
@@ -540,6 +563,8 @@ export interface LoopIteration {
   readonly score?: number;
   readonly exitCode?: number;
   readonly errorMessage?: string;
+  readonly gitBranch?: string; // Branch used for this iteration (v0.8.0)
+  readonly gitDiffSummary?: string; // Git diff --stat summary of iteration changes (v0.8.0)
   readonly startedAt: number;
   readonly completedAt?: number;
 }
@@ -562,6 +587,7 @@ export interface LoopCreateRequest {
   readonly pipelineSteps?: readonly string[];
   readonly priority?: Priority;
   readonly agent?: AgentProvider;
+  readonly gitBranch?: string; // Branch name for loop iteration work (v0.8.0)
 }
 
 /**
@@ -569,7 +595,7 @@ export interface LoopCreateRequest {
  * ARCHITECTURE: Factory function returns frozen immutable object
  * Pattern: Follows createSchedule() convention
  */
-export const createLoop = (request: LoopCreateRequest, workingDirectory: string): Loop => {
+export const createLoop = (request: LoopCreateRequest, workingDirectory: string, scheduleId?: ScheduleId): Loop => {
   const now = Date.now();
   return Object.freeze({
     id: LoopId(`loop-${crypto.randomUUID()}`),
@@ -594,6 +620,9 @@ export const createLoop = (request: LoopCreateRequest, workingDirectory: string)
     bestIterationId: undefined,
     consecutiveFailures: 0,
     status: LoopStatus.RUNNING,
+    gitBranch: request.gitBranch,
+    gitBaseBranch: undefined,
+    scheduleId,
     createdAt: now,
     updatedAt: now,
     completedAt: undefined,

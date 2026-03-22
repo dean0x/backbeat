@@ -1,7 +1,7 @@
 /**
- * Git state capture utility for task checkpoints
- * ARCHITECTURE: Captures git repository state at task terminal events
- * Pattern: Pure function returning Result, uses execFile for security (no shell injection)
+ * Git state capture and branch management utilities
+ * ARCHITECTURE: Pure functions returning Result, uses execFile for security (no shell injection)
+ * Pattern: All git operations use execFile (not exec) to prevent shell injection
  */
 
 import { execFile } from 'child_process';
@@ -71,6 +71,78 @@ export async function captureGitState(workingDirectory: string): Promise<Result<
         ErrorCode.SYSTEM_ERROR,
         `Failed to capture git state: ${error instanceof Error ? error.message : String(error)}`,
         { workingDirectory },
+      ),
+    );
+  }
+}
+
+/**
+ * Create and checkout a git branch
+ * Uses `git checkout -B` (force create/reset) for crash recovery safety —
+ * if the branch already exists from a prior crashed iteration, it is reset
+ * rather than failing.
+ *
+ * @param workingDirectory - Absolute path to the working directory
+ * @param branchName - Name of the branch to create/checkout
+ * @param fromRef - Optional ref to branch from (e.g., 'main'). If omitted, branches from current HEAD.
+ * @returns Result<void> on success, error on failure
+ */
+export async function createAndCheckoutBranch(
+  workingDirectory: string,
+  branchName: string,
+  fromRef?: string,
+): Promise<Result<void, BackbeatError>> {
+  try {
+    const args = ['checkout', '-B', branchName];
+    if (fromRef) {
+      args.push(fromRef);
+    }
+
+    await execFileAsync('git', args, { cwd: workingDirectory });
+    return ok(undefined);
+  } catch (error) {
+    return err(
+      new BackbeatError(
+        ErrorCode.SYSTEM_ERROR,
+        `Failed to create/checkout branch '${branchName}': ${error instanceof Error ? error.message : String(error)}`,
+        { workingDirectory, branchName, fromRef },
+      ),
+    );
+  }
+}
+
+/**
+ * Capture git diff summary between two branches
+ * Returns the `git diff --stat` output as a summary string, or null if there are no changes.
+ * Uses execFile (not exec) to prevent shell injection.
+ *
+ * @param workingDirectory - Absolute path to the working directory
+ * @param fromBranch - Base branch for comparison
+ * @param toBranch - Target branch for comparison
+ * @returns Result containing diff summary string or null if no changes
+ */
+export async function captureGitDiff(
+  workingDirectory: string,
+  fromBranch: string,
+  toBranch: string,
+): Promise<Result<string | null, BackbeatError>> {
+  try {
+    const diffResult = await execFileAsync('git', ['diff', '--stat', `${fromBranch}..${toBranch}`], {
+      cwd: workingDirectory,
+    });
+
+    const summary = diffResult.stdout.trim();
+    if (!summary) {
+      return ok(null);
+    }
+
+    return ok(summary);
+  } catch (error) {
+    return err(
+      new BackbeatError(
+        ErrorCode.SYSTEM_ERROR,
+        `Failed to capture git diff (${fromBranch}..${toBranch}): ${error instanceof Error ? error.message : String(error)}`,
+        { workingDirectory, fromBranch, toBranch },
       ),
     );
   }
