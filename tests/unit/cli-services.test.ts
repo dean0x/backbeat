@@ -1,24 +1,21 @@
 /**
  * Tests for CLI service helpers: exitOnError, exitOnNull, errorMessage
  *
- * ARCHITECTURE: Pure unit tests with vi.mock() for ui module and process.exit.
+ * ARCHITECTURE: Pure unit tests with vi.spyOn() for ui module and process.exit.
  * These helpers are critical-path for all CLI error handling (~15 call sites).
+ *
+ * NOTE: Uses vi.spyOn instead of vi.mock because isolate:false shares module cache
+ * across test files. vi.mock fails when ui.js is already loaded by other test files
+ * (e.g., cli.test.ts imports loop.ts which transitively loads ui.js).
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { errorMessage, exitOnError, exitOnNull } from '../../src/cli/services';
 import type { Spinner } from '../../src/cli/ui';
+import * as ui from '../../src/cli/ui.js';
 import { err, ok, type Result } from '../../src/core/result';
 
-// Mock ui module before importing services
-vi.mock('../../src/cli/ui.js', () => ({
-  error: vi.fn(),
-}));
-
-// Must import after mock setup
-import { errorMessage, exitOnError, exitOnNull } from '../../src/cli/services';
-import * as ui from '../../src/cli/ui.js';
-
-const mockError = vi.mocked(ui.error);
+let mockError: ReturnType<typeof vi.spyOn<typeof ui, 'error'>>;
 
 // ============================================================================
 // Test Helpers
@@ -64,11 +61,12 @@ describe('exitOnError', () => {
 
   beforeEach(() => {
     mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-    mockError.mockClear();
+    mockError = vi.spyOn(ui, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
     mockExit.mockRestore();
+    mockError.mockRestore();
   });
 
   it('returns unwrapped value on success', () => {
@@ -141,11 +139,12 @@ describe('exitOnNull', () => {
 
   beforeEach(() => {
     mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-    mockError.mockClear();
+    mockError = vi.spyOn(ui, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
     mockExit.mockRestore();
+    mockError.mockRestore();
   });
 
   it('returns value when non-null', () => {

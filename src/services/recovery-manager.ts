@@ -6,7 +6,14 @@
 import { isTerminalState, Task, TaskStatus } from '../core/domain.js';
 import { BackbeatError, ErrorCode } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
-import { DependencyRepository, Logger, TaskQueue, TaskRepository, WorkerRepository } from '../core/interfaces.js';
+import {
+  DependencyRepository,
+  Logger,
+  LoopRepository,
+  TaskQueue,
+  TaskRepository,
+  WorkerRepository,
+} from '../core/interfaces.js';
 import { ok, Result } from '../core/result.js';
 
 export class RecoveryManager {
@@ -17,6 +24,7 @@ export class RecoveryManager {
     private readonly logger: Logger,
     private readonly workerRepository: WorkerRepository,
     private readonly dependencyRepo: DependencyRepository,
+    private readonly loopRepository?: LoopRepository,
   ) {}
 
   /**
@@ -45,6 +53,9 @@ export class RecoveryManager {
 
     // Phase 1: Cleanup old completed tasks
     await this.cleanupOldCompletedTasks();
+
+    // Phase 1b: Cleanup old completed loops (FK cascade handles iterations)
+    await this.cleanupOldLoops();
 
     // Fetch non-terminal tasks for recovery
     const queuedResult = await this.repository.findByStatus(TaskStatus.QUEUED);
@@ -149,6 +160,17 @@ export class RecoveryManager {
 
     if (cleanupResult.ok && cleanupResult.value > 0) {
       this.logger.info('Cleaned up old completed tasks', { count: cleanupResult.value });
+    }
+  }
+
+  private async cleanupOldLoops(): Promise<void> {
+    if (!this.loopRepository) return;
+
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    const cleanupResult = await this.loopRepository.cleanupOldLoops(sevenDaysMs);
+
+    if (cleanupResult.ok && cleanupResult.value > 0) {
+      this.logger.info('Cleaned up old completed loops', { count: cleanupResult.value });
     }
   }
 

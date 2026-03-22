@@ -13,9 +13,11 @@ import {
   CheckpointRepository,
   DependencyRepository,
   Logger,
+  LoopRepository,
   OutputCapture,
   ResourceMonitor,
   ScheduleRepository,
+  SyncLoopOperations,
   SyncScheduleOperations,
   SyncTaskOperations,
   TaskQueue,
@@ -24,8 +26,10 @@ import {
   WorkerPool,
 } from '../core/interfaces.js';
 import { err, ok, Result } from '../core/result.js';
+import { ShellExitConditionEvaluator } from './exit-condition-evaluator.js';
 import { CheckpointHandler } from './handlers/checkpoint-handler.js';
 import { DependencyHandler } from './handlers/dependency-handler.js';
+import { LoopHandler } from './handlers/loop-handler.js';
 import { PersistenceHandler } from './handlers/persistence-handler.js';
 import { QueueHandler } from './handlers/queue-handler.js';
 import { ScheduleHandler } from './handlers/schedule-handler.js';
@@ -48,6 +52,7 @@ export interface HandlerDependencies {
   readonly resourceMonitor: ResourceMonitor;
   readonly scheduleRepository: ScheduleRepository & SyncScheduleOperations;
   readonly checkpointRepository: CheckpointRepository;
+  readonly loopRepository: LoopRepository & SyncLoopOperations;
 }
 
 /**
@@ -61,6 +66,8 @@ export interface HandlerSetupResult {
   readonly scheduleHandler: ScheduleHandler;
   /** CheckpointHandler uses factory pattern, returned separately for unified lifecycle */
   readonly checkpointHandler: CheckpointHandler;
+  /** LoopHandler uses factory pattern, returned separately for unified lifecycle */
+  readonly loopHandler: LoopHandler;
 }
 
 /**
@@ -100,7 +107,7 @@ function getDependency<T>(container: Container, key: string): Result<T> {
  * ```
  */
 export function extractHandlerDependencies(container: Container): Result<HandlerDependencies> {
-  // Extract all 12 dependencies - fail fast on any missing
+  // Extract all 13 dependencies - fail fast on any missing
   const configResult = getDependency<Configuration>(container, 'config');
   if (!configResult.ok) return configResult;
 
@@ -140,6 +147,9 @@ export function extractHandlerDependencies(container: Container): Result<Handler
   const checkpointRepositoryResult = getDependency<CheckpointRepository>(container, 'checkpointRepository');
   if (!checkpointRepositoryResult.ok) return checkpointRepositoryResult;
 
+  const loopRepositoryResult = getDependency<LoopRepository & SyncLoopOperations>(container, 'loopRepository');
+  if (!loopRepositoryResult.ok) return loopRepositoryResult;
+
   return ok({
     config: configResult.value,
     logger: loggerResult.value,
@@ -153,35 +163,23 @@ export function extractHandlerDependencies(container: Container): Result<Handler
     resourceMonitor: resourceMonitorResult.value,
     scheduleRepository: scheduleRepositoryResult.value,
     checkpointRepository: checkpointRepositoryResult.value,
+    loopRepository: loopRepositoryResult.value,
   });
 }
 
 /**
  * Create and setup all event handlers
  *
- * Initializes 6 handlers: 3 standard handlers via EventHandlerRegistry,
- * plus DependencyHandler, ScheduleHandler, and CheckpointHandler via factory pattern. On any failure,
- * performs cleanup of already-initialized handlers before returning error.
+ * Initializes 7 handlers: 3 standard handlers via EventHandlerRegistry,
+ * plus DependencyHandler, ScheduleHandler, CheckpointHandler, and LoopHandler via factory pattern.
+ * On any failure, performs cleanup of already-initialized handlers before returning error.
  *
  * ARCHITECTURE: Standard handlers use setup(eventBus) pattern via registry.
- * DependencyHandler and ScheduleHandler use factory pattern (create()) for
- * async initialization with proper event subscription.
+ * Factory handlers use create() for async initialization with proper event subscription.
  *
  * @param deps - All dependencies needed for handler creation
- * @returns Result containing registry, dependencyHandler, and scheduleHandler for lifecycle management
+ * @returns Result containing registry and all factory handlers for lifecycle management
  * @throws Never - Returns errors in Result type instead of throwing
- *
- * @example
- * ```typescript
- * const setupResult = await setupEventHandlers(deps);
- * if (!setupResult.ok) {
- *   return setupResult; // Cleanup already performed
- * }
- * const { registry, dependencyHandler, scheduleHandler } = setupResult.value;
- * container.registerValue('handlerRegistry', registry);
- * container.registerValue('dependencyHandler', dependencyHandler);
- * container.registerValue('scheduleHandler', scheduleHandler);
- * ```
  */
 export async function setupEventHandlers(deps: HandlerDependencies): Promise<Result<HandlerSetupResult>> {
   const { logger, eventBus } = deps;
@@ -312,10 +310,34 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
 
   const checkpointHandler = checkpointHandlerResult.value;
 
+  // 7. Loop Handler - iterative task/pipeline execution engine (v0.7.0)
+  // ARCHITECTURE: Factory pattern ensures handler is fully initialized before use
+  // Created AFTER CheckpointHandler because it needs checkpointRepository for context enrichment
+  const loopHandlerResult = await LoopHandler.create(
+    deps.loopRepository,
+    deps.taskRepository,
+    deps.checkpointRepository,
+    eventBus,
+    deps.database,
+    new ShellExitConditionEvaluator(),
+    childLogger('LoopHandler'),
+  );
+  if (!loopHandlerResult.ok) {
+    // Cleanup previous handlers on failure
+    await registry.shutdown();
+    return err(
+      new BackbeatError(ErrorCode.SYSTEM_ERROR, `Failed to create LoopHandler: ${loopHandlerResult.error.message}`, {
+        error: loopHandlerResult.error,
+      }),
+    );
+  }
+
+  const loopHandler = loopHandlerResult.value;
+
   setupLogger.info('Event handlers initialized successfully', {
     standardHandlers: standardHandlers.length,
-    totalHandlers: standardHandlers.length + 3, // +3 for DependencyHandler, ScheduleHandler, CheckpointHandler
+    totalHandlers: standardHandlers.length + 4, // +4 for DependencyHandler, ScheduleHandler, CheckpointHandler, LoopHandler
   });
 
-  return ok({ registry, dependencyHandler, scheduleHandler, checkpointHandler });
+  return ok({ registry, dependencyHandler, scheduleHandler, checkpointHandler, loopHandler });
 }

@@ -2,10 +2,21 @@
  * Event type definitions for the hybrid event-driven architecture.
  * Commands flow through events (TaskDelegated, TaskQueued, etc.).
  * Queries use direct repository access (no query events).
- * 25 event types remain after Phase 1 simplification.
+ * 29 event types after adding loop events (v0.7.0).
  */
 
-import { MissedRunPolicy, Schedule, ScheduleId, Task, TaskCheckpoint, TaskId, WorkerId } from '../domain.js';
+import {
+  Loop,
+  LoopId,
+  LoopIteration,
+  MissedRunPolicy,
+  Schedule,
+  ScheduleId,
+  Task,
+  TaskCheckpoint,
+  TaskId,
+  WorkerId,
+} from '../domain.js';
 import { BackbeatError } from '../errors.js';
 
 /**
@@ -187,6 +198,35 @@ export interface CheckpointCreatedEvent extends BaseEvent {
 }
 
 /**
+ * Loop lifecycle events
+ * ARCHITECTURE: Part of iterative task/pipeline loop system (v0.7.0)
+ * Pattern: Event-driven loop management with iteration tracking
+ */
+export interface LoopCreatedEvent extends BaseEvent {
+  type: 'LoopCreated';
+  loop: Loop;
+}
+
+export interface LoopIterationCompletedEvent extends BaseEvent {
+  type: 'LoopIterationCompleted';
+  loopId: LoopId;
+  iterationNumber: number;
+  result: LoopIteration;
+}
+
+export interface LoopCompletedEvent extends BaseEvent {
+  type: 'LoopCompleted';
+  loopId: LoopId;
+  reason: string;
+}
+
+export interface LoopCancelledEvent extends BaseEvent {
+  type: 'LoopCancelled';
+  loopId: LoopId;
+  reason?: string;
+}
+
+/**
  * Union type of all events
  */
 export type BackbeatEvent =
@@ -220,7 +260,12 @@ export type BackbeatEvent =
   // Checkpoint events
   | CheckpointCreatedEvent
   // Output events
-  | OutputCapturedEvent;
+  | OutputCapturedEvent
+  // Loop lifecycle events
+  | LoopCreatedEvent
+  | LoopIterationCompletedEvent
+  | LoopCompletedEvent
+  | LoopCancelledEvent;
 
 /**
  * Event handler function type

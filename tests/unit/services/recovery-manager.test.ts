@@ -18,6 +18,7 @@ import type { EventBus } from '../../../src/core/events/event-bus';
 import type {
   DependencyRepository,
   Logger,
+  LoopRepository,
   TaskQueue,
   TaskRepository,
   WorkerRepository,
@@ -74,6 +75,22 @@ const createMockDependencyRepo = () => ({
   resolveDependenciesBatch: vi.fn(),
   getUnresolvedDependencies: vi.fn(),
   findAll: vi.fn(),
+});
+
+const createMockLoopRepository = () => ({
+  cleanupOldLoops: vi.fn().mockResolvedValue(ok(0)),
+  save: vi.fn(),
+  update: vi.fn(),
+  findById: vi.fn(),
+  findAll: vi.fn(),
+  findByStatus: vi.fn(),
+  count: vi.fn(),
+  delete: vi.fn(),
+  recordIteration: vi.fn(),
+  getIterations: vi.fn(),
+  findIterationByTaskId: vi.fn(),
+  findRunningIterations: vi.fn(),
+  updateIteration: vi.fn(),
 });
 
 describe('RecoveryManager', () => {
@@ -846,6 +863,58 @@ describe('RecoveryManager', () => {
       const result = await manager.recover();
 
       expect(result).toEqual({ ok: true, value: undefined });
+    });
+  });
+
+  describe('Loop cleanup', () => {
+    it('should clean up old completed loops during recovery', async () => {
+      const mockLoopRepo = createMockLoopRepository();
+      mockLoopRepo.cleanupOldLoops.mockResolvedValue(ok(3));
+
+      const managerWithLoops = new RecoveryManager(
+        repo as unknown as TaskRepository,
+        queue as unknown as TaskQueue,
+        eventBus as unknown as EventBus,
+        logger as unknown as Logger,
+        workerRepo as unknown as WorkerRepository,
+        dependencyRepo as unknown as DependencyRepository,
+        mockLoopRepo as unknown as LoopRepository,
+      );
+
+      setupFindByStatus([], []);
+
+      await managerWithLoops.recover();
+
+      expect(mockLoopRepo.cleanupOldLoops).toHaveBeenCalledWith(7 * 24 * 60 * 60 * 1000);
+    });
+
+    it('should log cleanup count when loops are cleaned up', async () => {
+      const mockLoopRepo = createMockLoopRepository();
+      mockLoopRepo.cleanupOldLoops.mockResolvedValue(ok(5));
+
+      const managerWithLoops = new RecoveryManager(
+        repo as unknown as TaskRepository,
+        queue as unknown as TaskQueue,
+        eventBus as unknown as EventBus,
+        logger as unknown as Logger,
+        workerRepo as unknown as WorkerRepository,
+        dependencyRepo as unknown as DependencyRepository,
+        mockLoopRepo as unknown as LoopRepository,
+      );
+
+      setupFindByStatus([], []);
+
+      await managerWithLoops.recover();
+
+      expect(logger.info).toHaveBeenCalledWith('Cleaned up old completed loops', { count: 5 });
+    });
+
+    it('should skip loop cleanup when no LoopRepository is provided', async () => {
+      // The default manager has no loop repo — verify no crash
+      setupFindByStatus([], []);
+
+      await manager.recover();
+      // No assertion needed — just verifying it doesn't throw
     });
   });
 });

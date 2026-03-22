@@ -8,12 +8,15 @@
  * Quality: 3-5 assertions per test, AAA pattern, behavioral testing
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReadOnlyContext } from '../../src/cli/read-only-context';
 import { AGENT_PROVIDERS, isAgentProvider } from '../../src/core/agents';
 import { loadConfiguration } from '../../src/core/configuration';
 import type { Container } from '../../src/core/container';
 import type {
+  Loop,
+  LoopCreateRequest,
+  LoopIteration,
   PipelineCreateRequest,
   PipelineResult,
   ResumeTaskRequest,
@@ -26,8 +29,14 @@ import type {
   TaskRequest,
 } from '../../src/core/domain';
 import {
+  createLoop,
   createSchedule,
+  LoopId,
+  LoopStatus,
+  LoopStrategy,
   MissedRunPolicy,
+  OptimizeDirection,
+  Priority,
   ScheduleId,
   ScheduleStatus,
   ScheduleType,
@@ -43,6 +52,8 @@ import type {
   TaskTimeoutEvent,
 } from '../../src/core/events/events';
 import type {
+  LoopRepository,
+  LoopService,
   OutputRepository,
   ScheduleRepository,
   ScheduleService,
@@ -293,6 +304,61 @@ class MockScheduleService implements ScheduleService {
 }
 
 /**
+ * Mock LoopService for CLI loop command testing
+ */
+class MockLoopService implements LoopService {
+  createCalls: LoopCreateRequest[] = [];
+  getCalls: Array<{ loopId: string; includeHistory?: boolean; historyLimit?: number }> = [];
+  listCalls: Array<{ status?: LoopStatus; limit?: number; offset?: number }> = [];
+  cancelCalls: Array<{ loopId: string; reason?: string; cancelTasks?: boolean }> = [];
+
+  private loopStorage = new Map<string, Loop>();
+
+  async createLoop(request: LoopCreateRequest) {
+    this.createCalls.push(request);
+    const loop = createLoop(request, request.workingDirectory ?? '/workspace');
+    this.loopStorage.set(loop.id, loop);
+    return ok(loop);
+  }
+
+  async getLoop(loopId: LoopId, includeHistory?: boolean, historyLimit?: number) {
+    this.getCalls.push({ loopId, includeHistory, historyLimit });
+    const loop = this.loopStorage.get(loopId);
+    if (!loop) {
+      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Loop ${loopId} not found`));
+    }
+    const iterations: LoopIteration[] | undefined = includeHistory ? [] : undefined;
+    return ok({ loop, iterations });
+  }
+
+  async listLoops(status?: LoopStatus, limit?: number, offset?: number) {
+    this.listCalls.push({ status, limit, offset });
+    const all = Array.from(this.loopStorage.values());
+    if (status) {
+      return ok(all.filter((l) => l.status === status));
+    }
+    return ok(all);
+  }
+
+  async cancelLoop(loopId: LoopId, reason?: string, cancelTasks?: boolean) {
+    this.cancelCalls.push({ loopId, reason, cancelTasks });
+    const loop = this.loopStorage.get(loopId);
+    if (!loop) {
+      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Loop ${loopId} not found`));
+    }
+    return ok(undefined);
+  }
+
+  reset() {
+    this.createCalls = [];
+    this.getCalls = [];
+    this.listCalls = [];
+    this.cancelCalls = [];
+    this.loopStorage.clear();
+  }
+}
+
+/**
  * Mock Container for dependency injection in tests
  */
 class MockContainer implements Container {
@@ -342,6 +408,7 @@ class MockReadOnlyContext {
   readonly taskStorage = new Map<string, Task>();
   readonly outputStorage = new Map<string, TaskOutput>();
   readonly scheduleStorage = new Map<string, Schedule>();
+  readonly loopStorage = new Map<string, Loop>();
 
   readonly taskRepository: Pick<TaskRepository, 'findById' | 'findAll'> = {
     findById: async (taskId: string) => {
@@ -381,6 +448,24 @@ class MockReadOnlyContext {
     },
   };
 
+  readonly loopRepository: Pick<LoopRepository, 'findById' | 'findAll' | 'findByStatus' | 'getIterations'> = {
+    findById: async (id: LoopId) => {
+      const loop = this.loopStorage.get(id);
+      return ok(loop ?? null);
+    },
+    findAll: async (limit?: number) => {
+      const all = Array.from(this.loopStorage.values());
+      return ok(limit ? all.slice(0, limit) : all);
+    },
+    findByStatus: async (status: LoopStatus, limit?: number) => {
+      const filtered = Array.from(this.loopStorage.values()).filter((l) => l.status === status);
+      return ok(limit ? filtered.slice(0, limit) : filtered);
+    },
+    getIterations: async (_loopId: LoopId, _limit?: number) => {
+      return ok([] as readonly LoopIteration[]);
+    },
+  };
+
   close = vi.fn();
 
   /** Seed a task into the mock storage */
@@ -398,10 +483,16 @@ class MockReadOnlyContext {
     this.scheduleStorage.set(schedule.id, schedule);
   }
 
+  /** Seed a loop into the mock storage */
+  addLoop(loop: Loop): void {
+    this.loopStorage.set(loop.id, loop);
+  }
+
   reset(): void {
     this.taskStorage.clear();
     this.outputStorage.clear();
     this.scheduleStorage.clear();
+    this.loopStorage.clear();
     this.close.mockClear();
   }
 }
@@ -2346,6 +2437,59 @@ async function simulateResumeCommand(taskManager: MockTaskManager, taskId: strin
 }
 
 // ============================================================================
+// Loop Command Helpers
+// ============================================================================
+
+async function simulateLoopCreate(service: MockLoopService, args: string[]) {
+  const { parseLoopCreateArgs } = await import('../../src/cli/commands/loop');
+  const parsed = parseLoopCreateArgs(args);
+  if (!parsed.ok) return err(new BackbeatError(ErrorCode.INVALID_INPUT, parsed.error));
+  const p = parsed.value;
+  return service.createLoop({
+    prompt: p.prompt,
+    strategy: p.strategy,
+    exitCondition: p.exitCondition,
+    evalDirection:
+      p.evalDirection === 'minimize'
+        ? OptimizeDirection.MINIMIZE
+        : p.evalDirection === 'maximize'
+          ? OptimizeDirection.MAXIMIZE
+          : undefined,
+    evalTimeout: p.evalTimeout,
+    workingDirectory: p.workingDirectory,
+    maxIterations: p.maxIterations,
+    maxConsecutiveFailures: p.maxConsecutiveFailures,
+    cooldownMs: p.cooldownMs,
+    freshContext: p.freshContext,
+    pipelineSteps: p.pipelineSteps,
+    priority: p.priority ? Priority[p.priority] : undefined,
+    agent: p.agent,
+  });
+}
+
+async function simulateLoopListCommand(
+  ctx: MockReadOnlyContext,
+  status?: LoopStatus,
+  limit?: number,
+): Promise<Result<readonly Loop[]>> {
+  if (status) {
+    return await ctx.loopRepository.findByStatus(status, limit);
+  }
+  return await ctx.loopRepository.findAll(limit);
+}
+
+async function simulateLoopGetCommand(ctx: MockReadOnlyContext, loopId: string): Promise<Result<Loop | null>> {
+  return await ctx.loopRepository.findById(LoopId(loopId));
+}
+
+async function simulateLoopCancel(
+  service: MockLoopService,
+  options: { loopId: string; reason?: string; cancelTasks?: boolean },
+) {
+  return service.cancelLoop(LoopId(options.loopId), options.reason, options.cancelTasks);
+}
+
+// ============================================================================
 // Task Completion Lifecycle Helpers
 // ============================================================================
 
@@ -2406,6 +2550,435 @@ function waitForCompletion(eventBus: InMemoryEventBus, taskId: string): Promise<
     if (timeoutSub.ok) subscriptionIds.push(timeoutSub.value);
   });
 }
+
+// ============================================================================
+// Loop Command Tests
+// ============================================================================
+
+describe('CLI - Loop Commands', () => {
+  // Dynamic import to avoid polluting the module cache for cli-services.test.ts
+  // (non-isolated mode shares module cache; loop.ts transitively imports ui.js)
+  let parseLoopCreateArgs: typeof import('../../src/cli/commands/loop').parseLoopCreateArgs;
+
+  beforeAll(async () => {
+    const mod = await import('../../src/cli/commands/loop');
+    parseLoopCreateArgs = mod.parseLoopCreateArgs;
+  });
+
+  describe('parseLoopCreateArgs - pure function', () => {
+    it('should parse retry strategy with --until', () => {
+      const result = parseLoopCreateArgs(['fix', 'tests', '--until', 'npm test']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.strategy).toBe(LoopStrategy.RETRY);
+      expect(result.value.exitCondition).toBe('npm test');
+      expect(result.value.prompt).toBe('fix tests');
+    });
+
+    it('should parse optimize strategy with --eval and --direction', () => {
+      const result = parseLoopCreateArgs(['optimize', '--eval', 'echo 42', '--direction', 'maximize']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.strategy).toBe(LoopStrategy.OPTIMIZE);
+      expect(result.value.exitCondition).toBe('echo 42');
+      expect(result.value.evalDirection).toBe('maximize');
+    });
+
+    it('should parse pipeline mode with --pipeline and --step flags', () => {
+      const result = parseLoopCreateArgs(['--pipeline', '--step', 'lint', '--step', 'test', '--until', 'true']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.pipelineSteps).toEqual(['lint', 'test']);
+      expect(result.value.prompt).toBeUndefined();
+    });
+
+    it('should parse --max-iterations', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--max-iterations', '5']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.maxIterations).toBe(5);
+    });
+
+    it('should parse --max-failures', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--max-failures', '3']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.maxConsecutiveFailures).toBe(3);
+    });
+
+    it('should parse --cooldown', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--cooldown', '1000']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.cooldownMs).toBe(1000);
+    });
+
+    it('should parse --eval-timeout', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--eval-timeout', '5000']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.evalTimeout).toBe(5000);
+    });
+
+    it('should parse --continue-context as freshContext=false', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--continue-context']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.freshContext).toBe(false);
+    });
+
+    it('should default freshContext to true', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.freshContext).toBe(true);
+    });
+
+    it('should parse --priority P0', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--priority', 'P0']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.priority).toBe('P0');
+    });
+
+    it('should parse --agent claude', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--agent', 'claude']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.agent).toBe('claude');
+    });
+
+    it('should parse --working-directory', () => {
+      const cwd = process.cwd();
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--working-directory', cwd]);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.workingDirectory).toBe(cwd);
+    });
+
+    it('should parse --max-iterations 0 as unlimited', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--max-iterations', '0']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.maxIterations).toBe(0);
+    });
+
+    // Error cases
+    it('should reject both --until and --eval', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--eval', 'echo 1']);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain('Cannot specify both');
+    });
+
+    it('should reject neither --until nor --eval', () => {
+      const result = parseLoopCreateArgs(['fix']);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain('--until');
+    });
+
+    it('should reject --eval without --direction', () => {
+      const result = parseLoopCreateArgs(['fix', '--eval', 'echo 42']);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain('--direction');
+    });
+
+    it('should reject --direction without --eval', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--direction', 'maximize']);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain('--direction is only valid');
+    });
+
+    it('should reject --pipeline with fewer than 2 --step', () => {
+      const result = parseLoopCreateArgs(['--pipeline', '--step', 'only one', '--until', 'true']);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain('at least 2');
+    });
+
+    it('should reject unknown flag', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--bogus']);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain('Unknown flag');
+    });
+
+    it('should reject negative --max-iterations', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--max-iterations', '-1']);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain('--max-iterations');
+    });
+
+    it('should reject --eval-timeout below 1000ms', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--eval-timeout', '500']);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain('--eval-timeout');
+    });
+
+    it('should reject invalid --direction value', () => {
+      const result = parseLoopCreateArgs(['fix', '--eval', 'echo 1', '--direction', 'sideways']);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain('minimize');
+    });
+
+    it('should reject --step without --pipeline', () => {
+      const result = parseLoopCreateArgs(['fix', '--step', 'lint', '--step', 'test', '--until', 'true']);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain('--pipeline');
+    });
+
+    it('should reject missing prompt for non-pipeline mode', () => {
+      const result = parseLoopCreateArgs(['--until', 'true']);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain('Usage');
+    });
+
+    it('should reject invalid priority', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--priority', 'P9']);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain('Priority');
+    });
+
+    it('should reject unknown agent', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--agent', 'skynet']);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain('Unknown agent');
+    });
+  });
+
+  describe('loop create — service integration', () => {
+    let mockLoopService: MockLoopService;
+
+    beforeEach(() => {
+      mockLoopService = new MockLoopService();
+    });
+
+    afterEach(() => {
+      mockLoopService.reset();
+    });
+
+    it('should create retry loop with correct service args', async () => {
+      const result = await simulateLoopCreate(mockLoopService, [
+        'fix',
+        'tests',
+        '--until',
+        'npm test',
+        '--max-iterations',
+        '5',
+      ]);
+      expect(result.ok).toBe(true);
+      expect(mockLoopService.createCalls).toHaveLength(1);
+      expect(mockLoopService.createCalls[0].strategy).toBe(LoopStrategy.RETRY);
+      expect(mockLoopService.createCalls[0].exitCondition).toBe('npm test');
+      expect(mockLoopService.createCalls[0].maxIterations).toBe(5);
+    });
+
+    it('should create optimize loop with direction', async () => {
+      const result = await simulateLoopCreate(mockLoopService, [
+        'optimize',
+        'perf',
+        '--eval',
+        'echo 42',
+        '--direction',
+        'maximize',
+      ]);
+      expect(result.ok).toBe(true);
+      expect(mockLoopService.createCalls[0].strategy).toBe(LoopStrategy.OPTIMIZE);
+      expect(mockLoopService.createCalls[0].evalDirection).toBe(OptimizeDirection.MAXIMIZE);
+    });
+
+    it('should create pipeline loop with steps', async () => {
+      const result = await simulateLoopCreate(mockLoopService, [
+        '--pipeline',
+        '--step',
+        'lint',
+        '--step',
+        'test',
+        '--until',
+        'true',
+      ]);
+      expect(result.ok).toBe(true);
+      expect(mockLoopService.createCalls[0].pipelineSteps).toEqual(['lint', 'test']);
+      expect(mockLoopService.createCalls[0].prompt).toBeUndefined();
+    });
+
+    it('should reject invalid args before calling service', async () => {
+      const result = await simulateLoopCreate(mockLoopService, ['fix', '--until', 'true', '--eval', 'echo 1']);
+      expect(result.ok).toBe(false);
+      expect(mockLoopService.createCalls).toHaveLength(0);
+    });
+
+    it('should pass all optional parameters through', async () => {
+      const result = await simulateLoopCreate(mockLoopService, [
+        'full',
+        'options',
+        '--until',
+        'true',
+        '--max-iterations',
+        '10',
+        '--max-failures',
+        '5',
+        '--cooldown',
+        '1000',
+        '--eval-timeout',
+        '5000',
+        '--continue-context',
+        '--priority',
+        'P0',
+        '--agent',
+        'claude',
+      ]);
+      expect(result.ok).toBe(true);
+      const call = mockLoopService.createCalls[0];
+      expect(call.maxIterations).toBe(10);
+      expect(call.maxConsecutiveFailures).toBe(5);
+      expect(call.cooldownMs).toBe(1000);
+      expect(call.evalTimeout).toBe(5000);
+      expect(call.freshContext).toBe(false);
+      expect(call.agent).toBe('claude');
+    });
+  });
+
+  describe('loop list — read-only context', () => {
+    let mockLoopReadOnlyCtx: MockReadOnlyContext;
+
+    beforeEach(() => {
+      mockLoopReadOnlyCtx = new MockReadOnlyContext();
+    });
+
+    afterEach(() => {
+      mockLoopReadOnlyCtx.reset();
+    });
+
+    it('should list all loops when no filter', async () => {
+      const loop = createLoop(
+        {
+          prompt: 'test',
+          strategy: LoopStrategy.RETRY,
+          exitCondition: 'true',
+        },
+        '/workspace',
+      );
+      mockLoopReadOnlyCtx.addLoop(loop);
+
+      const result = await simulateLoopListCommand(mockLoopReadOnlyCtx);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0].id).toBe(loop.id);
+    });
+
+    it('should filter by status', async () => {
+      const loop1 = createLoop({ prompt: 'a', strategy: LoopStrategy.RETRY, exitCondition: 'true' }, '/w');
+      const loop2 = Object.freeze({
+        ...createLoop({ prompt: 'b', strategy: LoopStrategy.RETRY, exitCondition: 'true' }, '/w'),
+        status: LoopStatus.COMPLETED,
+      });
+      mockLoopReadOnlyCtx.addLoop(loop1);
+      mockLoopReadOnlyCtx.addLoop(loop2);
+
+      const result = await simulateLoopListCommand(mockLoopReadOnlyCtx, LoopStatus.RUNNING);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0].status).toBe(LoopStatus.RUNNING);
+    });
+
+    it('should return empty array when no loops found', async () => {
+      const result = await simulateLoopListCommand(mockLoopReadOnlyCtx);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toHaveLength(0);
+    });
+  });
+
+  describe('loop get — read-only context', () => {
+    let mockLoopReadOnlyCtx: MockReadOnlyContext;
+
+    beforeEach(() => {
+      mockLoopReadOnlyCtx = new MockReadOnlyContext();
+    });
+
+    afterEach(() => {
+      mockLoopReadOnlyCtx.reset();
+    });
+
+    it('should get loop by ID', async () => {
+      const loop = createLoop({ prompt: 'test', strategy: LoopStrategy.RETRY, exitCondition: 'true' }, '/workspace');
+      mockLoopReadOnlyCtx.addLoop(loop);
+
+      const result = await simulateLoopGetCommand(mockLoopReadOnlyCtx, loop.id);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBeDefined();
+      expect(result.value!.id).toBe(loop.id);
+    });
+
+    it('should return null for missing loop', async () => {
+      const result = await simulateLoopGetCommand(mockLoopReadOnlyCtx, 'loop-nonexistent');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBeNull();
+    });
+  });
+
+  describe('loop cancel — service integration', () => {
+    let mockLoopService: MockLoopService;
+
+    beforeEach(() => {
+      mockLoopService = new MockLoopService();
+    });
+
+    afterEach(() => {
+      mockLoopService.reset();
+    });
+
+    it('should cancel loop with reason', async () => {
+      // First create a loop so it exists
+      const createResult = await mockLoopService.createLoop({
+        prompt: 'test',
+        strategy: LoopStrategy.RETRY,
+        exitCondition: 'true',
+      });
+      if (!createResult.ok) return;
+      const loopId = createResult.value.id;
+
+      const result = await simulateLoopCancel(mockLoopService, { loopId, reason: 'done' });
+      expect(result.ok).toBe(true);
+      expect(mockLoopService.cancelCalls).toHaveLength(1);
+      expect(mockLoopService.cancelCalls[0].reason).toBe('done');
+    });
+
+    it('should pass cancel-tasks flag', async () => {
+      const createResult = await mockLoopService.createLoop({
+        prompt: 'test',
+        strategy: LoopStrategy.RETRY,
+        exitCondition: 'true',
+      });
+      if (!createResult.ok) return;
+      const loopId = createResult.value.id;
+
+      const result = await simulateLoopCancel(mockLoopService, { loopId, cancelTasks: true, reason: 'cleanup' });
+      expect(result.ok).toBe(true);
+      expect(mockLoopService.cancelCalls[0].cancelTasks).toBe(true);
+    });
+
+    it('should error on non-existent loop', async () => {
+      const result = await simulateLoopCancel(mockLoopService, { loopId: 'loop-nonexistent' });
+      expect(result.ok).toBe(false);
+    });
+  });
+});
 
 /**
  * Parse run command args — mirrors the option parsing loop in cli.ts

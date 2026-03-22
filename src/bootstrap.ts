@@ -12,6 +12,8 @@ import {
   CheckpointRepository,
   DependencyRepository,
   Logger,
+  LoopRepository,
+  LoopService,
   OutputCapture,
   OutputRepository,
   ProcessSpawner,
@@ -80,6 +82,7 @@ import { SQLiteDependencyRepository } from './implementations/dependency-reposit
 import { EventDrivenWorkerPool } from './implementations/event-driven-worker-pool.js';
 import { GeminiAdapter } from './implementations/gemini-adapter.js';
 import { ConsoleLogger, LogLevel, StructuredLogger } from './implementations/logger.js';
+import { SQLiteLoopRepository } from './implementations/loop-repository.js';
 import { BufferedOutputCapture } from './implementations/output-capture.js';
 import { SQLiteOutputRepository } from './implementations/output-repository.js';
 import { ClaudeProcessSpawner } from './implementations/process-spawner.js';
@@ -92,6 +95,7 @@ import { SQLiteWorkerRepository } from './implementations/worker-repository.js';
 
 // Services
 import { extractHandlerDependencies, setupEventHandlers } from './services/handler-setup.js';
+import { LoopManagerService } from './services/loop-manager.js';
 import { RecoveryManager } from './services/recovery-manager.js';
 import { ScheduleExecutor } from './services/schedule-executor.js';
 import { ScheduleManagerService } from './services/schedule-manager.js';
@@ -264,12 +268,29 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
     return new SQLiteWorkerRepository(dbResult.value);
   });
 
+  // Register LoopRepository for iterative task/pipeline loops (v0.7.0)
+  container.registerSingleton('loopRepository', () => {
+    const dbResult = container.get<Database>('database');
+    if (!dbResult.ok) throw new Error('Failed to get database for LoopRepository');
+    return new SQLiteLoopRepository(dbResult.value);
+  });
+
   // Register ScheduleService for schedule management (v0.4.0)
   container.registerSingleton('scheduleService', () => {
     return new ScheduleManagerService(
       getFromContainer<EventBus>(container, 'eventBus'),
       getFromContainer<Logger>(container, 'logger').child({ module: 'ScheduleManager' }),
       getFromContainer<ScheduleRepository>(container, 'scheduleRepository'),
+      config,
+    );
+  });
+
+  // Register LoopService for iterative task/pipeline loops (v0.7.0)
+  container.registerSingleton('loopService', () => {
+    return new LoopManagerService(
+      getFromContainer<EventBus>(container, 'eventBus'),
+      getFromContainer<Logger>(container, 'logger').child({ module: 'LoopManager' }),
+      getFromContainer<LoopRepository>(container, 'loopRepository'),
       config,
     );
   });
@@ -383,6 +404,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
     container.registerValue('dependencyHandler', setupResult.value.dependencyHandler);
     container.registerValue('scheduleHandler', setupResult.value.scheduleHandler);
     container.registerValue('checkpointHandler', setupResult.value.checkpointHandler);
+    container.registerValue('loopHandler', setupResult.value.loopHandler);
 
     return taskManager;
   });
@@ -398,6 +420,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
       taskManagerResult.value,
       getFromContainer<Logger>(container, 'logger').child({ module: 'MCP' }),
       getFromContainer<ScheduleService>(container, 'scheduleService'),
+      getFromContainer<LoopService>(container, 'loopService'),
       getFromContainer<AgentRegistry>(container, 'agentRegistry'),
       config,
     );
@@ -418,6 +441,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
       getFromContainer<Logger>(container, 'logger').child({ module: 'Recovery' }),
       getFromContainer<WorkerRepository>(container, 'workerRepository'),
       getFromContainer<DependencyRepository>(container, 'dependencyRepository'),
+      getFromContainer<LoopRepository>(container, 'loopRepository'),
     );
   });
 

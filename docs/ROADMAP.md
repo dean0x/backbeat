@@ -1,10 +1,10 @@
 # Backbeat Development Roadmap
 
-## Current Status: v0.6.0 ✅
+## Current Status: v0.7.0 ✅
 
-**Status**: Released (2026-03-20)
+**Status**: Released (2026-03-21)
 
-Backbeat v0.6.0 delivers architectural simplification (hybrid event model, SQLite worker coordination, ReadOnlyContext), scheduled pipelines, bug fixes, and tech debt cleanup. See [FEATURES.md](./FEATURES.md) for complete list of current capabilities.
+Backbeat v0.7.0 adds task/pipeline loops — condition-driven iteration with retry and optimize strategies. See [FEATURES.md](./FEATURES.md) for complete list of current capabilities.
 
 ---
 
@@ -85,24 +85,22 @@ See [RELEASE_NOTES_v0.6.0.md](./releases/RELEASE_NOTES_v0.6.0.md) for full detai
 
 ---
 
-### v0.7.0 - Task/Pipeline Loops
-**Goal**: Condition-driven iteration
-**Priority**: High — completes the orchestration story
+### v0.7.0 - Task/Pipeline Loops ✅
+**Status**: **RELEASED** (2026-03-21)
 **Issue**: [#79](https://github.com/dean0x/backbeat/issues/79)
 
-#### Task/Pipeline Loops (#79)
-Repeat a task or pipeline until an exit condition is met — the [Ralph Wiggum Loop](https://ghuntley.com/loop/) pattern.
+Condition-driven iteration — repeat a task or pipeline until an exit condition is met. The [Ralph Wiggum Loop](https://ghuntley.com/loop/) pattern.
 
-```bash
-beat loop "implement next item from spec.md" \
-  --until "npm test && npm run build" \
-  --max-iterations 10
-```
-
-- Exit condition: shell command returning exit code 0
-- Max iterations: required safety cap
-- Fresh context per iteration (Ralph pattern) or continue from checkpoint
-- Composable with schedules: "every night, loop until spec is done"
+#### Features
+- Task/Pipeline Loops — `CreateLoop` MCP tool, `beat loop` CLI, retry and optimize strategies (#79)
+- Retry strategy: shell command exit code 0 ends the loop
+- Optimize strategy: eval script returns a score, loop seeks best (minimize or maximize)
+- Pipeline loops: repeat a multi-step pipeline (2–20 steps) per iteration
+- Fresh context per iteration (default) or continue from checkpoint
+- Safety controls: max iterations, max consecutive failures, cooldown, eval timeout
+- 4 MCP tools: `CreateLoop`, `LoopStatus`, `ListLoops`, `CancelLoop`
+- 4 CLI commands: `beat loop`, `beat loop list`, `beat loop get`, `beat loop cancel`
+- 4 events: `LoopCreated`, `LoopIterationCompleted`, `LoopCompleted`, `LoopCancelled`
 
 #### Builds On
 - v0.4.0 schedules (cron/one-time), checkpoints, `continueFrom`
@@ -123,10 +121,14 @@ beat loop "implement next item from spec.md" \
 - **Smart Routing**: Route tasks based on complexity, cost, or agent strengths
 - **Usage Tracking**: Track per-agent usage to predict limit exhaustion
 - **Cooldown Management**: Track rate limit windows, re-enable agents when limits reset
+- **Git Integration for Loops**: Loop-aware git state management (branch per iteration, diff tracking)
+- **Loop + Schedule Composition**: "Every night, loop until spec is done" — composable loops with cron/one-time schedules
+- **Loop Pause/Resume**: Pause an active loop and resume it later
 
 #### Builds On
 - v0.4.0 checkpoint/resumption system (`continueFrom`)
 - v0.5.0 agent registry and adapters
+- v0.7.0 task/pipeline loops
 
 ---
 
@@ -240,7 +242,7 @@ beat recipe create my-workflow  # interactive recipe builder
 | v0.4.0 | ✅ Released | Scheduling, Resumption, Rename to Backbeat |
 | v0.5.0 | ✅ Released | Multi-Agent Support |
 | v0.6.0 | ✅ Released | Architectural Simplification + Bug Fixes |
-| v0.7.0 | 📋 Planned | Task/Pipeline Loops |
+| v0.7.0 | ✅ Released | Task/Pipeline Loops |
 | v0.8.0 | 📋 Planned | Agent Failover + Smart Routing |
 | v0.9.0 | 📋 Planned | Workflow Recipes & Templates |
 | v0.10.0 | 💭 Research | Monitoring + REST API + Dashboard |

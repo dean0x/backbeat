@@ -9,7 +9,6 @@ import { resolveDefaultAgent } from '../core/agents.js';
 import { Configuration } from '../core/configuration.js';
 import {
   createSchedule,
-  MissedRunPolicy,
   PipelineCreateRequest,
   PipelineResult,
   PipelineStep,
@@ -27,30 +26,8 @@ import { EventBus } from '../core/events/event-bus.js';
 import { Logger, ScheduleExecution, ScheduleRepository, ScheduleService } from '../core/interfaces.js';
 import { err, ok, Result } from '../core/result.js';
 import { getNextRunTime, isValidTimezone, validateCronExpression } from '../utils/cron.js';
+import { toMissedRunPolicy, truncatePrompt } from '../utils/format.js';
 import { validatePath } from '../utils/validation.js';
-
-/** Truncate a prompt string to maxLen characters, appending '...' if truncated */
-function truncatePrompt(prompt: string, maxLen: number): string {
-  if (prompt.length <= maxLen) {
-    return prompt;
-  }
-  return prompt.substring(0, maxLen) + '...';
-}
-
-/**
- * Map missedRunPolicy string to MissedRunPolicy enum
- * Defaults to SKIP for unrecognized values
- */
-export function toMissedRunPolicy(value: string | undefined): MissedRunPolicy {
-  switch (value) {
-    case 'catchup':
-      return MissedRunPolicy.CATCHUP;
-    case 'fail':
-      return MissedRunPolicy.FAIL;
-    default:
-      return MissedRunPolicy.SKIP;
-  }
-}
 
 export class ScheduleManagerService implements ScheduleService {
   constructor(
@@ -145,9 +122,8 @@ export class ScheduleManagerService implements ScheduleService {
       const historyResult = await this.scheduleRepository.getExecutionHistory(scheduleId, historyLimit);
       if (historyResult.ok) {
         history = historyResult.value;
-      }
-      // Non-fatal: log warning but still return schedule data
-      if (!historyResult.ok) {
+      } else {
+        // Non-fatal: log warning but still return schedule data
         this.logger.warn('Failed to fetch execution history', {
           scheduleId,
           error: historyResult.error.message,

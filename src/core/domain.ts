@@ -9,10 +9,12 @@ import { BackbeatError } from './errors.js';
 export type TaskId = string & { readonly __brand: 'TaskId' };
 export type WorkerId = string & { readonly __brand: 'WorkerId' };
 export type ScheduleId = string & { readonly __brand: 'ScheduleId' };
+export type LoopId = string & { readonly __brand: 'LoopId' };
 
 export const TaskId = (id: string): TaskId => id as TaskId;
 export const WorkerId = (id: string): WorkerId => id as WorkerId;
 export const ScheduleId = (id: string): ScheduleId => id as ScheduleId;
+export const LoopId = (id: string): LoopId => id as LoopId;
 
 export enum Priority {
   P0 = 'P0', // Critical
@@ -458,3 +460,155 @@ export interface ResumeTaskRequest {
   readonly taskId: TaskId;
   readonly additionalContext?: string; // User-provided instructions for retry
 }
+
+// ============================================================================
+// Loop types (v0.7.0: Task/Pipeline Loops)
+// ARCHITECTURE: Iterative task execution with exit condition evaluation
+// Pattern: Immutable domain objects with factory functions, following Schedule conventions
+// ============================================================================
+
+/**
+ * Loop status values
+ * ARCHITECTURE: Tracks lifecycle of iterative task loops
+ */
+export enum LoopStatus {
+  RUNNING = 'running',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+  CANCELLED = 'cancelled',
+}
+
+/**
+ * Loop strategy discriminator
+ * ARCHITECTURE: Determines how iteration results are evaluated
+ * - RETRY: Exit condition is pass/fail (exit code 0 = pass)
+ * - OPTIMIZE: Exit condition returns a numeric score, loop seeks best score
+ */
+export enum LoopStrategy {
+  RETRY = 'retry',
+  OPTIMIZE = 'optimize',
+}
+
+/**
+ * Direction for optimize strategy scoring
+ * ARCHITECTURE: Determines whether lower or higher scores are better
+ */
+export enum OptimizeDirection {
+  MINIMIZE = 'minimize',
+  MAXIMIZE = 'maximize',
+}
+
+/**
+ * Loop interface - defines iterative task/pipeline execution
+ * ARCHITECTURE: All fields readonly for immutability
+ * Pattern: Factory function createLoop() for construction
+ */
+export interface Loop {
+  readonly id: LoopId;
+  readonly strategy: LoopStrategy;
+  readonly taskTemplate: TaskRequest;
+  readonly pipelineSteps?: readonly string[];
+  readonly exitCondition: string; // Shell command to evaluate iteration result
+  readonly evalDirection?: OptimizeDirection; // Optimize strategy only
+  readonly evalTimeout: number; // Milliseconds for exit condition evaluation
+  readonly workingDirectory: string;
+  readonly maxIterations: number; // 0 = unlimited
+  readonly maxConsecutiveFailures: number;
+  readonly cooldownMs: number;
+  readonly freshContext: boolean; // Whether each iteration gets a fresh agent context
+  readonly currentIteration: number;
+  readonly bestScore?: number;
+  readonly bestIterationId?: number;
+  readonly consecutiveFailures: number;
+  readonly status: LoopStatus;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly completedAt?: number;
+}
+
+/**
+ * Loop iteration record - tracks individual iteration execution
+ * ARCHITECTURE: Immutable record of each iteration attempt and outcome
+ */
+export interface LoopIteration {
+  readonly id: number; // Autoincrement
+  readonly loopId: LoopId;
+  readonly iterationNumber: number;
+  readonly taskId?: TaskId; // Optional: NULL after ON DELETE SET NULL when task is cleaned up
+  readonly pipelineTaskIds?: readonly TaskId[];
+  readonly status: 'running' | 'pass' | 'fail' | 'keep' | 'discard' | 'crash' | 'cancelled';
+  readonly score?: number;
+  readonly exitCode?: number;
+  readonly errorMessage?: string;
+  readonly startedAt: number;
+  readonly completedAt?: number;
+}
+
+/**
+ * Request type for creating loops via LoopService
+ * ARCHITECTURE: Flat structure for MCP/CLI consumption
+ */
+export interface LoopCreateRequest {
+  readonly prompt?: string; // Optional if pipeline mode (pipelineSteps provided)
+  readonly strategy: LoopStrategy;
+  readonly exitCondition: string;
+  readonly evalDirection?: OptimizeDirection;
+  readonly evalTimeout?: number; // Default: 60000ms
+  readonly workingDirectory?: string;
+  readonly maxIterations?: number; // Default: 10
+  readonly maxConsecutiveFailures?: number; // Default: 3
+  readonly cooldownMs?: number; // Default: 0
+  readonly freshContext?: boolean; // Default: true
+  readonly pipelineSteps?: readonly string[];
+  readonly priority?: Priority;
+  readonly agent?: AgentProvider;
+}
+
+/**
+ * Create a new loop
+ * ARCHITECTURE: Factory function returns frozen immutable object
+ * Pattern: Follows createSchedule() convention
+ */
+export const createLoop = (request: LoopCreateRequest, workingDirectory: string): Loop => {
+  const now = Date.now();
+  return Object.freeze({
+    id: LoopId(`loop-${crypto.randomUUID()}`),
+    strategy: request.strategy,
+    taskTemplate: {
+      prompt: request.prompt ?? '',
+      priority: request.priority,
+      workingDirectory,
+      agent: request.agent,
+    },
+    pipelineSteps: request.pipelineSteps,
+    exitCondition: request.exitCondition,
+    evalDirection: request.evalDirection,
+    evalTimeout: request.evalTimeout ?? 60000,
+    workingDirectory,
+    maxIterations: request.maxIterations ?? 10,
+    maxConsecutiveFailures: request.maxConsecutiveFailures ?? 3,
+    cooldownMs: request.cooldownMs ?? 0,
+    freshContext: request.freshContext ?? true,
+    currentIteration: 0,
+    bestScore: undefined,
+    bestIterationId: undefined,
+    consecutiveFailures: 0,
+    status: LoopStatus.RUNNING,
+    createdAt: now,
+    updatedAt: now,
+    completedAt: undefined,
+  });
+};
+
+/**
+ * Immutable update helper for loops
+ * ARCHITECTURE: Returns new frozen object, never mutates input
+ * Pattern: Follows updateSchedule() convention
+ */
+export const updateLoop = (loop: Loop, update: Partial<Loop>): Loop => {
+  return Object.freeze({
+    ...loop,
+    ...update,
+    updatedAt: Date.now(),
+  });
+};

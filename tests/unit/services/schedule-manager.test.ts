@@ -21,7 +21,8 @@ import {
 } from '../../../src/core/domain';
 import { Database } from '../../../src/implementations/database';
 import { SQLiteScheduleRepository } from '../../../src/implementations/schedule-repository';
-import { ScheduleManagerService, toMissedRunPolicy } from '../../../src/services/schedule-manager';
+import { ScheduleManagerService } from '../../../src/services/schedule-manager';
+import { toMissedRunPolicy } from '../../../src/utils/format';
 import { createTestConfiguration } from '../../fixtures/factories';
 import { TestEventBus, TestLogger } from '../../fixtures/test-doubles';
 

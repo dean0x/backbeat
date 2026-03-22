@@ -15,6 +15,7 @@ import { SQLiteCheckpointRepository } from '../../../src/implementations/checkpo
 import { Database } from '../../../src/implementations/database';
 import { SQLiteDependencyRepository } from '../../../src/implementations/dependency-repository';
 import { EventDrivenWorkerPool } from '../../../src/implementations/event-driven-worker-pool';
+import { SQLiteLoopRepository } from '../../../src/implementations/loop-repository';
 import { BufferedOutputCapture } from '../../../src/implementations/output-capture';
 import { ProcessSpawnerAdapter } from '../../../src/implementations/process-spawner-adapter';
 import { SystemResourceMonitor } from '../../../src/implementations/resource-monitor';
@@ -82,10 +83,11 @@ describe('handler-setup', () => {
     );
     container.registerValue('workerPool', workerPool);
 
-    // Repositories added in v0.4.0+ (scheduleRepository, checkpointRepository, database)
+    // Repositories added in v0.4.0+ (scheduleRepository, checkpointRepository, loopRepository, database)
     container.registerValue('database', database);
     container.registerValue('scheduleRepository', new SQLiteScheduleRepository(database));
     container.registerValue('checkpointRepository', new SQLiteCheckpointRepository(database));
+    container.registerValue('loopRepository', new SQLiteLoopRepository(database));
   });
 
   afterEach(async () => {
@@ -208,7 +210,7 @@ describe('handler-setup', () => {
       }
     });
 
-    it('should setup all 6 handlers (3 standard + DependencyHandler + ScheduleHandler + CheckpointHandler)', async () => {
+    it('should setup all 7 handlers (3 standard + DependencyHandler + ScheduleHandler + CheckpointHandler + LoopHandler)', async () => {
       const depsResult = extractHandlerDependencies(container);
       expect(depsResult.ok).toBe(true);
       if (!depsResult.ok) return;

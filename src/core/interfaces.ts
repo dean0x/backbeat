@@ -5,6 +5,11 @@
 
 import { ChildProcess } from 'child_process';
 import {
+  Loop,
+  LoopCreateRequest,
+  LoopId,
+  LoopIteration,
+  LoopStatus,
   PipelineCreateRequest,
   PipelineResult,
   ResumeTaskRequest,
@@ -503,4 +508,154 @@ export interface WorkerRepository {
   findAll(): Result<readonly WorkerRegistration[]>;
   getGlobalCount(): Result<number>;
   deleteByOwnerPid(ownerPid: number): Result<number>;
+}
+
+// ============================================================================
+// Loop interfaces (v0.7.0: Task/Pipeline Loops)
+// ARCHITECTURE: Repository and service interfaces for iterative task execution
+// Pattern: Follows ScheduleRepository/ScheduleService conventions
+// ============================================================================
+
+/**
+ * Loop persistence and query interface
+ * ARCHITECTURE: Pure Result pattern, no exceptions
+ * Pattern: Repository pattern for loop management
+ * Rationale: Enables loop CRUD, status tracking, iteration history
+ */
+export interface LoopRepository {
+  /**
+   * Save a new loop
+   */
+  save(loop: Loop): Promise<Result<void>>;
+
+  /**
+   * Update an existing loop
+   */
+  update(loop: Loop): Promise<Result<void>>;
+
+  /**
+   * Find loop by ID
+   */
+  findById(id: LoopId): Promise<Result<Loop | null>>;
+
+  /**
+   * Find loops with optional pagination
+   *
+   * All implementations MUST use DEFAULT_LIMIT = 100 when limit is not specified.
+   * This ensures consistent behavior across implementations.
+   *
+   * @param limit Maximum results to return (default: 100, max recommended: 1000)
+   * @param offset Skip first N results (default: 0)
+   * @returns Paginated loop list ordered by created_at DESC
+   */
+  findAll(limit?: number, offset?: number): Promise<Result<readonly Loop[]>>;
+
+  /**
+   * Find loops by status with optional pagination
+   *
+   * All implementations MUST use DEFAULT_LIMIT = 100 when limit is not specified.
+   *
+   * @param status Loop status to filter by
+   * @param limit Maximum results to return (default: 100)
+   * @param offset Skip first N results (default: 0)
+   * @returns Paginated loop list matching status, ordered by created_at DESC
+   */
+  findByStatus(status: LoopStatus, limit?: number, offset?: number): Promise<Result<readonly Loop[]>>;
+
+  /**
+   * Count total loops
+   */
+  count(): Promise<Result<number>>;
+
+  /**
+   * Delete a loop
+   */
+  delete(id: LoopId): Promise<Result<void>>;
+
+  /**
+   * Record a loop iteration
+   */
+  recordIteration(iteration: LoopIteration): Promise<Result<void>>;
+
+  /**
+   * Get iteration history for a loop
+   * @param loopId Loop to get history for
+   * @param limit Maximum records to return (default: 100)
+   * @param offset Skip first N results (default: 0)
+   * @returns Iterations ordered by iteration_number DESC
+   */
+  getIterations(loopId: LoopId, limit?: number, offset?: number): Promise<Result<readonly LoopIteration[]>>;
+
+  /**
+   * Find iteration by the task ID it spawned
+   * ARCHITECTURE: Used by loop handler to correlate task completion events back to iterations
+   */
+  findIterationByTaskId(taskId: TaskId): Promise<Result<LoopIteration | null>>;
+
+  /**
+   * Find all currently running iterations across all active loops
+   * ARCHITECTURE: Used by recovery manager for crash recovery
+   */
+  findRunningIterations(): Promise<Result<readonly LoopIteration[]>>;
+
+  /**
+   * Update an existing iteration
+   */
+  updateIteration(iteration: LoopIteration): Promise<Result<void>>;
+
+  /**
+   * Clean up old completed/failed/cancelled loops
+   * @param olderThanMs Age threshold in milliseconds — loops completed before (Date.now() - olderThanMs) are deleted
+   * @returns Number of loops deleted
+   * ARCHITECTURE: FK cascade (ON DELETE CASCADE) auto-deletes associated iterations
+   */
+  cleanupOldLoops(olderThanMs: number): Promise<Result<number>>;
+}
+
+/**
+ * Synchronous loop operations for use inside Database.runInTransaction().
+ * These methods throw on error (the transaction wrapper catches and converts to Result).
+ * ARCHITECTURE: Narrow interface -- only the operations needed inside transactions.
+ */
+export interface SyncLoopOperations {
+  updateSync(loop: Loop): void;
+  recordIterationSync(iteration: LoopIteration): void;
+  findByIdSync(id: LoopId): Loop | null;
+  updateIterationSync(iteration: LoopIteration): void;
+}
+
+/**
+ * Loop management service
+ * ARCHITECTURE: Extracted for MCP/CLI reuse
+ * Pattern: Service layer with DI, Result types, event emission
+ */
+export interface LoopService {
+  createLoop(request: LoopCreateRequest): Promise<Result<Loop>>;
+  getLoop(
+    loopId: LoopId,
+    includeHistory?: boolean,
+    historyLimit?: number,
+  ): Promise<Result<{ loop: Loop; iterations?: readonly LoopIteration[] }>>;
+  listLoops(status?: LoopStatus, limit?: number, offset?: number): Promise<Result<readonly Loop[]>>;
+  cancelLoop(loopId: LoopId, reason?: string, cancelTasks?: boolean): Promise<Result<void>>;
+}
+
+/**
+ * Exit condition evaluation result
+ * ARCHITECTURE: Discriminated by strategy — retry returns pass/fail, optimize returns score
+ */
+export interface EvalResult {
+  readonly passed: boolean;
+  readonly score?: number;
+  readonly exitCode?: number;
+  readonly error?: string;
+}
+
+/**
+ * Exit condition evaluator abstraction for dependency injection
+ * ARCHITECTURE: Decouples loop handler from child_process for testability
+ * Pattern: Strategy pattern — implementations can use shell exec, HTTP, etc.
+ */
+export interface ExitConditionEvaluator {
+  evaluate(loop: Loop, taskId: TaskId): Promise<EvalResult>;
 }
