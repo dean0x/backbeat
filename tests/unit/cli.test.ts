@@ -1144,7 +1144,7 @@ describe('CLI - Schedule Commands', () => {
       expect(result.value.prompt).toBeUndefined();
     });
 
-    it('should preserve prompt in pipeline mode for handler warning', () => {
+    it('should suppress prompt in pipeline mode (matches loop parser)', () => {
       const result = parseScheduleCreateArgs([
         'extra',
         'words',
@@ -1159,7 +1159,7 @@ describe('CLI - Schedule Commands', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value.isPipeline).toBe(true);
-      expect(result.value.prompt).toBe('extra words');
+      expect(result.value.prompt).toBeUndefined();
     });
 
     it('should parse --priority with -p shorthand', () => {

@@ -85,7 +85,7 @@ export function parseScheduleCreateArgs(scheduleArgs: string[]): Result<ParsedSc
       workingDirectory = pathResult.value;
       i++;
     } else if (arg === '--max-runs' && next) {
-      maxRuns = parseInt(next);
+      maxRuns = parseInt(next, 10);
       if (isNaN(maxRuns) || maxRuns < 1) {
         return err('--max-runs must be a positive integer');
       }
@@ -147,11 +147,13 @@ export function parseScheduleCreateArgs(scheduleArgs: string[]): Result<ParsedSc
   // Non-pipeline mode: prompt is required
   const prompt = promptWords.join(' ');
   if (!isPipeline && !prompt) {
-    return err('Usage: beat schedule create <prompt> --cron "..." | --at "..." [options]');
+    return err(
+      'Usage: beat schedule create <prompt> --cron "..." | --at "..." [options]\n  Pipeline: beat schedule create --pipeline --step "lint" --step "test" --cron "0 9 * * *"',
+    );
   }
 
   return ok({
-    prompt: prompt || undefined,
+    prompt: isPipeline ? undefined : prompt || undefined,
     scheduleType,
     cronExpression,
     scheduledAt,
@@ -227,10 +229,6 @@ async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]):
     process.exit(1);
   }
   const args = parsed.value;
-
-  if (args.isPipeline && args.prompt) {
-    ui.info(`Ignoring positional prompt text in --pipeline mode: "${args.prompt}". Use --step flags only.`);
-  }
 
   const baseOptions = {
     scheduleType: args.scheduleType === 'cron' ? ScheduleType.CRON : ScheduleType.ONE_TIME,
