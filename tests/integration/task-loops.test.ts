@@ -304,4 +304,164 @@ describe('Integration: Task Loops - End-to-End Flow', () => {
       expect(finalLoop!.bestScore).toBe(70);
     });
   });
+
+  describe('Task failure scenarios', () => {
+    it('should increment consecutiveFailures on task failure and start next iteration', async () => {
+      const createResult = await service.createLoop({
+        prompt: 'Fix the bug',
+        strategy: LoopStrategy.RETRY,
+        exitCondition: 'true',
+        maxIterations: 5,
+        maxConsecutiveFailures: 5,
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const loopId = createResult.value.id;
+      await flushEventLoop();
+
+      // Emit TaskFailed for first iteration
+      const iter1 = await getLatestIteration(loopId);
+      expect(iter1).toBeDefined();
+      await eventBus.emit('TaskFailed', { taskId: iter1!.taskId, error: 'Test failed', exitCode: 1 });
+      await flushEventLoop();
+
+      // Loop should still be running with incremented failures
+      const loop = await getLoop(loopId);
+      expect(loop!.status).toBe(LoopStatus.RUNNING);
+      expect(loop!.consecutiveFailures).toBe(1);
+      expect(loop!.currentIteration).toBe(2);
+    });
+
+    it('should fail loop when max consecutive failures reached', async () => {
+      const createResult = await service.createLoop({
+        prompt: 'Fix the bug',
+        strategy: LoopStrategy.RETRY,
+        exitCondition: 'true',
+        maxIterations: 10,
+        maxConsecutiveFailures: 2,
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const loopId = createResult.value.id;
+      await flushEventLoop();
+
+      // Fail first iteration
+      const iter1 = await getLatestIteration(loopId);
+      await eventBus.emit('TaskFailed', { taskId: iter1!.taskId, error: 'fail 1', exitCode: 1 });
+      await flushEventLoop();
+
+      // Fail second iteration
+      const iter2 = await getLatestIteration(loopId);
+      await eventBus.emit('TaskFailed', { taskId: iter2!.taskId, error: 'fail 2', exitCode: 1 });
+      await flushEventLoop();
+
+      // Loop should be FAILED
+      const loop = await getLoop(loopId);
+      expect(loop!.status).toBe(LoopStatus.FAILED);
+      expect(loop!.consecutiveFailures).toBe(2);
+    });
+
+    it('should keep incrementing consecutiveFailures when task succeeds but exit condition fails', async () => {
+      // Exit condition: `false` always fails (exit code 1) so loop continues
+      // consecutiveFailures tracks iteration outcome, not task outcome
+      const createResult = await service.createLoop({
+        prompt: 'Fix the bug',
+        strategy: LoopStrategy.RETRY,
+        exitCondition: 'false',
+        maxIterations: 5,
+        maxConsecutiveFailures: 5,
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const loopId = createResult.value.id;
+      await flushEventLoop();
+
+      // Fail first iteration (TaskFailed)
+      const iter1 = await getLatestIteration(loopId);
+      await eventBus.emit('TaskFailed', { taskId: iter1!.taskId, error: 'fail', exitCode: 1 });
+      await flushEventLoop();
+
+      expect((await getLoop(loopId))!.consecutiveFailures).toBe(1);
+
+      // Succeed second iteration task, but exit condition `false` fails
+      const iter2 = await getLatestIteration(loopId);
+      await eventBus.emit('TaskCompleted', { taskId: iter2!.taskId, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // consecutiveFailures increments because exit condition failed
+      const loop = await getLoop(loopId);
+      expect(loop!.consecutiveFailures).toBe(2);
+      expect(loop!.status).toBe(LoopStatus.RUNNING);
+    });
+  });
+
+  describe('Optimize strategy edge cases', () => {
+    it('should track best score with maximize direction', async () => {
+      // Create a script that outputs specific scores per iteration
+      const counterFile = join(tempDir, 'max-counter.txt');
+      await writeFile(counterFile, '0');
+      // Scores: 10, 20, 15 — best for maximize is 20
+      const exitCondition = `COUNTER=$(cat ${counterFile}); COUNTER=$((COUNTER + 1)); echo $COUNTER > ${counterFile}; case $COUNTER in 1) echo 10;; 2) echo 20;; *) echo 15;; esac`;
+
+      const createResult = await service.createLoop({
+        prompt: 'Maximize score',
+        strategy: LoopStrategy.OPTIMIZE,
+        exitCondition,
+        evalDirection: OptimizeDirection.MAXIMIZE,
+        maxIterations: 3,
+        maxConsecutiveFailures: 5,
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const loopId = createResult.value.id;
+      await flushEventLoop();
+
+      for (let i = 0; i < 3; i++) {
+        const iter = await getLatestIteration(loopId);
+        if (!iter || iter.status !== 'running') break;
+        await eventBus.emit('TaskCompleted', { taskId: iter.taskId, exitCode: 0, duration: 100 });
+        await flushEventLoop();
+      }
+
+      const finalLoop = await getLoop(loopId);
+      expect(finalLoop!.status).toBe(LoopStatus.COMPLETED);
+      expect(finalLoop!.bestScore).toBe(20);
+    });
+  });
+
+  describe('Shell exit condition evaluation', () => {
+    it('should parse numeric score from shell command output', async () => {
+      // echo 42 should produce score=42
+      const createResult = await service.createLoop({
+        prompt: 'Score test',
+        strategy: LoopStrategy.OPTIMIZE,
+        exitCondition: 'echo 42',
+        evalDirection: OptimizeDirection.MINIMIZE,
+        maxIterations: 1,
+        maxConsecutiveFailures: 3,
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const loopId = createResult.value.id;
+      await flushEventLoop();
+
+      const iter = await getLatestIteration(loopId);
+      await eventBus.emit('TaskCompleted', { taskId: iter!.taskId, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      const finalLoop = await getLoop(loopId);
+      expect(finalLoop!.status).toBe(LoopStatus.COMPLETED);
+      expect(finalLoop!.bestScore).toBe(42);
+    });
+  });
 });
