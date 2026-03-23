@@ -678,7 +678,7 @@ export class ScheduleHandler extends BaseEventHandler {
       runCount: newRunCount,
       lastRunAt: triggeredAt,
       nextRunAt: newNextRunAt,
-      ...(newStatus !== undefined ? { status: newStatus } : {}),
+      ...(newStatus !== undefined && { status: newStatus }),
     };
   }
 

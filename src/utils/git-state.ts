@@ -25,16 +25,12 @@ export function validateGitRefName(name: string, label = 'branch'): Result<void,
 
   // Prevent argument injection: names starting with '-' are interpreted as git flags
   if (name.startsWith('-')) {
-    return err(
-      new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not start with '-': ${name}`),
-    );
+    return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not start with '-': ${name}`));
   }
 
   // git-check-ref-format disallows '..' (directory traversal)
   if (name.includes('..')) {
-    return err(
-      new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not contain '..': ${name}`),
-    );
+    return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not contain '..': ${name}`));
   }
 
   // Reject control characters (ASCII 0x00-0x1F and 0x7F)
@@ -148,9 +144,7 @@ export async function createAndCheckoutBranch(
 
   try {
     // Use '--' separator to prevent branch names from being interpreted as flags
-    const args = fromRef
-      ? ['checkout', '-B', branchName, fromRef, '--']
-      : ['checkout', '-B', branchName, '--'];
+    const args = fromRef ? ['checkout', '-B', branchName, fromRef, '--'] : ['checkout', '-B', branchName, '--'];
 
     await execFileAsync('git', args, { cwd: workingDirectory });
     return ok(undefined);

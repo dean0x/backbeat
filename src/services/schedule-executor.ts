@@ -127,28 +127,28 @@ export class ScheduleExecutor {
 
       // When a task completes, check if it was from a schedule and clear running state
       this.eventBus.subscribe<TaskCompletedEvent>('TaskCompleted', async (event) => {
-        this.clearRunningScheduleByTask(event.taskId);
+        this.clearRunningScheduleByTrackingId(event.taskId);
       }),
 
       this.eventBus.subscribe<TaskFailedEvent>('TaskFailed', async (event) => {
-        this.clearRunningScheduleByTask(event.taskId);
+        this.clearRunningScheduleByTrackingId(event.taskId);
       }),
 
       this.eventBus.subscribe<TaskCancelledEvent>('TaskCancelled', async (event) => {
-        this.clearRunningScheduleByTask(event.taskId);
+        this.clearRunningScheduleByTrackingId(event.taskId);
       }),
 
       this.eventBus.subscribe<TaskTimeoutEvent>('TaskTimeout', async (event) => {
-        this.clearRunningScheduleByTask(event.taskId);
+        this.clearRunningScheduleByTrackingId(event.taskId);
       }),
 
       // Loop lifecycle events — clear running state for parent schedule
       this.eventBus.subscribe<LoopCompletedEvent>('LoopCompleted', async (event) => {
-        this.clearRunningScheduleByTask(event.loopId);
+        this.clearRunningScheduleByTrackingId(event.loopId);
       }),
 
       this.eventBus.subscribe<LoopCancelledEvent>('LoopCancelled', async (event) => {
-        this.clearRunningScheduleByTask(event.loopId);
+        this.clearRunningScheduleByTrackingId(event.loopId);
       }),
     ];
 
@@ -168,13 +168,13 @@ export class ScheduleExecutor {
   }
 
   /**
-   * Clear running schedule state when a task completes
+   * Clear running schedule state when a tracked entity (task or loop) completes
    */
-  private clearRunningScheduleByTask(taskId: string): void {
-    for (const [scheduleId, runningTaskId] of this.runningSchedules.entries()) {
-      if (runningTaskId === taskId) {
+  private clearRunningScheduleByTrackingId(trackingId: string): void {
+    for (const [scheduleId, runningId] of this.runningSchedules.entries()) {
+      if (runningId === trackingId) {
         this.runningSchedules.delete(scheduleId);
-        this.logger.debug('Cleared running state for schedule', { scheduleId, taskId });
+        this.logger.debug('Cleared running state for schedule', { scheduleId, trackingId });
         break;
       }
     }
