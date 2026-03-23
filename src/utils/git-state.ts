@@ -11,6 +11,52 @@ import { err, ok, Result } from '../core/result.js';
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * Validate a git ref name (branch or tag) to prevent argument injection.
+ * Rejects names that could be interpreted as git flags or contain unsafe patterns.
+ * Based on git-check-ref-format rules plus argument injection prevention.
+ *
+ * @returns Result<void> - ok if valid, err with descriptive message if invalid
+ */
+export function validateGitRefName(name: string, label = 'branch'): Result<void, BackbeatError> {
+  if (!name || name.trim().length === 0) {
+    return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not be empty`));
+  }
+
+  // Prevent argument injection: names starting with '-' are interpreted as git flags
+  if (name.startsWith('-')) {
+    return err(
+      new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not start with '-': ${name}`),
+    );
+  }
+
+  // git-check-ref-format disallows '..' (directory traversal)
+  if (name.includes('..')) {
+    return err(
+      new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not contain '..': ${name}`),
+    );
+  }
+
+  // Reject control characters (ASCII 0x00-0x1F and 0x7F)
+  if (/[\x00-\x1f\x7f]/.test(name)) {
+    return err(
+      new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not contain control characters: ${name}`),
+    );
+  }
+
+  // git-check-ref-format disallows space, tilde, caret, colon, backslash
+  if (/[\s~^:\\]/.test(name)) {
+    return err(
+      new BackbeatError(
+        ErrorCode.INVALID_INPUT,
+        `Git ${label} name contains invalid characters (space, ~, ^, :, or \\): ${name}`,
+      ),
+    );
+  }
+
+  return ok(undefined);
+}
+
 export interface GitState {
   readonly branch: string;
   readonly commitSha: string;
@@ -92,11 +138,19 @@ export async function createAndCheckoutBranch(
   branchName: string,
   fromRef?: string,
 ): Promise<Result<void, BackbeatError>> {
+  const nameValidation = validateGitRefName(branchName, 'branch');
+  if (!nameValidation.ok) return nameValidation;
+
+  if (fromRef) {
+    const refValidation = validateGitRefName(fromRef, 'ref');
+    if (!refValidation.ok) return refValidation;
+  }
+
   try {
-    const args = ['checkout', '-B', branchName];
-    if (fromRef) {
-      args.push(fromRef);
-    }
+    // Use '--' separator to prevent branch names from being interpreted as flags
+    const args = fromRef
+      ? ['checkout', '-B', branchName, fromRef, '--']
+      : ['checkout', '-B', branchName, '--'];
 
     await execFileAsync('git', args, { cwd: workingDirectory });
     return ok(undefined);
@@ -126,8 +180,15 @@ export async function captureGitDiff(
   fromBranch: string,
   toBranch: string,
 ): Promise<Result<string | null, BackbeatError>> {
+  const fromValidation = validateGitRefName(fromBranch, 'branch');
+  if (!fromValidation.ok) return fromValidation;
+
+  const toValidation = validateGitRefName(toBranch, 'branch');
+  if (!toValidation.ok) return toValidation;
+
   try {
-    const diffResult = await execFileAsync('git', ['diff', '--stat', `${fromBranch}..${toBranch}`], {
+    // '--' separator prevents ref names from being interpreted as flags
+    const diffResult = await execFileAsync('git', ['diff', '--stat', `${fromBranch}..${toBranch}`, '--'], {
       cwd: workingDirectory,
     });
 

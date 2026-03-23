@@ -502,7 +502,7 @@ export class ScheduleManagerService implements ScheduleService {
       cronExpression: request.cronExpression,
       scheduledAt: scheduledAtMs,
       timezone,
-      missedRunPolicy: request.missedRunPolicy,
+      missedRunPolicy: toMissedRunPolicy(request.missedRunPolicy),
       maxRuns: request.maxRuns,
       expiresAt: expiresAtMs,
       loopConfig: request.loopConfig,

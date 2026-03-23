@@ -207,7 +207,7 @@ const ConfigureAgentSchema = z.object({
 const CreateLoopSchema = z.object({
   prompt: z.string().min(1).max(4000).optional().describe('Task prompt for each iteration'),
   strategy: z.enum(['retry', 'optimize']).describe('Loop strategy'),
-  exitCondition: z.string().min(1).describe('Shell command to evaluate after each iteration'),
+  exitCondition: z.string().min(1).max(4000).describe('Shell command to evaluate after each iteration'),
   evalDirection: z.enum(['minimize', 'maximize']).optional().describe('Score direction for optimize strategy'),
   evalTimeout: z.number().min(1000).optional().default(60000).describe('Eval script timeout in ms'),
   workingDirectory: z.string().optional().describe('Working directory for task and eval'),
@@ -260,7 +260,7 @@ const ScheduleLoopSchema = z.object({
   // Loop config fields
   prompt: z.string().min(1).max(4000).optional().describe('Task prompt for each iteration'),
   strategy: z.enum(['retry', 'optimize']).describe('Loop strategy'),
-  exitCondition: z.string().min(1).describe('Shell command to evaluate after each iteration'),
+  exitCondition: z.string().min(1).max(4000).describe('Shell command to evaluate after each iteration'),
   evalDirection: z.enum(['minimize', 'maximize']).optional().describe('Score direction for optimize strategy'),
   evalTimeout: z.number().min(1000).optional().describe('Eval script timeout in ms'),
   workingDirectory: z.string().optional().describe('Working directory for task and eval'),

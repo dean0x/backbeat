@@ -655,9 +655,24 @@ export class Database implements TransactionRunner {
             )
           `);
 
-          // Copy existing data — NULL for new columns
+          // Copy existing data — explicit column list for safety (NULL for new v11 columns)
           db.exec(`
-            INSERT INTO loops_new SELECT *, NULL, NULL, NULL FROM loops
+            INSERT INTO loops_new (
+              id, strategy, task_template, pipeline_steps, exit_condition,
+              eval_direction, eval_timeout, working_directory, max_iterations,
+              max_consecutive_failures, cooldown_ms, fresh_context, status,
+              current_iteration, best_score, best_iteration_id, consecutive_failures,
+              created_at, updated_at, completed_at,
+              git_branch, git_base_branch, schedule_id
+            )
+            SELECT
+              id, strategy, task_template, pipeline_steps, exit_condition,
+              eval_direction, eval_timeout, working_directory, max_iterations,
+              max_consecutive_failures, cooldown_ms, fresh_context, status,
+              current_iteration, best_score, best_iteration_id, consecutive_failures,
+              created_at, updated_at, completed_at,
+              NULL, NULL, NULL
+            FROM loops
           `);
 
           db.exec(`DROP TABLE loops`);

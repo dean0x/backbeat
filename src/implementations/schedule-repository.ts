@@ -11,8 +11,11 @@ import { AGENT_PROVIDERS_TUPLE } from '../core/agents.js';
 import {
   type LoopCreateRequest,
   LoopId,
+  LoopStrategy,
   MissedRunPolicy,
+  OptimizeDirection,
   type PipelineStepRequest,
+  Priority,
   Schedule,
   ScheduleId,
   ScheduleStatus,
@@ -113,9 +116,9 @@ const PipelineStepsSchema = z
  */
 const LoopConfigSchema = z.object({
   prompt: z.string().optional(),
-  strategy: z.enum(['retry', 'optimize']),
+  strategy: z.nativeEnum(LoopStrategy),
   exitCondition: z.string().min(1),
-  evalDirection: z.enum(['minimize', 'maximize']).optional(),
+  evalDirection: z.nativeEnum(OptimizeDirection).optional(),
   evalTimeout: z.number().optional(),
   workingDirectory: z.string().optional(),
   maxIterations: z.number().optional(),
@@ -123,10 +126,10 @@ const LoopConfigSchema = z.object({
   cooldownMs: z.number().optional(),
   freshContext: z.boolean().optional(),
   pipelineSteps: z.array(z.string()).optional(),
-  priority: z.enum(['P0', 'P1', 'P2']).optional(),
+  priority: z.nativeEnum(Priority).optional(),
   agent: z.enum(AGENT_PROVIDERS_TUPLE).optional(),
   gitBranch: z.string().optional(),
-});
+}) satisfies z.ZodType<LoopCreateRequest>;
 
 /**
  * Database row type for schedules table
@@ -580,7 +583,7 @@ export class SQLiteScheduleRepository implements ScheduleRepository, SyncSchedul
     if (data.loop_config) {
       try {
         const parsed = JSON.parse(data.loop_config);
-        loopConfig = LoopConfigSchema.parse(parsed) as LoopCreateRequest;
+        loopConfig = LoopConfigSchema.parse(parsed);
       } catch (e) {
         throw new Error(`Invalid loop_config JSON for schedule ${data.id}: ${e}`);
       }
