@@ -112,13 +112,17 @@ export class ScheduleExecutor {
    */
   private subscribeToTaskEvents(): Result<void, BackbeatError> {
     const subscriptions = [
-      // When a schedule execution creates a task, track it
+      // When a schedule execution creates a task or loop, track it
       this.eventBus.subscribe<ScheduleExecutedEvent>('ScheduleExecuted', async (event) => {
-        this.markScheduleRunning(event.scheduleId, event.taskId);
-        this.logger.debug('Marked schedule as running', {
-          scheduleId: event.scheduleId,
-          taskId: event.taskId,
-        });
+        const trackingId = event.taskId ?? event.loopId;
+        if (trackingId) {
+          this.markScheduleRunning(event.scheduleId, trackingId);
+          this.logger.debug('Marked schedule as running', {
+            scheduleId: event.scheduleId,
+            taskId: event.taskId,
+            loopId: event.loopId,
+          });
+        }
       }),
 
       // When a task completes, check if it was from a schedule and clear running state
@@ -139,8 +143,6 @@ export class ScheduleExecutor {
       }),
 
       // Loop lifecycle events — clear running state for parent schedule
-      // ARCHITECTURE: loopId is stored in the taskId slot of runningSchedules when
-      // ScheduleHandler emits ScheduleExecuted for a loop trigger
       this.eventBus.subscribe<LoopCompletedEvent>('LoopCompleted', async (event) => {
         this.clearRunningScheduleByTask(event.loopId);
       }),

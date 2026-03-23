@@ -149,7 +149,8 @@ export interface ScheduleTriggeredEvent extends BaseEvent {
 export interface ScheduleExecutedEvent extends BaseEvent {
   type: 'ScheduleExecuted';
   scheduleId: ScheduleId;
-  taskId: TaskId; // ID of the task created from this execution
+  taskId?: TaskId; // ID of the task created from this execution (undefined for loop triggers)
+  loopId?: LoopId; // ID of the loop created from this execution (undefined for task/pipeline triggers)
   executedAt: number; // Epoch ms when execution started
 }
 

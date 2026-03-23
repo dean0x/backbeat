@@ -526,18 +526,30 @@ export class ScheduleHandler extends BaseEventHandler {
     // Pure computation OUTSIDE transaction
     const scheduleUpdates = this.computeScheduleUpdates(schedule, triggeredAt);
 
-    // Record execution (with loopId instead of taskId)
-    await this.scheduleRepo.recordExecution({
-      scheduleId,
-      loopId: loop.id,
-      scheduledFor: schedule.nextRunAt ?? triggeredAt,
-      executedAt: triggeredAt,
-      status: 'triggered',
-      createdAt: Date.now(),
+    // Atomic: record execution + update schedule (matches handleSingleTaskTrigger pattern)
+    const txResult = this.database.runInTransaction(() => {
+      this.scheduleRepo.recordExecutionSync({
+        scheduleId,
+        loopId: loop.id,
+        scheduledFor: schedule.nextRunAt ?? triggeredAt,
+        executedAt: triggeredAt,
+        status: 'triggered',
+        createdAt: Date.now(),
+      });
+
+      this.scheduleRepo.updateSync(schedule.id, scheduleUpdates, schedule);
     });
 
-    // Update schedule
-    await this.scheduleRepo.update(scheduleId, scheduleUpdates);
+    if (!txResult.ok) {
+      // Transaction rolled back — best-effort audit trail
+      await this.recordFailedExecution(
+        scheduleId,
+        schedule.nextRunAt ?? triggeredAt,
+        triggeredAt,
+        txResult.error.message,
+      );
+      return txResult;
+    }
 
     // Post-commit logging
     this.logScheduleTransition(schedule, scheduleUpdates);
@@ -552,12 +564,10 @@ export class ScheduleHandler extends BaseEventHandler {
       return emitResult;
     }
 
-    // Emit ScheduleExecuted with loopId as tracking value (cast to TaskId for map slot)
-    // ARCHITECTURE EXCEPTION: loopId is used in the taskId slot for ScheduleExecutor tracking.
-    // ScheduleExecutor.clearRunningScheduleByTask will be called with the loopId when the loop completes.
+    // Emit ScheduleExecuted with loopId for ScheduleExecutor concurrency tracking
     await this.eventBus.emit('ScheduleExecuted', {
       scheduleId,
-      taskId: loop.id as unknown as TaskId,
+      loopId: loop.id,
       executedAt: triggeredAt,
     });
 
