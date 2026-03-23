@@ -211,19 +211,12 @@ export class LoopManagerService implements LoopService {
     }
 
     // ========================================================================
-    // Resolve validated working directory and agent (already validated above)
+    // Resolve validated working directory and agent (validation passed above)
     // ========================================================================
-    let validatedWorkingDirectory: string;
-    if (request.workingDirectory) {
-      const pathValidation = validatePath(request.workingDirectory);
-      // Already validated — this always succeeds
-      validatedWorkingDirectory = pathValidation.ok ? pathValidation.value : process.cwd();
-    } else {
-      validatedWorkingDirectory = process.cwd();
-    }
+    const pathResult = request.workingDirectory ? validatePath(request.workingDirectory) : undefined;
+    const validatedWorkingDirectory = pathResult?.ok ? pathResult.value : process.cwd();
 
     const agentResult = resolveDefaultAgent(request.agent, this.config.defaultAgent);
-    // Already validated — this always succeeds
     const agent = agentResult.ok ? agentResult.value : request.agent;
 
     // ========================================================================

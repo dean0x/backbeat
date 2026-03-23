@@ -110,7 +110,47 @@ Condition-driven iteration — repeat a task or pipeline until an exit condition
 
 ---
 
-### v0.8.0 - Agent Failover & Smart Routing
+### v0.8.0 - Loop Enhancements
+**Goal**: Loop lifecycle control, schedule composition, and git-aware iterations
+**Priority**: High — completes the loop story started in v0.7.0
+
+#### Features
+- **Loop + Schedule Composition**: "Every night, loop until spec is done" — composable loops with cron/one-time schedules. A schedule trigger creates a loop instance per execution.
+- **Loop Pause/Resume**: Pause an active loop mid-iteration and resume it later. Paused loops retain iteration state and checkpoint.
+- **Git Integration for Loops**: Loop-aware git state management — branch per iteration, diff tracking between iterations, automatic branch cleanup on loop completion.
+
+#### CLI
+```bash
+# Schedule a loop
+beat schedule create --cron "0 9 * * *" --loop \
+  --prompt "implement next item from spec.md" \
+  --exit-condition "./check-spec-complete.sh" \
+  --max-iterations 10
+
+# Pause/resume
+beat loop pause <loop-id>
+beat loop resume <loop-id>
+
+# Git integration
+beat loop create "refactor auth module" \
+  --exit-condition "./tests-pass.sh" \
+  --git-branch-per-iteration \
+  --base-branch main
+```
+
+#### MCP Tools
+- `ScheduleLoop` — create a scheduled loop (cron/one-time trigger → loop)
+- `PauseLoop` / `ResumeLoop` — lifecycle control
+- `CreateLoop` updated — optional `gitConfig` parameter for branch-per-iteration
+
+#### Builds On
+- v0.4.0 scheduling (cron/one-time), checkpoints
+- v0.6.0 scheduled pipelines pattern
+- v0.7.0 task/pipeline loops
+
+---
+
+### v0.9.0 - Agent Failover & Smart Routing
 **Goal**: Automatic agent switching on rate limits, intelligent task routing
 **Priority**: High — makes multi-agent practically useful
 
@@ -121,9 +161,6 @@ Condition-driven iteration — repeat a task or pipeline until an exit condition
 - **Smart Routing**: Route tasks based on complexity, cost, or agent strengths
 - **Usage Tracking**: Track per-agent usage to predict limit exhaustion
 - **Cooldown Management**: Track rate limit windows, re-enable agents when limits reset
-- **Git Integration for Loops**: Loop-aware git state management (branch per iteration, diff tracking)
-- **Loop + Schedule Composition**: "Every night, loop until spec is done" — composable loops with cron/one-time schedules
-- **Loop Pause/Resume**: Pause an active loop and resume it later
 
 #### Builds On
 - v0.4.0 checkpoint/resumption system (`continueFrom`)
@@ -132,9 +169,10 @@ Condition-driven iteration — repeat a task or pipeline until an exit condition
 
 ---
 
-### v0.9.0 - Workflow Recipes & Templates
+### v0.10.0 - Workflow Recipes & Templates
 **Goal**: Reusable multi-step workflows with predefined DAGs
 **Priority**: Medium — power user productivity
+**Note**: Renumbered from v0.9.0
 
 #### Features
 - **Recipe Definitions**: YAML/JSON workflow specifications
@@ -188,7 +226,7 @@ beat recipe create my-workflow  # interactive recipe builder
 
 ---
 
-### v0.10.0 - Monitoring & REST API
+### v0.11.0 - Monitoring & REST API
 **Goal**: Production observability and external integrations
 **Priority**: Medium — production readiness
 
@@ -243,9 +281,10 @@ beat recipe create my-workflow  # interactive recipe builder
 | v0.5.0 | ✅ Released | Multi-Agent Support |
 | v0.6.0 | ✅ Released | Architectural Simplification + Bug Fixes |
 | v0.7.0 | ✅ Released | Task/Pipeline Loops |
-| v0.8.0 | 📋 Planned | Agent Failover + Smart Routing |
-| v0.9.0 | 📋 Planned | Workflow Recipes & Templates |
-| v0.10.0 | 💭 Research | Monitoring + REST API + Dashboard |
+| v0.8.0 | 📋 Planned | Loop Enhancements |
+| v0.9.0 | 📋 Planned | Agent Failover + Smart Routing |
+| v0.10.0 | 📋 Planned | Workflow Recipes & Templates |
+| v0.11.0 | 💭 Research | Monitoring + REST API + Dashboard |
 | v1.0.0 | 💭 Research | Distributed Processing |
 
 ---

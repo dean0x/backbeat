@@ -329,10 +329,9 @@ export class MCPAdapter {
   }
 
   /**
-   * Public tool dispatch method for testing.
-   * ARCHITECTURE: Extracts the switch body from the tools/call handler so tests
-   * can exercise the full Zod validation + dispatch + response formatting pipeline
-   * without requiring a live MCP transport.
+   * Dispatch a tool call by name through the Zod validation + handler pipeline.
+   * ARCHITECTURE: Extracted from the MCP tools/call request handler so both
+   * the transport layer and tests share the same dispatch path.
    */
   async callTool(name: string, args: unknown): Promise<MCPToolResponse> {
     this.logger.debug('MCP tool call received', { tool: name });

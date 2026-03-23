@@ -842,9 +842,7 @@ export class LoopHandler extends BaseEventHandler {
 
   /**
    * Force-cancel the current running iteration and all its tasks.
-   * ARCHITECTURE: Extracted from handleLoopPaused() to reduce nesting from 5 levels to 2.
-   * Handles: iteration lookup, iteration cancellation, single task cancellation,
-   * pipeline task cancellation, and taskToLoop cleanup.
+   * ARCHITECTURE: Extracted from handleLoopPaused() to reduce nesting.
    */
   private async forceCancelCurrentIteration(loopId: LoopId): Promise<void> {
     const iterationsResult = await this.loopRepo.getIterations(loopId, 1);

@@ -52,30 +52,24 @@ type ParsedScheduleCreateArgs =
   | (ParsedScheduleBaseArgs & { readonly isPipeline: false; readonly isLoop?: false; readonly prompt: string })
   | (ParsedScheduleBaseArgs & { readonly isLoop: true; readonly loopConfig: ParsedLoopConfig });
 
+interface ParsedLoopFlags {
+  readonly untilCmd?: string;
+  readonly evalCmd?: string;
+  readonly explicitStrategy?: LoopStrategy;
+  readonly loopDirection?: 'minimize' | 'maximize';
+  readonly loopMaxIterations?: number;
+  readonly loopMaxFailures?: number;
+  readonly loopCooldown?: number;
+  readonly loopEvalTimeout?: number;
+  readonly loopContinueContext: boolean;
+  readonly loopGitBranch?: string;
+}
+
 /**
  * Parse loop-specific flags from schedule create arguments (v0.8.0).
  * ARCHITECTURE: Extracted from parseScheduleCreateArgs() to reduce cyclomatic complexity.
- * Returns the consumed flag count and parsed loop flags, or an error.
  */
-function parseScheduleLoopFlags(
-  args: readonly string[],
-  startIndex: number,
-): Result<
-  {
-    consumed: number;
-    untilCmd?: string;
-    evalCmd?: string;
-    explicitStrategy?: LoopStrategy;
-    loopDirection?: 'minimize' | 'maximize';
-    loopMaxIterations?: number;
-    loopMaxFailures?: number;
-    loopCooldown?: number;
-    loopEvalTimeout?: number;
-    loopContinueContext: boolean;
-    loopGitBranch?: string;
-  },
-  string
-> {
+function parseScheduleLoopFlags(args: readonly string[]): Result<ParsedLoopFlags, string> {
   let untilCmd: string | undefined;
   let evalCmd: string | undefined;
   let explicitStrategy: LoopStrategy | undefined;
@@ -86,75 +80,63 @@ function parseScheduleLoopFlags(
   let loopEvalTimeout: number | undefined;
   let loopContinueContext = false;
   let loopGitBranch: string | undefined;
-  let consumed = 0;
 
-  for (let i = startIndex; i < args.length; i++) {
+  for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     const next = args[i + 1];
 
     if (arg === '--until' && next) {
       untilCmd = next;
       i++;
-      consumed += 2;
     } else if (arg === '--eval' && next) {
       evalCmd = next;
       i++;
-      consumed += 2;
     } else if (arg === '--strategy' && next) {
       if (next !== 'retry' && next !== 'optimize') {
         return err('--strategy must be "retry" or "optimize"');
       }
       explicitStrategy = next === 'retry' ? LoopStrategy.RETRY : LoopStrategy.OPTIMIZE;
       i++;
-      consumed += 2;
     } else if (arg === '--direction' && next) {
       if (next !== 'minimize' && next !== 'maximize') {
         return err('--direction must be "minimize" or "maximize"');
       }
       loopDirection = next;
       i++;
-      consumed += 2;
     } else if (arg === '--max-iterations' && next) {
       loopMaxIterations = parseInt(next, 10);
       if (isNaN(loopMaxIterations) || loopMaxIterations < 0) {
         return err('--max-iterations must be >= 0 (0 = unlimited)');
       }
       i++;
-      consumed += 2;
     } else if (arg === '--max-failures' && next) {
       loopMaxFailures = parseInt(next, 10);
       if (isNaN(loopMaxFailures) || loopMaxFailures < 0) {
         return err('--max-failures must be >= 0');
       }
       i++;
-      consumed += 2;
     } else if (arg === '--cooldown' && next) {
       loopCooldown = parseInt(next, 10);
       if (isNaN(loopCooldown) || loopCooldown < 0) {
         return err('--cooldown must be >= 0 (ms)');
       }
       i++;
-      consumed += 2;
     } else if (arg === '--eval-timeout' && next) {
       loopEvalTimeout = parseInt(next, 10);
       if (isNaN(loopEvalTimeout) || loopEvalTimeout < 1000) {
         return err('--eval-timeout must be >= 1000 (ms)');
       }
       i++;
-      consumed += 2;
     } else if (arg === '--continue-context') {
       loopContinueContext = true;
-      consumed += 1;
     } else if (arg === '--git-branch' && next) {
       loopGitBranch = next;
       i++;
-      consumed += 2;
     }
     // Non-loop flags are silently skipped — they are handled by the parent parser
   }
 
   return ok({
-    consumed,
     untilCmd,
     evalCmd,
     explicitStrategy,
@@ -190,7 +172,7 @@ export function parseScheduleCreateArgs(scheduleArgs: string[]): Result<ParsedSc
 
   // Loop-specific flags (v0.8.0) — parsed via extracted parseScheduleLoopFlags()
   let isLoop = false;
-  let loopFlags: ReturnType<typeof parseScheduleLoopFlags> extends Result<infer T, string> ? T : never;
+  let loopFlags: ParsedLoopFlags;
 
   for (let i = 0; i < scheduleArgs.length; i++) {
     const arg = scheduleArgs[i];
@@ -284,7 +266,7 @@ export function parseScheduleCreateArgs(scheduleArgs: string[]): Result<ParsedSc
 
   // Parse loop-specific flags in one pass via extracted function
   if (isLoop) {
-    const loopFlagsResult = parseScheduleLoopFlags(scheduleArgs, 0);
+    const loopFlagsResult = parseScheduleLoopFlags(scheduleArgs);
     if (!loopFlagsResult.ok) {
       return loopFlagsResult;
     }
