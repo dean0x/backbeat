@@ -322,5 +322,160 @@ describe('LoopManagerService - Unit Tests', () => {
       if (cancelResult.ok) return;
       expect(cancelResult.error.message).toContain('not running');
     });
+
+    it('should accept cancellation of a PAUSED loop', async () => {
+      const loop = await saveLoopInRepo();
+
+      // Update status to PAUSED
+      const paused = { ...loop, status: LoopStatus.PAUSED, updatedAt: Date.now() };
+      await loopRepo.update(paused);
+
+      const cancelResult = await service.cancelLoop(loop.id, 'No longer needed');
+
+      expect(cancelResult.ok).toBe(true);
+      expect(eventBus.hasEmitted('LoopCancelled')).toBe(true);
+    });
+
+    it('should reject cancellation of a FAILED loop', async () => {
+      const loop = await saveLoopInRepo();
+
+      const failed = { ...loop, status: LoopStatus.FAILED, updatedAt: Date.now() };
+      await loopRepo.update(failed);
+
+      const cancelResult = await service.cancelLoop(loop.id);
+
+      expect(cancelResult.ok).toBe(false);
+      if (cancelResult.ok) return;
+      expect(cancelResult.error.message).toContain('not running');
+    });
+
+    it('should reject cancellation of a CANCELLED loop', async () => {
+      const loop = await saveLoopInRepo();
+
+      const cancelled = { ...loop, status: LoopStatus.CANCELLED, updatedAt: Date.now() };
+      await loopRepo.update(cancelled);
+
+      const cancelResult = await service.cancelLoop(loop.id);
+
+      expect(cancelResult.ok).toBe(false);
+      if (cancelResult.ok) return;
+      expect(cancelResult.error.message).toContain('not running');
+    });
+  });
+
+  describe('pauseLoop()', () => {
+    it('should pause a RUNNING loop and emit LoopPaused event', async () => {
+      const loop = await saveLoopInRepo();
+
+      const pauseResult = await service.pauseLoop(loop.id);
+
+      expect(pauseResult.ok).toBe(true);
+      expect(eventBus.hasEmitted('LoopPaused')).toBe(true);
+    });
+
+    it('should pass force option to the event', async () => {
+      const loop = await saveLoopInRepo();
+
+      const pauseResult = await service.pauseLoop(loop.id, { force: true });
+
+      expect(pauseResult.ok).toBe(true);
+      expect(eventBus.hasEmitted('LoopPaused')).toBe(true);
+      const emitted = eventBus.getAllEmittedEvents().find((e) => e.type === 'LoopPaused');
+      expect(emitted).toBeDefined();
+      expect((emitted!.payload as { force: boolean }).force).toBe(true);
+    });
+
+    it('should reject pause of a COMPLETED loop', async () => {
+      const loop = await saveLoopInRepo();
+
+      const completed = { ...loop, status: LoopStatus.COMPLETED, updatedAt: Date.now() };
+      await loopRepo.update(completed);
+
+      const result = await service.pauseLoop(loop.id);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.message).toContain('not running');
+    });
+
+    it('should reject pause of a FAILED loop', async () => {
+      const loop = await saveLoopInRepo();
+
+      const failed = { ...loop, status: LoopStatus.FAILED, updatedAt: Date.now() };
+      await loopRepo.update(failed);
+
+      const result = await service.pauseLoop(loop.id);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.message).toContain('not running');
+    });
+
+    it('should reject pause of a CANCELLED loop', async () => {
+      const loop = await saveLoopInRepo();
+
+      const cancelled = { ...loop, status: LoopStatus.CANCELLED, updatedAt: Date.now() };
+      await loopRepo.update(cancelled);
+
+      const result = await service.pauseLoop(loop.id);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.message).toContain('not running');
+    });
+
+    it('should return error when loop not found', async () => {
+      const result = await service.pauseLoop(LoopId('non-existent'));
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.message).toContain('not found');
+    });
+  });
+
+  describe('resumeLoop()', () => {
+    it('should resume a PAUSED loop and emit LoopResumed event', async () => {
+      const loop = await saveLoopInRepo();
+
+      // Set to paused
+      const paused = { ...loop, status: LoopStatus.PAUSED, updatedAt: Date.now() };
+      await loopRepo.update(paused);
+
+      const resumeResult = await service.resumeLoop(loop.id);
+
+      expect(resumeResult.ok).toBe(true);
+      expect(eventBus.hasEmitted('LoopResumed')).toBe(true);
+    });
+
+    it('should reject resume of a RUNNING loop', async () => {
+      const loop = await saveLoopInRepo();
+
+      const result = await service.resumeLoop(loop.id);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.message).toContain('not paused');
+    });
+
+    it('should reject resume of a COMPLETED loop', async () => {
+      const loop = await saveLoopInRepo();
+
+      const completed = { ...loop, status: LoopStatus.COMPLETED, updatedAt: Date.now() };
+      await loopRepo.update(completed);
+
+      const result = await service.resumeLoop(loop.id);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.message).toContain('not paused');
+    });
+
+    it('should return error when loop not found', async () => {
+      const result = await service.resumeLoop(LoopId('non-existent'));
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.message).toContain('not found');
+    });
   });
 });

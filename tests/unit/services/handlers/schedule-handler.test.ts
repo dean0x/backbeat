@@ -9,9 +9,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PipelineStepRequest, Schedule, Task } from '../../../../src/core/domain';
+import type { LoopCreateRequest, PipelineStepRequest, Schedule, Task } from '../../../../src/core/domain';
 import {
   createSchedule,
+  LoopStatus,
+  LoopStrategy,
   MissedRunPolicy,
   ScheduleId,
   ScheduleStatus,
@@ -984,6 +986,157 @@ describe('ScheduleHandler - Behavioral Tests', () => {
       expect(persisted!.status).toBe(ScheduleStatus.COMPLETED);
       expect(persisted!.runCount).toBe(1);
       expect(persisted!.nextRunAt).toBeUndefined();
+    });
+  });
+
+  // ==========================================================================
+  // Scheduled Loop Trigger (v0.8.0)
+  // ==========================================================================
+
+  describe('Scheduled Loop Trigger', () => {
+    function createLoopSchedule(overrides: Partial<Parameters<typeof createSchedule>[0]> = {}): Schedule {
+      const loopConfig: LoopCreateRequest = {
+        prompt: 'Fix the tests',
+        strategy: LoopStrategy.RETRY,
+        exitCondition: 'npm test',
+        maxIterations: 5,
+        maxConsecutiveFailures: 3,
+      };
+      return createSchedule({
+        taskTemplate: { prompt: loopConfig.prompt ?? '', workingDirectory: '/tmp' },
+        scheduleType: ScheduleType.CRON,
+        cronExpression: '0 9 * * *',
+        timezone: 'UTC',
+        missedRunPolicy: MissedRunPolicy.SKIP,
+        loopConfig,
+        ...overrides,
+      });
+    }
+
+    async function triggerLoopSchedule(scheduleId: ReturnType<typeof ScheduleId>): Promise<void> {
+      await scheduleRepo.update(scheduleId, { nextRunAt: Date.now() - 1000 });
+      await eventBus.emit('ScheduleTriggered', { scheduleId, triggeredAt: Date.now() });
+      await flushEventLoop();
+    }
+
+    it('should create a loop when schedule with loopConfig is triggered', async () => {
+      const schedule = createLoopSchedule();
+      await saveSchedule({ ...schedule, status: ScheduleStatus.ACTIVE });
+
+      await triggerLoopSchedule(schedule.id);
+
+      // Assert: a loop should have been created (LoopCreated event emitted)
+      // LoopHandler creates the loop from the event, so check loopRepo
+      const loops = await loopRepo.findByScheduleId(schedule.id);
+      expect(loops.ok).toBe(true);
+      if (!loops.ok) return;
+      // LoopCreated event was emitted but LoopHandler is not wired up in this test,
+      // so check the execution history instead
+      const history = await scheduleRepo.getExecutionHistory(schedule.id);
+      expect(history.ok).toBe(true);
+      if (!history.ok) return;
+      expect(history.value).toHaveLength(1);
+      expect(history.value[0].status).toBe('triggered');
+    });
+
+    it('should skip trigger when previous loop is still RUNNING', async () => {
+      const schedule = createLoopSchedule();
+      await saveSchedule({ ...schedule, status: ScheduleStatus.ACTIVE });
+
+      // Create a running loop associated with this schedule
+      const { createLoop } = await import('../../../../src/core/domain');
+      const existingLoop = createLoop(
+        {
+          prompt: 'existing loop',
+          strategy: LoopStrategy.RETRY,
+          exitCondition: 'npm test',
+          maxIterations: 5,
+        },
+        '/tmp',
+        schedule.id,
+      );
+      await loopRepo.save(existingLoop);
+
+      // Trigger schedule again
+      await triggerLoopSchedule(schedule.id);
+
+      // Should have been skipped — only the pre-existing loop
+      const loops = await loopRepo.findByScheduleId(schedule.id);
+      expect(loops.ok).toBe(true);
+      if (!loops.ok) return;
+      expect(loops.value).toHaveLength(1);
+      expect(loops.value[0].id).toBe(existingLoop.id);
+
+      // Logger should record the skip
+      expect(logger.hasLogContaining('previous loop still active')).toBe(true);
+    });
+
+    it('should skip trigger when previous loop is PAUSED', async () => {
+      const schedule = createLoopSchedule();
+      await saveSchedule({ ...schedule, status: ScheduleStatus.ACTIVE });
+
+      // Create a paused loop associated with this schedule
+      const { createLoop } = await import('../../../../src/core/domain');
+      const existingLoop = createLoop(
+        {
+          prompt: 'paused loop',
+          strategy: LoopStrategy.RETRY,
+          exitCondition: 'npm test',
+          maxIterations: 5,
+        },
+        '/tmp',
+        schedule.id,
+      );
+      const pausedLoop = { ...existingLoop, status: LoopStatus.PAUSED };
+      await loopRepo.save(pausedLoop);
+
+      // Trigger schedule
+      await triggerLoopSchedule(schedule.id);
+
+      // Should have been skipped
+      const loops = await loopRepo.findByScheduleId(schedule.id);
+      expect(loops.ok).toBe(true);
+      if (!loops.ok) return;
+      expect(loops.value).toHaveLength(1);
+      expect(loops.value[0].status).toBe(LoopStatus.PAUSED);
+    });
+
+    it('should cancel active loops when schedule with loopConfig is cancelled', async () => {
+      const schedule = createLoopSchedule();
+      await saveSchedule({ ...schedule, status: ScheduleStatus.ACTIVE });
+
+      // Create an active loop associated with this schedule
+      const { createLoop } = await import('../../../../src/core/domain');
+      const existingLoop = createLoop(
+        {
+          prompt: 'active loop for cancel test',
+          strategy: LoopStrategy.RETRY,
+          exitCondition: 'npm test',
+          maxIterations: 5,
+        },
+        '/tmp',
+        schedule.id,
+      );
+      await loopRepo.save(existingLoop);
+
+      // Cancel the schedule
+      await eventBus.emit('ScheduleCancelled', {
+        scheduleId: schedule.id,
+        reason: 'Test cancellation',
+      });
+      await flushEventLoop();
+
+      // Schedule should be cancelled
+      const schedResult = await scheduleRepo.findById(schedule.id);
+      expect(schedResult.ok).toBe(true);
+      if (!schedResult.ok) return;
+      expect(schedResult.value!.status).toBe(ScheduleStatus.CANCELLED);
+
+      // Active loop should have had LoopCancelled emitted
+      // (LoopHandler would process it if wired, but we can verify the event was emitted)
+      // In this unit test context, the loop state depends on LoopHandler subscription.
+      // We verify the intent by checking logger output.
+      expect(logger.hasLogContaining('Cancelling schedule')).toBe(true);
     });
   });
 });

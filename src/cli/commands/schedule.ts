@@ -1,8 +1,8 @@
 import { AGENT_PROVIDERS, type AgentProvider, isAgentProvider } from '../../core/agents.js';
-import { Priority, ScheduleId, ScheduleStatus, ScheduleType } from '../../core/domain.js';
+import { LoopStrategy, Priority, ScheduleId, ScheduleStatus, ScheduleType } from '../../core/domain.js';
 import type { ScheduleExecution, ScheduleRepository, ScheduleService } from '../../core/interfaces.js';
 import { err, ok, type Result } from '../../core/result.js';
-import { toMissedRunPolicy, truncatePrompt } from '../../utils/format.js';
+import { toMissedRunPolicy, toOptimizeDirection, truncatePrompt } from '../../utils/format.js';
 import { validatePath } from '../../utils/validation.js';
 import { exitOnError, exitOnNull, withReadOnlyContext, withServices } from '../services.js';
 import * as ui from '../ui.js';
@@ -26,9 +26,27 @@ interface ParsedScheduleBaseArgs {
   readonly agent?: AgentProvider;
 }
 
+/**
+ * Parsed loop config for scheduled loop creation (v0.8.0)
+ */
+interface ParsedLoopConfig {
+  readonly strategy: LoopStrategy;
+  readonly exitCondition: string;
+  readonly evalDirection?: 'minimize' | 'maximize';
+  readonly evalTimeout?: number;
+  readonly maxIterations?: number;
+  readonly maxConsecutiveFailures?: number;
+  readonly cooldownMs?: number;
+  readonly freshContext: boolean;
+  readonly gitBranch?: string;
+  readonly prompt?: string;
+  readonly pipelineSteps?: readonly string[];
+}
+
 type ParsedScheduleCreateArgs =
-  | (ParsedScheduleBaseArgs & { readonly isPipeline: true; readonly pipelineSteps: readonly string[] })
-  | (ParsedScheduleBaseArgs & { readonly isPipeline: false; readonly prompt: string });
+  | (ParsedScheduleBaseArgs & { readonly isPipeline: true; readonly isLoop?: false; readonly pipelineSteps: readonly string[] })
+  | (ParsedScheduleBaseArgs & { readonly isPipeline: false; readonly isLoop?: false; readonly prompt: string })
+  | (ParsedScheduleBaseArgs & { readonly isLoop: true; readonly loopConfig: ParsedLoopConfig });
 
 /**
  * Parse and validate schedule create arguments.
@@ -49,6 +67,18 @@ export function parseScheduleCreateArgs(scheduleArgs: string[]): Result<ParsedSc
   let agent: AgentProvider | undefined;
   let isPipeline = false;
   const pipelineSteps: string[] = [];
+
+  // Loop-specific flags (v0.8.0)
+  let isLoop = false;
+  let untilCmd: string | undefined;
+  let evalCmd: string | undefined;
+  let loopDirection: 'minimize' | 'maximize' | undefined;
+  let loopMaxIterations: number | undefined;
+  let loopMaxFailures: number | undefined;
+  let loopCooldown: number | undefined;
+  let loopEvalTimeout: number | undefined;
+  let loopContinueContext = false;
+  let loopGitBranch: string | undefined;
 
   for (let i = 0; i < scheduleArgs.length; i++) {
     const arg = scheduleArgs[i];
@@ -114,6 +144,55 @@ export function parseScheduleCreateArgs(scheduleArgs: string[]): Result<ParsedSc
     } else if (arg === '--step' && next) {
       pipelineSteps.push(next);
       i++;
+    } else if (arg === '--loop') {
+      isLoop = true;
+    } else if (arg === '--until' && next) {
+      untilCmd = next;
+      i++;
+    } else if (arg === '--eval' && next) {
+      evalCmd = next;
+      i++;
+    } else if (arg === '--strategy' && next) {
+      // Explicit strategy flag (alternative to --until/--eval inference)
+      if (next !== 'retry' && next !== 'optimize') {
+        return err('--strategy must be "retry" or "optimize"');
+      }
+      i++;
+    } else if (arg === '--direction' && next) {
+      if (next !== 'minimize' && next !== 'maximize') {
+        return err('--direction must be "minimize" or "maximize"');
+      }
+      loopDirection = next;
+      i++;
+    } else if (arg === '--max-iterations' && next) {
+      loopMaxIterations = parseInt(next, 10);
+      if (isNaN(loopMaxIterations) || loopMaxIterations < 0) {
+        return err('--max-iterations must be >= 0 (0 = unlimited)');
+      }
+      i++;
+    } else if (arg === '--max-failures' && next) {
+      loopMaxFailures = parseInt(next, 10);
+      if (isNaN(loopMaxFailures) || loopMaxFailures < 0) {
+        return err('--max-failures must be >= 0');
+      }
+      i++;
+    } else if (arg === '--cooldown' && next) {
+      loopCooldown = parseInt(next, 10);
+      if (isNaN(loopCooldown) || loopCooldown < 0) {
+        return err('--cooldown must be >= 0 (ms)');
+      }
+      i++;
+    } else if (arg === '--eval-timeout' && next) {
+      loopEvalTimeout = parseInt(next, 10);
+      if (isNaN(loopEvalTimeout) || loopEvalTimeout < 1000) {
+        return err('--eval-timeout must be >= 1000 (ms)');
+      }
+      i++;
+    } else if (arg === '--continue-context') {
+      loopContinueContext = true;
+    } else if (arg === '--git-branch' && next) {
+      loopGitBranch = next;
+      i++;
     } else if (arg.startsWith('-')) {
       return err(`Unknown flag: ${arg}`);
     } else {
@@ -137,6 +216,62 @@ export function parseScheduleCreateArgs(scheduleArgs: string[]): Result<ParsedSc
   scheduleType = scheduleType ?? inferredType;
   if (!scheduleType) {
     return err('Provide --cron, --at, or --type');
+  }
+
+  // Loop mode (v0.8.0)
+  if (isLoop) {
+    // Validate loop exit condition
+    if (untilCmd && evalCmd) {
+      return err('Cannot specify both --until and --eval. Use --until for retry, --eval for optimize.');
+    }
+    if (!untilCmd && !evalCmd) {
+      return err('--loop requires --until <cmd> or --eval <cmd> --direction minimize|maximize');
+    }
+
+    const isOptimize = !!evalCmd;
+    const exitCondition = isOptimize ? evalCmd! : untilCmd!;
+
+    if (isOptimize && !loopDirection) {
+      return err('--direction minimize|maximize is required with --eval (optimize strategy)');
+    }
+    if (!isOptimize && loopDirection) {
+      return err('--direction is only valid with --eval (optimize strategy)');
+    }
+
+    const loopConfig: ParsedLoopConfig = {
+      strategy: isOptimize ? LoopStrategy.OPTIMIZE : LoopStrategy.RETRY,
+      exitCondition,
+      evalDirection: loopDirection,
+      evalTimeout: loopEvalTimeout,
+      maxIterations: loopMaxIterations,
+      maxConsecutiveFailures: loopMaxFailures,
+      cooldownMs: loopCooldown,
+      freshContext: !loopContinueContext,
+      gitBranch: loopGitBranch,
+      prompt: promptWords.join(' ') || undefined,
+      pipelineSteps: isPipeline && pipelineSteps.length >= 2 ? pipelineSteps : undefined,
+    };
+
+    // Pipeline validation for loop mode
+    if (isPipeline && pipelineSteps.length < 2) {
+      return err('Pipeline requires at least 2 --step flags');
+    }
+
+    const shared = {
+      scheduleType,
+      cronExpression,
+      scheduledAt,
+      timezone,
+      missedRunPolicy,
+      priority,
+      workingDirectory,
+      maxRuns,
+      expiresAt,
+      afterScheduleId,
+      agent,
+    };
+
+    return ok({ ...shared, isLoop: true as const, loopConfig });
   }
 
   // Pipeline mode
@@ -251,6 +386,38 @@ async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]):
     afterScheduleId: args.afterScheduleId ? ScheduleId(args.afterScheduleId) : undefined,
     agent: args.agent,
   };
+
+  // Scheduled loop (v0.8.0)
+  if (args.isLoop) {
+    const lc = args.loopConfig;
+    const result = await service.createScheduledLoop({
+      loopConfig: {
+        prompt: lc.prompt,
+        strategy: lc.strategy,
+        exitCondition: lc.exitCondition,
+        evalDirection: toOptimizeDirection(lc.evalDirection),
+        evalTimeout: lc.evalTimeout,
+        workingDirectory: args.workingDirectory,
+        maxIterations: lc.maxIterations,
+        maxConsecutiveFailures: lc.maxConsecutiveFailures,
+        cooldownMs: lc.cooldownMs,
+        freshContext: lc.freshContext,
+        pipelineSteps: lc.pipelineSteps,
+        gitBranch: lc.gitBranch,
+        priority: args.priority ? Priority[args.priority] : undefined,
+        agent: args.agent,
+      },
+      ...baseOptions,
+    });
+
+    const created = exitOnError(result, undefined, 'Failed to create scheduled loop');
+    ui.success(`Scheduled loop created: ${created.id}`);
+    const details = [`Type: ${created.scheduleType}`, `Status: ${created.status}`, `Strategy: ${lc.strategy}`];
+    if (created.nextRunAt) details.push(`Next run: ${new Date(created.nextRunAt).toISOString()}`);
+    if (created.cronExpression) details.push(`Cron: ${created.cronExpression}`);
+    ui.info(details.join(' | '));
+    return;
+  }
 
   if (args.isPipeline) {
     const result = await service.createScheduledPipeline({

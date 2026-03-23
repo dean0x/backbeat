@@ -1,5 +1,6 @@
 import { AGENT_PROVIDERS, type AgentProvider, isAgentProvider } from '../../core/agents.js';
 import { LoopId, LoopStatus, LoopStrategy, Priority } from '../../core/domain.js';
+import type { LoopService } from '../../core/interfaces.js';
 import { err, ok, type Result } from '../../core/result.js';
 import { toOptimizeDirection, truncatePrompt } from '../../utils/format.js';
 import { validatePath } from '../../utils/validation.js';
@@ -23,6 +24,7 @@ interface ParsedLoopBaseArgs {
   readonly freshContext: boolean;
   readonly priority?: 'P0' | 'P1' | 'P2';
   readonly agent?: AgentProvider;
+  readonly gitBranch?: string;
 }
 
 type ParsedLoopArgs =
@@ -48,6 +50,7 @@ export function parseLoopCreateArgs(loopArgs: string[]): Result<ParsedLoopArgs, 
   let priority: 'P0' | 'P1' | 'P2' | undefined;
   let workingDirectory: string | undefined;
   let agent: AgentProvider | undefined;
+  let gitBranch: string | undefined;
 
   for (let i = 0; i < loopArgs.length; i++) {
     const arg = loopArgs[i];
@@ -118,6 +121,9 @@ export function parseLoopCreateArgs(loopArgs: string[]): Result<ParsedLoopArgs, 
       }
       agent = next;
       i++;
+    } else if (arg === '--git-branch' && next) {
+      gitBranch = next;
+      i++;
     } else if (arg.startsWith('-')) {
       return err(`Unknown flag: ${arg}`);
     } else {
@@ -175,6 +181,7 @@ export function parseLoopCreateArgs(loopArgs: string[]): Result<ParsedLoopArgs, 
     freshContext: !continueContext,
     priority,
     agent,
+    gitBranch,
   };
 
   if (isPipeline) {
@@ -197,6 +204,16 @@ export async function handleLoopCommand(subCmd: string | undefined, loopArgs: st
 
   if (subCmd === 'cancel') {
     await handleLoopCancel(loopArgs);
+    return;
+  }
+
+  if (subCmd === 'pause') {
+    await handleLoopPause(loopArgs);
+    return;
+  }
+
+  if (subCmd === 'resume') {
+    await handleLoopResume(loopArgs);
     return;
   }
 
@@ -236,6 +253,7 @@ async function handleLoopCreate(loopArgs: string[]): Promise<void> {
     pipelineSteps: args.isPipeline ? args.pipelineSteps : undefined,
     priority: args.priority ? Priority[args.priority] : undefined,
     agent: args.agent,
+    gitBranch: args.gitBranch,
   });
 
   const loop = exitOnError(result, s, 'Failed to create loop');
@@ -431,3 +449,65 @@ async function handleLoopCancel(loopArgs: string[]): Promise<void> {
   if (reason) ui.info(`Reason: ${reason}`);
   process.exit(0);
 }
+
+// ============================================================================
+// Loop pause — full bootstrap (v0.8.0)
+// ============================================================================
+
+async function handleLoopPause(loopArgs: string[]): Promise<void> {
+  let force = false;
+  const filteredArgs: string[] = [];
+
+  for (const arg of loopArgs) {
+    if (arg === '--force') {
+      force = true;
+    } else {
+      filteredArgs.push(arg);
+    }
+  }
+
+  const loopId = filteredArgs[0];
+  if (!loopId) {
+    ui.error('Usage: beat loop pause <loop-id> [--force]');
+    process.exit(1);
+  }
+
+  const s = ui.createSpinner();
+  s.start('Pausing loop...');
+  const { loopService } = await withServices(s);
+  s.stop('Ready');
+
+  const result = await loopService.pauseLoop(LoopId(loopId), { force });
+  exitOnError(result, undefined, 'Failed to pause loop');
+  ui.success(`Loop ${loopId} paused`);
+  if (force) ui.info('Force pause — current iteration cancelled');
+  process.exit(0);
+}
+
+// ============================================================================
+// Loop resume — full bootstrap (v0.8.0)
+// ============================================================================
+
+async function handleLoopResume(loopArgs: string[]): Promise<void> {
+  const loopId = loopArgs[0];
+  if (!loopId) {
+    ui.error('Usage: beat loop resume <loop-id>');
+    process.exit(1);
+  }
+
+  const s = ui.createSpinner();
+  s.start('Resuming loop...');
+  const { loopService } = await withServices(s);
+  s.stop('Ready');
+
+  const result = await loopService.resumeLoop(LoopId(loopId));
+  exitOnError(result, undefined, 'Failed to resume loop');
+  ui.success(`Loop ${loopId} resumed`);
+  process.exit(0);
+}
+
+/**
+ * Exported for CLI schedule integration — allows schedule create to call loop service
+ * when --loop flag is used.
+ */
+export { handleLoopPause, handleLoopResume };

@@ -7,28 +7,34 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   createLoop,
+  createSchedule,
   createTask,
   type Loop,
   LoopId,
   type LoopIteration,
   LoopStatus,
   LoopStrategy,
+  MissedRunPolicy,
   OptimizeDirection,
+  ScheduleType,
   TaskId,
 } from '../../../src/core/domain.js';
 import { Database } from '../../../src/implementations/database.js';
 import { SQLiteLoopRepository } from '../../../src/implementations/loop-repository.js';
+import { SQLiteScheduleRepository } from '../../../src/implementations/schedule-repository.js';
 import { SQLiteTaskRepository } from '../../../src/implementations/task-repository.js';
 
 describe('SQLiteLoopRepository - Unit Tests', () => {
   let db: Database;
   let repo: SQLiteLoopRepository;
   let taskRepo: SQLiteTaskRepository;
+  let scheduleRepo: SQLiteScheduleRepository;
 
   beforeEach(() => {
     db = new Database(':memory:');
     repo = new SQLiteLoopRepository(db);
     taskRepo = new SQLiteTaskRepository(db);
+    scheduleRepo = new SQLiteScheduleRepository(db);
   });
 
   afterEach(() => {
@@ -943,6 +949,176 @@ describe('SQLiteLoopRepository - Unit Tests', () => {
       if (!iters.ok) return;
       expect(iters.value).toHaveLength(1);
       expect(iters.value[0].taskId).toBeUndefined();
+    });
+  });
+
+  // ==========================================================================
+  // v0.8.0 Fields: PAUSED status, git fields, scheduleId, findByScheduleId
+  // ==========================================================================
+
+  describe('PAUSED status round-trip', () => {
+    it('should save and read a loop with PAUSED status', async () => {
+      const loop = createTestLoop();
+      // Save as RUNNING then update to PAUSED
+      await repo.save(loop);
+      const paused = { ...loop, status: LoopStatus.PAUSED, updatedAt: Date.now() };
+      await repo.update(paused);
+
+      const found = await repo.findById(loop.id);
+      expect(found.ok).toBe(true);
+      if (!found.ok) return;
+      expect(found.value).toBeDefined();
+      expect(found.value!.status).toBe(LoopStatus.PAUSED);
+    });
+  });
+
+  describe('Git fields on loop (v0.8.0)', () => {
+    it('should save and read gitBranch, gitBaseBranch, and scheduleId', async () => {
+      const { ScheduleId: SID } = await import('../../../src/core/domain');
+
+      // Create schedule to satisfy FK constraint
+      const schedule = createSchedule({
+        taskTemplate: { prompt: 'placeholder', workingDirectory: '/tmp' },
+        scheduleType: ScheduleType.CRON,
+        cronExpression: '0 * * * *',
+        timezone: 'UTC',
+        missedRunPolicy: MissedRunPolicy.SKIP,
+      });
+      const schedOverridden = { ...schedule, id: SID('sched-abc-123') };
+      await scheduleRepo.save(schedOverridden);
+
+      const loop = createLoop(
+        { prompt: 'git test', strategy: LoopStrategy.RETRY, exitCondition: 'true', gitBranch: 'feat/loop-work' },
+        '/tmp',
+        SID('sched-abc-123'),
+      );
+      // Override gitBaseBranch (set via LoopManager, not factory)
+      const loopWithGit = { ...loop, gitBaseBranch: 'main' };
+      await repo.save(loopWithGit);
+
+      const found = await repo.findById(loopWithGit.id);
+      expect(found.ok).toBe(true);
+      if (!found.ok) return;
+      expect(found.value).toBeDefined();
+      expect(found.value!.gitBranch).toBe('feat/loop-work');
+      expect(found.value!.gitBaseBranch).toBe('main');
+      expect(found.value!.scheduleId).toBe('sched-abc-123');
+    });
+
+    it('should default git fields to undefined when not set', async () => {
+      const loop = createTestLoop();
+      await repo.save(loop);
+
+      const found = await repo.findById(loop.id);
+      expect(found.ok).toBe(true);
+      if (!found.ok) return;
+      expect(found.value!.gitBranch).toBeUndefined();
+      expect(found.value!.gitBaseBranch).toBeUndefined();
+      expect(found.value!.scheduleId).toBeUndefined();
+    });
+  });
+
+  describe('Git fields on iteration (v0.8.0)', () => {
+    it('should save and read gitBranch and gitDiffSummary on iterations', async () => {
+      const loop = createTestLoop();
+      await repo.save(loop);
+
+      const taskId = TaskId('task-git-iter-1');
+      await createTaskInRepo(taskId);
+
+      await repo.recordIteration({
+        id: 0,
+        loopId: loop.id,
+        iterationNumber: 1,
+        taskId,
+        status: 'pass',
+        startedAt: Date.now(),
+        completedAt: Date.now(),
+        gitBranch: 'feat/loop-iter-1',
+        gitDiffSummary: ' src/main.ts | 5 +++--\n 1 file changed, 3 insertions(+), 2 deletions(-)',
+      });
+
+      const iters = await repo.getIterations(loop.id);
+      expect(iters.ok).toBe(true);
+      if (!iters.ok) return;
+      expect(iters.value).toHaveLength(1);
+      expect(iters.value[0].gitBranch).toBe('feat/loop-iter-1');
+      expect(iters.value[0].gitDiffSummary).toContain('src/main.ts');
+    });
+
+    it('should default iteration git fields to undefined when not set', async () => {
+      const loop = createTestLoop();
+      await repo.save(loop);
+
+      const taskId = TaskId('task-no-git-iter');
+      await createTaskInRepo(taskId);
+
+      await repo.recordIteration(createTestIteration(loop.id, 1, { taskId }));
+
+      const iters = await repo.getIterations(loop.id);
+      expect(iters.ok).toBe(true);
+      if (!iters.ok) return;
+      expect(iters.value[0].gitBranch).toBeUndefined();
+      expect(iters.value[0].gitDiffSummary).toBeUndefined();
+    });
+  });
+
+  describe('findByScheduleId (v0.8.0)', () => {
+    // Helper: create a schedule in the DB so FK constraints are satisfied
+    async function createScheduleInRepo(scheduleId: string): Promise<void> {
+      const { ScheduleId: SID } = await import('../../../src/core/domain');
+      const schedule = createSchedule({
+        taskTemplate: { prompt: 'placeholder', workingDirectory: '/tmp' },
+        scheduleType: ScheduleType.CRON,
+        cronExpression: '0 * * * *',
+        timezone: 'UTC',
+        missedRunPolicy: MissedRunPolicy.SKIP,
+      });
+      // Override the schedule id to match the desired value
+      const overridden = { ...schedule, id: SID(scheduleId) };
+      await scheduleRepo.save(overridden);
+    }
+
+    it('should return loops matching a schedule ID', async () => {
+      const { ScheduleId: SID } = await import('../../../src/core/domain');
+      const sid = SID('sched-find-test');
+
+      // Create the referenced schedule to satisfy FK constraint
+      await createScheduleInRepo('sched-find-test');
+
+      // Use createLoop with scheduleId as third arg
+      const loop1 = createLoop(
+        { prompt: 'loop 1', strategy: LoopStrategy.RETRY, exitCondition: 'true' },
+        '/tmp',
+        sid,
+      );
+      const loop2 = createLoop(
+        { prompt: 'loop 2', strategy: LoopStrategy.RETRY, exitCondition: 'true' },
+        '/tmp',
+        sid,
+      );
+      const loop3 = createTestLoop(); // No scheduleId
+
+      await repo.save(loop1);
+      await repo.save(loop2);
+      await repo.save(loop3);
+
+      const result = await repo.findByScheduleId(sid);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toHaveLength(2);
+      expect(result.value.map((l) => l.id)).toContain(loop1.id);
+      expect(result.value.map((l) => l.id)).toContain(loop2.id);
+    });
+
+    it('should return empty array for non-matching schedule ID', async () => {
+      const { ScheduleId: SID } = await import('../../../src/core/domain');
+      const sid = SID('sched-nonexistent');
+
+      const result = await repo.findByScheduleId(sid);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toHaveLength(0);
     });
   });
 });

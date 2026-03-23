@@ -312,6 +312,8 @@ class MockLoopService implements LoopService {
   getCalls: Array<{ loopId: string; includeHistory?: boolean; historyLimit?: number }> = [];
   listCalls: Array<{ status?: LoopStatus; limit?: number; offset?: number }> = [];
   cancelCalls: Array<{ loopId: string; reason?: string; cancelTasks?: boolean }> = [];
+  pauseCalls: Array<{ loopId: string; options?: { force?: boolean } }> = [];
+  resumeCalls: Array<{ loopId: string }> = [];
 
   private loopStorage = new Map<string, Loop>();
 
@@ -350,11 +352,34 @@ class MockLoopService implements LoopService {
     return ok(undefined);
   }
 
+  async pauseLoop(loopId: LoopId, options?: { force?: boolean }) {
+    this.pauseCalls.push({ loopId, options });
+    const loop = this.loopStorage.get(loopId);
+    if (!loop) {
+      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Loop ${loopId} not found`));
+    }
+    if (loop.status !== LoopStatus.RUNNING) {
+      return err(new BackbeatError(ErrorCode.INVALID_OPERATION, `Loop ${loopId} is not running`));
+    }
+    return ok(undefined);
+  }
+
+  async resumeLoop(loopId: LoopId) {
+    this.resumeCalls.push({ loopId });
+    const loop = this.loopStorage.get(loopId);
+    if (!loop) {
+      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Loop ${loopId} not found`));
+    }
+    return ok(undefined);
+  }
+
   reset() {
     this.createCalls = [];
     this.getCalls = [];
     this.listCalls = [];
     this.cancelCalls = [];
+    this.pauseCalls = [];
+    this.resumeCalls = [];
     this.loopStorage.clear();
   }
 }
@@ -2677,6 +2702,20 @@ async function simulateLoopCancel(
   return service.cancelLoop(LoopId(options.loopId), options.reason, options.cancelTasks);
 }
 
+async function simulateLoopPause(
+  service: MockLoopService,
+  options: { loopId: string; force?: boolean },
+) {
+  return service.pauseLoop(LoopId(options.loopId), { force: options.force });
+}
+
+async function simulateLoopResume(
+  service: MockLoopService,
+  options: { loopId: string },
+) {
+  return service.resumeLoop(LoopId(options.loopId));
+}
+
 // ============================================================================
 // Task Completion Lifecycle Helpers
 // ============================================================================
@@ -2944,6 +2983,20 @@ describe('CLI - Loop Commands', () => {
       if (result.ok) return;
       expect(result.error).toContain('Unknown agent');
     });
+
+    it('should parse --git-branch flag', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--git-branch', 'feat/loop-work']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.gitBranch).toBe('feat/loop-work');
+    });
+
+    it('should leave gitBranch undefined when not specified', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.gitBranch).toBeUndefined();
+    });
   });
 
   describe('loop create — service integration', () => {
@@ -3167,6 +3220,216 @@ describe('CLI - Loop Commands', () => {
       const result = await simulateLoopCancel(mockLoopService, { loopId: 'loop-nonexistent' });
       expect(result.ok).toBe(false);
     });
+  });
+
+  describe('loop pause — service integration', () => {
+    let mockLoopService: MockLoopService;
+
+    beforeEach(() => {
+      mockLoopService = new MockLoopService();
+    });
+
+    afterEach(() => {
+      mockLoopService.reset();
+    });
+
+    it('should pause a running loop', async () => {
+      const createResult = await mockLoopService.createLoop({
+        prompt: 'pauseable loop',
+        strategy: LoopStrategy.RETRY,
+        exitCondition: 'true',
+      });
+      if (!createResult.ok) return;
+      const loopId = createResult.value.id;
+
+      const result = await simulateLoopPause(mockLoopService, { loopId });
+      expect(result.ok).toBe(true);
+      expect(mockLoopService.pauseCalls).toHaveLength(1);
+      expect(mockLoopService.pauseCalls[0].options?.force).toBeFalsy();
+    });
+
+    it('should pass force flag', async () => {
+      const createResult = await mockLoopService.createLoop({
+        prompt: 'force pause loop',
+        strategy: LoopStrategy.RETRY,
+        exitCondition: 'true',
+      });
+      if (!createResult.ok) return;
+      const loopId = createResult.value.id;
+
+      const result = await simulateLoopPause(mockLoopService, { loopId, force: true });
+      expect(result.ok).toBe(true);
+      expect(mockLoopService.pauseCalls[0].options?.force).toBe(true);
+    });
+
+    it('should error on non-existent loop', async () => {
+      const result = await simulateLoopPause(mockLoopService, { loopId: 'loop-nonexistent' });
+      expect(result.ok).toBe(false);
+    });
+  });
+
+  describe('loop resume — service integration', () => {
+    let mockLoopService: MockLoopService;
+
+    beforeEach(() => {
+      mockLoopService = new MockLoopService();
+    });
+
+    afterEach(() => {
+      mockLoopService.reset();
+    });
+
+    it('should resume a loop', async () => {
+      const createResult = await mockLoopService.createLoop({
+        prompt: 'resumable loop',
+        strategy: LoopStrategy.RETRY,
+        exitCondition: 'true',
+      });
+      if (!createResult.ok) return;
+      const loopId = createResult.value.id;
+
+      const result = await simulateLoopResume(mockLoopService, { loopId });
+      expect(result.ok).toBe(true);
+      expect(mockLoopService.resumeCalls).toHaveLength(1);
+    });
+
+    it('should error on non-existent loop', async () => {
+      const result = await simulateLoopResume(mockLoopService, { loopId: 'loop-nonexistent' });
+      expect(result.ok).toBe(false);
+    });
+  });
+});
+
+describe('CLI - Schedule --loop flag', () => {
+  let parseScheduleCreateArgs: typeof import('../../src/cli/commands/schedule').parseScheduleCreateArgs;
+
+  beforeAll(async () => {
+    const mod = await import('../../src/cli/commands/schedule');
+    parseScheduleCreateArgs = mod.parseScheduleCreateArgs;
+  });
+
+  it('should parse --loop with --until for retry strategy', () => {
+    const result = parseScheduleCreateArgs([
+      '--loop',
+      '--until',
+      'npm test',
+      '--cron',
+      '0 9 * * *',
+      'Fix the tests',
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.isLoop).toBe(true);
+    if (!result.value.isLoop) return;
+    expect(result.value.loopConfig.strategy).toBe(LoopStrategy.RETRY);
+    expect(result.value.loopConfig.exitCondition).toBe('npm test');
+    expect(result.value.loopConfig.prompt).toBe('Fix the tests');
+    expect(result.value.cronExpression).toBe('0 9 * * *');
+  });
+
+  it('should parse --loop with --eval and --direction for optimize strategy', () => {
+    const result = parseScheduleCreateArgs([
+      '--loop',
+      '--eval',
+      'echo 42',
+      '--direction',
+      'minimize',
+      '--cron',
+      '0 */6 * * *',
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.isLoop).toBe(true);
+    if (!result.value.isLoop) return;
+    expect(result.value.loopConfig.strategy).toBe(LoopStrategy.OPTIMIZE);
+    expect(result.value.loopConfig.evalDirection).toBe('minimize');
+  });
+
+  it('should parse --loop with --max-iterations and --max-failures', () => {
+    const result = parseScheduleCreateArgs([
+      '--loop',
+      '--until',
+      'true',
+      '--max-iterations',
+      '20',
+      '--max-failures',
+      '5',
+      '--cron',
+      '0 * * * *',
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.isLoop).toBe(true);
+    if (!result.value.isLoop) return;
+    expect(result.value.loopConfig.maxIterations).toBe(20);
+    expect(result.value.loopConfig.maxConsecutiveFailures).toBe(5);
+  });
+
+  it('should parse --loop with --git-branch flag', () => {
+    const result = parseScheduleCreateArgs([
+      '--loop',
+      '--until',
+      'true',
+      '--git-branch',
+      'feat/nightly-loop',
+      '--cron',
+      '0 0 * * *',
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.isLoop).toBe(true);
+    if (!result.value.isLoop) return;
+    expect(result.value.loopConfig.gitBranch).toBe('feat/nightly-loop');
+  });
+
+  it('should parse --loop with --continue-context', () => {
+    const result = parseScheduleCreateArgs([
+      '--loop',
+      '--until',
+      'true',
+      '--continue-context',
+      '--cron',
+      '0 0 * * *',
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.isLoop).toBe(true);
+    if (!result.value.isLoop) return;
+    expect(result.value.loopConfig.freshContext).toBe(false);
+  });
+
+  it('should parse --loop --pipeline with --step flags', () => {
+    const result = parseScheduleCreateArgs([
+      '--loop',
+      '--pipeline',
+      '--step',
+      'lint',
+      '--step',
+      'test',
+      '--until',
+      'true',
+      '--cron',
+      '0 9 * * *',
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.isLoop).toBe(true);
+    if (!result.value.isLoop) return;
+    expect(result.value.loopConfig.pipelineSteps).toEqual(['lint', 'test']);
+  });
+
+  it('should reject --loop without --until or --eval', () => {
+    const result = parseScheduleCreateArgs(['--loop', '--cron', '0 9 * * *']);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('--until');
+  });
+
+  it('should reject --loop --eval without --direction', () => {
+    const result = parseScheduleCreateArgs(['--loop', '--eval', 'echo 42', '--cron', '0 9 * * *']);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('--direction');
   });
 });
 

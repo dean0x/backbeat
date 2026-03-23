@@ -464,4 +464,130 @@ describe('Integration: Task Loops - End-to-End Flow', () => {
       expect(finalLoop!.bestScore).toBe(42);
     });
   });
+
+  // ==========================================================================
+  // v0.8.0 Pause/Resume Integration Tests
+  // ==========================================================================
+
+  describe('Pause/Resume lifecycle', () => {
+    it('should pause and resume a running loop — full lifecycle', async () => {
+      // Exit condition: `false` always fails → loop keeps iterating
+      const createResult = await service.createLoop({
+        prompt: 'Pauseable loop',
+        strategy: LoopStrategy.RETRY,
+        exitCondition: 'false',
+        maxIterations: 10,
+        maxConsecutiveFailures: 10,
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const loopId = createResult.value.id;
+      await flushEventLoop();
+
+      // Verify loop is running
+      const runningLoop = await getLoop(loopId);
+      expect(runningLoop!.status).toBe(LoopStatus.RUNNING);
+      expect(runningLoop!.currentIteration).toBe(1);
+
+      // Pause (graceful)
+      const pauseResult = await service.pauseLoop(loopId);
+      expect(pauseResult.ok).toBe(true);
+      await flushEventLoop();
+
+      const pausedLoop = await getLoop(loopId);
+      expect(pausedLoop!.status).toBe(LoopStatus.PAUSED);
+
+      // Resume
+      const resumeResult = await service.resumeLoop(loopId);
+      expect(resumeResult.ok).toBe(true);
+      await flushEventLoop();
+
+      const resumedLoop = await getLoop(loopId);
+      expect(resumedLoop!.status).toBe(LoopStatus.RUNNING);
+    });
+
+    it('should resume after mid-iteration completion (pause → task finishes → resume → continues)', async () => {
+      // Exit condition: check for sentinel file
+      const sentinelFile = join(tempDir, 'pause-resume-done.txt');
+      const exitCondition = `test -f ${sentinelFile}`;
+
+      const createResult = await service.createLoop({
+        prompt: 'Pause-resume test',
+        strategy: LoopStrategy.RETRY,
+        exitCondition,
+        maxIterations: 10,
+        maxConsecutiveFailures: 10,
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const loopId = createResult.value.id;
+      await flushEventLoop();
+
+      // Pause (graceful — iteration continues)
+      await service.pauseLoop(loopId);
+      await flushEventLoop();
+
+      // Simulate task completion while paused
+      // In real system, WorkerHandler updates task status
+      const iter1 = await getLatestIteration(loopId);
+      expect(iter1).toBeDefined();
+
+      // Mark task as completed in the task repo (simulates WorkerHandler)
+      if (iter1!.taskId) {
+        await taskRepo.update(iter1!.taskId, {
+          status: 'completed' as import('../../src/core/domain').TaskStatus,
+          exitCode: 0,
+          completedAt: Date.now(),
+        });
+      }
+
+      // Emit TaskCompleted (handler ignores it because loop is PAUSED)
+      await eventBus.emit('TaskCompleted', { taskId: iter1!.taskId, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // Still paused
+      expect((await getLoop(loopId))!.status).toBe(LoopStatus.PAUSED);
+
+      // Resume — recovery should evaluate the exit condition (fails: no sentinel file yet)
+      await service.resumeLoop(loopId);
+      await flushEventLoop();
+
+      const afterResume = await getLoop(loopId);
+      expect(afterResume!.status).toBe(LoopStatus.RUNNING);
+      // Should have started iteration 2 (exit condition failed → next iteration)
+      expect(afterResume!.currentIteration).toBe(2);
+    });
+
+    it('should cancel a paused loop', async () => {
+      const createResult = await service.createLoop({
+        prompt: 'Cancel while paused',
+        strategy: LoopStrategy.RETRY,
+        exitCondition: 'true',
+        maxIterations: 10,
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const loopId = createResult.value.id;
+      await flushEventLoop();
+
+      // Pause
+      await service.pauseLoop(loopId);
+      await flushEventLoop();
+      expect((await getLoop(loopId))!.status).toBe(LoopStatus.PAUSED);
+
+      // Cancel while paused
+      const cancelResult = await service.cancelLoop(loopId, 'No longer needed');
+      expect(cancelResult.ok).toBe(true);
+      await flushEventLoop();
+
+      const cancelledLoop = await getLoop(loopId);
+      expect(cancelledLoop!.status).toBe(LoopStatus.CANCELLED);
+    });
+  });
 });

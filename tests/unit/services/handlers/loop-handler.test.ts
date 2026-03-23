@@ -1043,4 +1043,161 @@ describe('LoopHandler - Behavioral Tests', () => {
       freshEventBus.dispose();
     });
   });
+
+  // ==========================================================================
+  // v0.8.0 Pause/Resume Tests
+  // ==========================================================================
+
+  describe('Pause — graceful', () => {
+    it('should set status to PAUSED and allow current iteration to continue', async () => {
+      const loop = await createAndEmitLoop();
+
+      // Emit LoopPaused (graceful, force=false)
+      await eventBus.emit('LoopPaused', { loopId: loop.id, force: false });
+      await flushEventLoop();
+
+      const pausedLoop = await getLoop(loop.id);
+      expect(pausedLoop).toBeDefined();
+      expect(pausedLoop!.status).toBe(LoopStatus.PAUSED);
+
+      // Current iteration should still be running (graceful)
+      const iteration = await getLatestIteration(loop.id);
+      expect(iteration).toBeDefined();
+      expect(iteration!.status).toBe('running');
+    });
+
+    it('should not start next iteration when task completes while paused (graceful)', async () => {
+      // Mock: exit condition fails → normally starts next iteration
+      mockEvaluator.evaluate.mockResolvedValue({ passed: false, exitCode: 1, error: 'fail' });
+
+      const loop = await createAndEmitLoop({ maxIterations: 10 });
+
+      // Pause (graceful)
+      await eventBus.emit('LoopPaused', { loopId: loop.id, force: false });
+      await flushEventLoop();
+
+      // Task completes while paused
+      const taskId = await getLatestTaskId(loop.id);
+      expect(taskId).toBeDefined();
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // Loop should still be paused (no next iteration started)
+      const afterComplete = await getLoop(loop.id);
+      expect(afterComplete!.status).toBe(LoopStatus.PAUSED);
+      // Current iteration should still be 1 (no new iteration started)
+      expect(afterComplete!.currentIteration).toBe(1);
+    });
+  });
+
+  describe('Pause — force', () => {
+    it('should set status to PAUSED and cancel current running iteration', async () => {
+      const loop = await createAndEmitLoop();
+
+      // Emit LoopPaused (force=true)
+      await eventBus.emit('LoopPaused', { loopId: loop.id, force: true });
+      await flushEventLoop();
+
+      const pausedLoop = await getLoop(loop.id);
+      expect(pausedLoop).toBeDefined();
+      expect(pausedLoop!.status).toBe(LoopStatus.PAUSED);
+
+      // Current iteration should be marked as cancelled
+      const iteration = await getLatestIteration(loop.id);
+      expect(iteration).toBeDefined();
+      expect(iteration!.status).toBe('cancelled');
+      expect(iteration!.completedAt).toBeDefined();
+    });
+  });
+
+  describe('Resume', () => {
+    it('should set status to RUNNING and start next iteration after force pause', async () => {
+      const loop = await createAndEmitLoop({ maxIterations: 10 });
+
+      // Force pause cancels current iteration
+      await eventBus.emit('LoopPaused', { loopId: loop.id, force: true });
+      await flushEventLoop();
+
+      // Resume
+      await eventBus.emit('LoopResumed', { loopId: loop.id });
+      await flushEventLoop();
+
+      const resumedLoop = await getLoop(loop.id);
+      expect(resumedLoop).toBeDefined();
+      expect(resumedLoop!.status).toBe(LoopStatus.RUNNING);
+      // Should have started iteration 2 (recovery sees cancelled iter, starts next)
+      expect(resumedLoop!.currentIteration).toBe(2);
+    });
+
+    it('should evaluate result when resuming after graceful mid-iteration completion', async () => {
+      // Mock: exit condition passes
+      mockEvaluator.evaluate.mockResolvedValue({ passed: true, exitCode: 0 });
+
+      const loop = await createAndEmitLoop({ maxIterations: 10 });
+
+      // Graceful pause
+      await eventBus.emit('LoopPaused', { loopId: loop.id, force: false });
+      await flushEventLoop();
+
+      // Simulate task completion while paused:
+      // 1. Update task status in repo (mirrors what WorkerHandler does)
+      // 2. Emit TaskCompleted (handler ignores it because loop is PAUSED)
+      const taskId = await getLatestTaskId(loop.id);
+      expect(taskId).toBeDefined();
+      await taskRepo.update(taskId!, { status: TaskStatus.COMPLETED, exitCode: 0, completedAt: Date.now() });
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // Resume — recovery should pick up the completed task and evaluate exit condition
+      await eventBus.emit('LoopResumed', { loopId: loop.id });
+      await flushEventLoop();
+
+      const resumedLoop = await getLoop(loop.id);
+      expect(resumedLoop).toBeDefined();
+      // Exit condition passed → loop should be completed
+      expect(resumedLoop!.status).toBe(LoopStatus.COMPLETED);
+    });
+  });
+
+  describe('Recovery skips PAUSED loops', () => {
+    it('should not recover paused loops on handler startup', async () => {
+      // Create a paused loop directly in DB
+      const loop = createLoop(
+        {
+          prompt: 'paused loop',
+          strategy: LoopStrategy.RETRY,
+          exitCondition: 'test -f /tmp/done',
+          maxIterations: 10,
+          maxConsecutiveFailures: 3,
+          cooldownMs: 0,
+          freshContext: true,
+          evalTimeout: 60000,
+        },
+        '/tmp',
+      );
+
+      // Save as PAUSED
+      const pausedLoop = { ...loop, status: LoopStatus.PAUSED, currentIteration: 1 };
+      await loopRepo.save(pausedLoop);
+
+      // Create a fresh handler — triggers recovery
+      const freshEventBus = new InMemoryEventBus(createTestConfiguration(), new TestLogger());
+      await LoopHandler.create(
+        loopRepo,
+        taskRepo,
+        createMockCheckpointRepo(),
+        freshEventBus,
+        database,
+        mockEvaluator,
+        new TestLogger(),
+      );
+
+      // Loop should still be PAUSED (not recovered to RUNNING)
+      const afterRecovery = await getLoop(loop.id);
+      expect(afterRecovery).toBeDefined();
+      expect(afterRecovery!.status).toBe(LoopStatus.PAUSED);
+
+      freshEventBus.dispose();
+    });
+  });
 });
