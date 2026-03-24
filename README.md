@@ -78,7 +78,7 @@ Once configured, use these MCP tools:
 | **RetryTask** | Retry a failed or completed task | `RetryTask({ taskId })` |
 | **ScheduleTask** | Schedule recurring or one-time tasks | `ScheduleTask({ prompt: "...", scheduleType: "cron", cronExpression: "0 2 * * *" })` |
 | **ListSchedules** | List schedules with optional status filter | `ListSchedules({ status: "active" })` |
-| **GetSchedule** | Get schedule details and execution history | `GetSchedule({ scheduleId })` |
+| **ScheduleStatus** | Get schedule details and execution history | `ScheduleStatus({ scheduleId })` |
 | **CancelSchedule** | Cancel an active schedule (optionally cancel in-flight tasks) | `CancelSchedule({ scheduleId, reason, cancelTasks? })` |
 | **PauseSchedule** | Pause a schedule (resumable) | `PauseSchedule({ scheduleId })` |
 | **ResumeSchedule** | Resume a paused schedule | `ResumeSchedule({ scheduleId })` |
@@ -89,6 +89,9 @@ Once configured, use these MCP tools:
 | **LoopStatus** | Get loop details and iteration history | `LoopStatus({ loopId })` |
 | **ListLoops** | List loops with optional status filter | `ListLoops({ status: "running" })` |
 | **CancelLoop** | Cancel an active loop (optionally cancel in-flight tasks) | `CancelLoop({ loopId, cancelTasks: true })` |
+| **PauseLoop** | Pause an active loop (graceful or force) | `PauseLoop({ loopId, force?: true })` |
+| **ResumeLoop** | Resume a paused loop | `ResumeLoop({ loopId })` |
+| **ScheduleLoop** | Schedule a recurring or one-time loop | `ScheduleLoop({ prompt: "...", strategy: "retry", exitCondition: "...", cronExpression: "0 * * * *" })` |
 
 ### CLI Commands
 
