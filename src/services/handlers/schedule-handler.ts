@@ -565,6 +565,12 @@ export class ScheduleHandler extends BaseEventHandler {
       const gitStateResult = await captureGitState(workingDirectory);
       if (gitStateResult.ok && gitStateResult.value) {
         loopWithGit = updateLoop(loop, { gitBaseBranch: gitStateResult.value.branch });
+      } else if (!gitStateResult.ok) {
+        this.logger.warn('Failed to capture git state for scheduled loop — proceeding without gitBaseBranch', {
+          scheduleId,
+          loopId: loop.id,
+          error: gitStateResult.error.message,
+        });
       }
     }
 

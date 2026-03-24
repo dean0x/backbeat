@@ -1,7 +1,6 @@
 /**
  * Git state capture and branch management utilities
  * ARCHITECTURE: Pure functions returning Result, uses execFile for security (no shell injection)
- * Pattern: All git operations use execFile (not exec) to prevent shell injection
  */
 
 import { execFile } from 'child_process';
@@ -13,6 +12,11 @@ const execFileAsync = promisify(execFile);
 
 /** Timeout for all git operations — prevents hung git from blocking the event loop */
 const GIT_TIMEOUT_MS = 30_000;
+
+/** Detect execFile timeout: Node sets `killed = true` when a child process is terminated by timeout */
+function isTimeoutError(error: unknown): boolean {
+  return error instanceof Error && 'killed' in error && (error as { killed?: boolean }).killed === true;
+}
 
 /**
  * Validate a git ref name (branch or tag) to prevent argument injection.
@@ -122,9 +126,7 @@ export async function captureGitState(workingDirectory: string): Promise<Result<
       const branchResult = await execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], execOpts);
       branch = branchResult.stdout.trim();
     } catch (catchError) {
-      if (catchError instanceof Error && 'killed' in catchError && (catchError as { killed?: boolean }).killed) {
-        throw catchError; // Re-throw timeout → outer catch → err(...)
-      }
+      if (isTimeoutError(catchError)) throw catchError;
       // Not a git directory or git not available - not an error
       return ok(null);
     }
@@ -135,9 +137,7 @@ export async function captureGitState(workingDirectory: string): Promise<Result<
       const shaResult = await execFileAsync('git', ['rev-parse', 'HEAD'], execOpts);
       commitSha = shaResult.stdout.trim();
     } catch (catchError) {
-      if (catchError instanceof Error && 'killed' in catchError && (catchError as { killed?: boolean }).killed) {
-        throw catchError; // Re-throw timeout → outer catch → err(...)
-      }
+      if (isTimeoutError(catchError)) throw catchError;
       // HEAD might not exist (empty repo) - not an error
       return ok(null);
     }
@@ -153,9 +153,7 @@ export async function captureGitState(workingDirectory: string): Promise<Result<
           .map((line) => line.substring(3).trim()); // Remove status prefix (e.g., " M ", "?? ")
       }
     } catch (catchError) {
-      if (catchError instanceof Error && 'killed' in catchError && (catchError as { killed?: boolean }).killed) {
-        throw catchError; // Re-throw timeout → outer catch → err(...)
-      }
+      if (isTimeoutError(catchError)) throw catchError;
       // Status failed - continue with empty dirty files
       dirtyFiles = [];
     }

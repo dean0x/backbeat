@@ -302,6 +302,28 @@ describe('git exec timeout protection', () => {
     expect(opts.timeout).toBeGreaterThan(0);
   });
 
+  it('should propagate timeout errors from createAndCheckoutBranch as err()', async () => {
+    const killedError = Object.assign(new Error('Command timed out'), { killed: true });
+    mockExecFileSequence([{ error: killedError }]);
+
+    const result = await createAndCheckoutBranch('/workspace', 'feat/branch');
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('Failed to create/checkout branch');
+  });
+
+  it('should propagate timeout errors from captureGitDiff as err()', async () => {
+    const killedError = Object.assign(new Error('Command timed out'), { killed: true });
+    mockExecFileSequence([{ error: killedError }]);
+
+    const result = await captureGitDiff('/workspace', 'main', 'feature');
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('Failed to capture git diff');
+  });
+
   it('should propagate timeout errors from captureGitState as err(), not ok(null)', async () => {
     // Simulate a killed process (timeout) on the first git call (branch check)
     const killedError = Object.assign(new Error('Command timed out'), { killed: true });

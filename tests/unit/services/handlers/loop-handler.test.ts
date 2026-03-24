@@ -544,10 +544,8 @@ describe('LoopHandler - Behavioral Tests', () => {
       });
       await flushEventLoop();
 
-      // Iteration should be marked as 'fail' (from first failure)
-      const afterFirst = await getLatestIteration(loop.id);
-      // The latest iteration is now iteration 2 (next one started)
-      // We need to check the original iteration
+      // Iteration 1 should be marked as 'fail' (from first failure).
+      // Latest iteration is now iteration 2 (next one started), so fetch all.
       const allIters = await loopRepo.getIterations(loop.id, 10);
       expect(allIters.ok).toBe(true);
       if (!allIters.ok) return;
