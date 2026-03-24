@@ -1442,7 +1442,7 @@ describe('CLI - Schedule Commands', () => {
     });
   });
 
-  describe('schedule get (ReadOnlyContext)', () => {
+  describe('schedule status (ReadOnlyContext)', () => {
     it('should get schedule details by ID via scheduleRepository.findById()', async () => {
       const schedule = createSchedule({
         taskTemplate: { prompt: 'test' },
@@ -1453,7 +1453,7 @@ describe('CLI - Schedule Commands', () => {
       });
       mockScheduleReadOnlyCtx.addSchedule(schedule);
 
-      const result = await simulateScheduleGetCommand(mockScheduleReadOnlyCtx, schedule.id);
+      const result = await simulateScheduleStatusCommand(mockScheduleReadOnlyCtx, schedule.id);
       expect(result.ok).toBe(true);
       if (result.ok && result.value) {
         expect(result.value.id).toBe(schedule.id);
@@ -1462,7 +1462,7 @@ describe('CLI - Schedule Commands', () => {
     });
 
     it('should return null for non-existent schedule', async () => {
-      const result = await simulateScheduleGetCommand(mockScheduleReadOnlyCtx, ScheduleId('non-existent'));
+      const result = await simulateScheduleStatusCommand(mockScheduleReadOnlyCtx, ScheduleId('non-existent'));
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value).toBeNull();
@@ -1685,7 +1685,7 @@ describe('CLI - Help Text Coverage', () => {
 
     expect(helpText).toContain('schedule create');
     expect(helpText).toContain('schedule list');
-    expect(helpText).toContain('schedule get');
+    expect(helpText).toContain('schedule status');
     expect(helpText).toContain('schedule cancel');
     expect(helpText).toContain('schedule pause');
     expect(helpText).toContain('schedule resume');
@@ -2249,7 +2249,7 @@ Schedule Commands:
     --at "2025-03-01T09:00:00Z"       ISO 8601 datetime (implies --type one_time)
     --type cron|one_time               Explicit type (optional if --cron or --at given)
   schedule list [--status active|paused|...] [--limit N]
-  schedule get <schedule-id> [--history] [--history-limit N]
+  schedule status <schedule-id> [--history] [--history-limit N]
   schedule cancel <schedule-id> [reason]
   schedule pause <schedule-id>
   schedule resume <schedule-id>
@@ -2453,10 +2453,10 @@ async function simulateScheduleListCommand(
 }
 
 /**
- * Simulates `beat schedule get <schedule-id>` — mirrors production code in schedule.ts
+ * Simulates `beat schedule status <schedule-id>` — mirrors production code in schedule.ts
  * which calls ctx.scheduleRepository.findById()
  */
-async function simulateScheduleGetCommand(
+async function simulateScheduleStatusCommand(
   ctx: MockReadOnlyContext,
   scheduleId: string,
 ): Promise<Result<Schedule | null>> {
@@ -2797,8 +2797,8 @@ describe('CLI - Loop Commands', () => {
       expect(result.value.prompt).toBe('fix tests');
     });
 
-    it('should parse optimize strategy with --eval and --direction', () => {
-      const result = parseLoopCreateArgs(['optimize', '--eval', 'echo 42', '--direction', 'maximize']);
+    it('should parse optimize strategy with --eval and --maximize', () => {
+      const result = parseLoopCreateArgs(['optimize', '--eval', 'echo 42', '--maximize']);
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value.strategy).toBe(LoopStrategy.OPTIMIZE);
@@ -2843,8 +2843,8 @@ describe('CLI - Loop Commands', () => {
       expect(result.value.evalTimeout).toBe(5000);
     });
 
-    it('should parse --continue-context as freshContext=false', () => {
-      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--continue-context']);
+    it('should parse --checkpoint as freshContext=false', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--checkpoint']);
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value.freshContext).toBe(false);
@@ -2901,18 +2901,25 @@ describe('CLI - Loop Commands', () => {
       expect(result.error).toContain('--until');
     });
 
-    it('should reject --eval without --direction', () => {
+    it('should reject --eval without --minimize or --maximize', () => {
       const result = parseLoopCreateArgs(['fix', '--eval', 'echo 42']);
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.error).toContain('--direction');
+      expect(result.error).toContain('--minimize or --maximize');
     });
 
-    it('should reject --direction without --eval', () => {
-      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--direction', 'maximize']);
+    it('should reject --minimize/--maximize without --eval', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--maximize']);
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.error).toContain('--direction is only valid');
+      expect(result.error).toContain('only valid with --eval');
+    });
+
+    it('should reject both --minimize and --maximize', () => {
+      const result = parseLoopCreateArgs(['fix', '--eval', 'echo 42', '--minimize', '--maximize']);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain('Cannot specify both --minimize and --maximize');
     });
 
     it('should reject --pipeline with fewer than 2 --step', () => {
@@ -2943,11 +2950,11 @@ describe('CLI - Loop Commands', () => {
       expect(result.error).toContain('--eval-timeout');
     });
 
-    it('should reject invalid --direction value', () => {
-      const result = parseLoopCreateArgs(['fix', '--eval', 'echo 1', '--direction', 'sideways']);
-      expect(result.ok).toBe(false);
-      if (result.ok) return;
-      expect(result.error).toContain('minimize');
+    it('should parse --minimize flag correctly', () => {
+      const result = parseLoopCreateArgs(['fix', '--eval', 'echo 1', '--minimize']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.evalDirection).toBe('minimize');
     });
 
     it('should reject --step without --pipeline', () => {
@@ -3021,14 +3028,7 @@ describe('CLI - Loop Commands', () => {
     });
 
     it('should create optimize loop with direction', async () => {
-      const result = await simulateLoopCreate(mockLoopService, [
-        'optimize',
-        'perf',
-        '--eval',
-        'echo 42',
-        '--direction',
-        'maximize',
-      ]);
+      const result = await simulateLoopCreate(mockLoopService, ['optimize', 'perf', '--eval', 'echo 42', '--maximize']);
       expect(result.ok).toBe(true);
       expect(mockLoopService.createCalls[0].strategy).toBe(LoopStrategy.OPTIMIZE);
       expect(mockLoopService.createCalls[0].evalDirection).toBe(OptimizeDirection.MAXIMIZE);
@@ -3069,7 +3069,7 @@ describe('CLI - Loop Commands', () => {
         '1000',
         '--eval-timeout',
         '5000',
-        '--continue-context',
+        '--checkpoint',
         '--priority',
         'P0',
         '--agent',
@@ -3139,7 +3139,7 @@ describe('CLI - Loop Commands', () => {
     });
   });
 
-  describe('loop get — read-only context', () => {
+  describe('loop status — read-only context', () => {
     let mockLoopReadOnlyCtx: MockReadOnlyContext;
 
     beforeEach(() => {
@@ -3314,16 +3314,8 @@ describe('CLI - Schedule --loop flag', () => {
     expect(result.value.cronExpression).toBe('0 9 * * *');
   });
 
-  it('should parse --loop with --eval and --direction for optimize strategy', () => {
-    const result = parseScheduleCreateArgs([
-      '--loop',
-      '--eval',
-      'echo 42',
-      '--direction',
-      'minimize',
-      '--cron',
-      '0 */6 * * *',
-    ]);
+  it('should parse --loop with --eval and --minimize for optimize strategy', () => {
+    const result = parseScheduleCreateArgs(['--loop', '--eval', 'echo 42', '--minimize', '--cron', '0 */6 * * *']);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.isLoop).toBe(true);
@@ -3369,8 +3361,8 @@ describe('CLI - Schedule --loop flag', () => {
     expect(result.value.loopConfig.gitBranch).toBe('feat/nightly-loop');
   });
 
-  it('should parse --loop with --continue-context', () => {
-    const result = parseScheduleCreateArgs(['--loop', '--until', 'true', '--continue-context', '--cron', '0 0 * * *']);
+  it('should parse --loop with --checkpoint', () => {
+    const result = parseScheduleCreateArgs(['--loop', '--until', 'true', '--checkpoint', '--cron', '0 0 * * *']);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.isLoop).toBe(true);
@@ -3405,11 +3397,11 @@ describe('CLI - Schedule --loop flag', () => {
     expect(result.error).toContain('--until');
   });
 
-  it('should reject --loop --eval without --direction', () => {
+  it('should reject --loop --eval without --minimize or --maximize', () => {
     const result = parseScheduleCreateArgs(['--loop', '--eval', 'echo 42', '--cron', '0 9 * * *']);
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain('--direction');
+    expect(result.error).toContain('--minimize or --maximize');
   });
 });
 

@@ -138,7 +138,7 @@ When adding task dependencies:
 
 ### MCP Tools
 
-All tools use PascalCase: `DelegateTask`, `TaskStatus`, `TaskLogs`, `CancelTask`, `ScheduleTask`, `ListSchedules`, `GetSchedule`, `CancelSchedule`, `PauseSchedule`, `ResumeSchedule`, `CreatePipeline`, `SchedulePipeline`, `CreateLoop`, `LoopStatus`, `ListLoops`, `CancelLoop`
+All tools use PascalCase: `DelegateTask`, `TaskStatus`, `TaskLogs`, `CancelTask`, `ScheduleTask`, `ListSchedules`, `ScheduleStatus`, `CancelSchedule`, `PauseSchedule`, `ResumeSchedule`, `CreatePipeline`, `SchedulePipeline`, `CreateLoop`, `LoopStatus`, `ListLoops`, `CancelLoop`, `PauseLoop`, `ResumeLoop`, `ScheduleLoop`
 
 ## File Locations
 

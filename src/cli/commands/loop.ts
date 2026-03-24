@@ -39,7 +39,8 @@ export function parseLoopCreateArgs(loopArgs: string[]): Result<ParsedLoopArgs, 
   const promptWords: string[] = [];
   let untilCmd: string | undefined;
   let evalCmd: string | undefined;
-  let direction: 'minimize' | 'maximize' | undefined;
+  let minimizeFlag = false;
+  let maximizeFlag = false;
   let maxIterations: number | undefined;
   let maxFailures: number | undefined;
   let cooldown: number | undefined;
@@ -62,12 +63,10 @@ export function parseLoopCreateArgs(loopArgs: string[]): Result<ParsedLoopArgs, 
     } else if (arg === '--eval' && next) {
       evalCmd = next;
       i++;
-    } else if (arg === '--direction' && next) {
-      if (next !== 'minimize' && next !== 'maximize') {
-        return err('--direction must be "minimize" or "maximize"');
-      }
-      direction = next;
-      i++;
+    } else if (arg === '--minimize') {
+      minimizeFlag = true;
+    } else if (arg === '--maximize') {
+      maximizeFlag = true;
     } else if (arg === '--max-iterations' && next) {
       maxIterations = parseInt(next, 10);
       if (isNaN(maxIterations) || maxIterations < 0) {
@@ -92,7 +91,7 @@ export function parseLoopCreateArgs(loopArgs: string[]): Result<ParsedLoopArgs, 
         return err('--eval-timeout must be >= 1000 (ms)');
       }
       i++;
-    } else if (arg === '--continue-context') {
+    } else if (arg === '--checkpoint') {
       continueContext = true;
     } else if (arg === '--pipeline') {
       isPipeline = true;
@@ -136,20 +135,26 @@ export function parseLoopCreateArgs(loopArgs: string[]): Result<ParsedLoopArgs, 
     return err('Cannot specify both --until and --eval. Use --until for retry strategy, --eval for optimize strategy.');
   }
   if (!untilCmd && !evalCmd) {
-    return err(
-      'Provide --until <cmd> for retry strategy or --eval <cmd> --direction minimize|maximize for optimize strategy.',
-    );
+    return err('Provide --until <cmd> for retry strategy or --eval <cmd> --minimize|--maximize for optimize strategy.');
   }
 
   const isOptimize = !!evalCmd;
   const exitCondition = isOptimize ? evalCmd! : untilCmd!;
 
-  // Validate direction for optimize
+  // Validate direction flags for optimize
+  if (minimizeFlag && maximizeFlag) {
+    return err('Cannot specify both --minimize and --maximize');
+  }
+  const direction: 'minimize' | 'maximize' | undefined = minimizeFlag
+    ? 'minimize'
+    : maximizeFlag
+      ? 'maximize'
+      : undefined;
   if (isOptimize && !direction) {
-    return err('--direction minimize|maximize is required with --eval (optimize strategy)');
+    return err('--minimize or --maximize is required with --eval (optimize strategy)');
   }
   if (!isOptimize && direction) {
-    return err('--direction is only valid with --eval (optimize strategy)');
+    return err('--minimize/--maximize is only valid with --eval (optimize strategy)');
   }
 
   // Pipeline mode
@@ -197,8 +202,8 @@ export async function handleLoopCommand(subCmd: string | undefined, loopArgs: st
     return;
   }
 
-  if (subCmd === 'get') {
-    await handleLoopGet(loopArgs);
+  if (subCmd === 'status') {
+    await handleLoopStatus(loopArgs);
     return;
   }
 
@@ -335,13 +340,13 @@ async function handleLoopList(loopArgs: string[]): Promise<void> {
 }
 
 // ============================================================================
-// Loop get — read-only context
+// Loop status — read-only context
 // ============================================================================
 
-async function handleLoopGet(loopArgs: string[]): Promise<void> {
+async function handleLoopStatus(loopArgs: string[]): Promise<void> {
   const loopId = loopArgs[0];
   if (!loopId) {
-    ui.error('Usage: beat loop get <loop-id> [--history] [--history-limit N]');
+    ui.error('Usage: beat loop status <loop-id> [--history] [--history-limit N]');
     process.exit(1);
   }
 

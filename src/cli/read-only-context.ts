@@ -1,7 +1,7 @@
 /**
  * Lightweight read-only context for CLI query commands
  *
- * Read-only commands (status, logs, list, schedule list/get) only need
+ * Read-only commands (status, logs, list, schedule list/status) only need
  * Database + repositories. This module bypasses full bootstrap() which
  * initializes 15+ components (EventBus, 6 handlers, WorkerPool, AgentRegistry,
  * ResourceMonitor, RecoveryManager, etc.) — saving ~200-500ms per query.

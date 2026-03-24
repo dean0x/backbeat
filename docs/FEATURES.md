@@ -125,7 +125,7 @@ Last Updated: March 2026 (v0.7.0)
 ### Schedule Commands (v0.4.0+)
 - `beat schedule create <prompt> [options]`: Create a cron or one-time scheduled task
 - `beat schedule list [--status <status>]`: List schedules with optional status filter
-- `beat schedule get <id> [--history]`: Get schedule details and execution history
+- `beat schedule status <id> [--history]`: Get schedule details and execution history
 - `beat schedule pause <id>`: Pause an active schedule
 - `beat schedule resume <id>`: Resume a paused schedule
 - `beat schedule cancel <id> [reason]`: Cancel a schedule with optional reason
@@ -198,7 +198,7 @@ Last Updated: March 2026 (v0.7.0)
 ### MCP Tools
 - **ScheduleTask**: Create recurring (cron) or one-time scheduled tasks
 - **ListSchedules**: List all schedules with optional status filter and pagination
-- **GetSchedule**: Get schedule details including execution history
+- **ScheduleStatus**: Get schedule details including execution history
 - **CancelSchedule**: Cancel an active schedule with optional reason
 - **PauseSchedule**: Pause an active schedule (can be resumed later)
 - **ResumeSchedule**: Resume a paused schedule
@@ -318,10 +318,10 @@ Last Updated: March 2026 (v0.7.0)
 
 ### CLI Commands (v0.7.0)
 - `beat loop <prompt> --until <cmd>`: Create a retry loop (run until shell command exits 0)
-- `beat loop <prompt> --eval <cmd> --direction minimize|maximize`: Create an optimize loop (score-based)
+- `beat loop <prompt> --eval <cmd> --minimize|--maximize`: Create an optimize loop (score-based)
 - `beat loop --pipeline --step "..." --step "..." --until <cmd>`: Create a pipeline loop
 - `beat loop list [--status <status>]`: List loops with optional status filter
-- `beat loop get <loop-id> [--history]`: Get loop details and iteration history
+- `beat loop status <loop-id> [--history]`: Get loop details and iteration history
 - `beat loop cancel <loop-id> [--cancel-tasks] [reason]`: Cancel a loop with optional task cancellation
 
 ### Event-Driven Integration
@@ -354,7 +354,7 @@ Last Updated: March 2026 (v0.7.0)
 - **Fresh Context**: Each iteration gets a clean agent context by default, or continues from previous checkpoint
 - **Safety Controls**: Max iterations (0 = unlimited), max consecutive failures, cooldown between iterations
 - **Configurable Eval Timeout**: Exit condition evaluation timeout (default: 60s)
-- **CLI**: `beat loop`, `beat loop list`, `beat loop get`, `beat loop cancel` commands
+- **CLI**: `beat loop`, `beat loop list`, `beat loop status`, `beat loop cancel` commands
 - **4 MCP Tools**: `CreateLoop`, `LoopStatus`, `ListLoops`, `CancelLoop`
 
 ### Event System
@@ -374,7 +374,7 @@ Last Updated: March 2026 (v0.7.0)
 - **Per-Step Agent Override**: MCP tool supports per-step `agent` field; CLI uses shared `--agent`
 - **`cancelTasks` on CancelSchedule**: Optional flag to also cancel in-flight pipeline tasks from current execution
 - **ListSchedules Enhancement**: Response includes `isPipeline` and `stepCount` indicators
-- **GetSchedule Enhancement**: Response includes full `pipelineSteps` when present
+- **ScheduleStatus Enhancement**: Response includes full `pipelineSteps` when present
 - **CLI**: `--pipeline --step "..." --step "..."` flags for creating scheduled pipelines
 
 ### Architectural Simplification
@@ -440,7 +440,7 @@ Last Updated: March 2026 (v0.7.0)
 - **Missed Run Policies**: `skip`, `catchup`, or `fail` for overdue triggers
 - **Lifecycle Management**: Pause, resume, cancel schedules with full execution history
 - **Concurrent Execution Prevention**: Lock-based protection against overlapping runs
-- **6 MCP Tools**: `ScheduleTask`, `ListSchedules`, `GetSchedule`, `CancelSchedule`, `PauseSchedule`, `ResumeSchedule`
+- **6 MCP Tools**: `ScheduleTask`, `ListSchedules`, `ScheduleStatus`, `CancelSchedule`, `PauseSchedule`, `ResumeSchedule`
 - **CLI + Pipeline**: Full CLI parity including `beat pipeline` command for chained one-time schedules
 
 ### Task Resumption

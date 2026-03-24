@@ -1080,7 +1080,7 @@ describe('MCPAdapter - SchedulePipeline & Enhanced Schedule Tools', () => {
     });
   });
 
-  describe('GetSchedule with pipelineSteps', () => {
+  describe('ScheduleStatus with pipelineSteps', () => {
     it('should include pipelineSteps in response when present', async () => {
       const now = Date.now();
       mockScheduleService.getScheduleResult = {
@@ -1103,7 +1103,7 @@ describe('MCPAdapter - SchedulePipeline & Enhanced Schedule Tools', () => {
         }),
       };
 
-      const result = await simulateGetSchedule(mockScheduleService, {
+      const result = await simulateScheduleStatus(mockScheduleService, {
         scheduleId: 'schedule-pipeline-detail',
       });
 
@@ -1140,7 +1140,7 @@ class MockScheduleService {
   shouldFailScheduledPipeline = false;
   shouldFailCancelSchedule = false;
   shouldFailListSchedules = false;
-  shouldFailGetSchedule = false;
+  shouldFailScheduleStatus = false;
 
   async createSchedule() {
     return ok(null);
@@ -1169,7 +1169,7 @@ class MockScheduleService {
       }[];
     }>
   > {
-    if (this.shouldFailGetSchedule) {
+    if (this.shouldFailScheduleStatus) {
       return err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Failed to get schedule', {}));
     }
     if (this.getScheduleResult) {
@@ -1719,7 +1719,7 @@ async function simulateListSchedules(
   };
 }
 
-async function simulateGetSchedule(
+async function simulateScheduleStatus(
   scheduleService: MockScheduleService,
   args: { scheduleId: string; includeHistory?: boolean; historyLimit?: number },
 ): Promise<MCPToolResponse> {

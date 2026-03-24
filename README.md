@@ -105,7 +105,7 @@ Once configured, use these MCP tools:
 | `beat resume <task-id>` | Resume a task from its checkpoint |
 | `beat schedule create <prompt>` | Create a cron or one-time schedule |
 | `beat schedule list` | List schedules with optional status filter |
-| `beat schedule get <id>` | Get schedule details and execution history |
+| `beat schedule status <id>` | Get schedule details and execution history |
 | `beat schedule pause <id>` | Pause an active schedule |
 | `beat schedule resume <id>` | Resume a paused schedule |
 | `beat schedule cancel <id>` | Cancel a schedule |
@@ -113,7 +113,7 @@ Once configured, use these MCP tools:
 | `beat loop <prompt> --until <cmd>` | Create a retry loop (run until condition passes) |
 | `beat loop <prompt> --eval <cmd>` | Create an optimize loop (score-based) |
 | `beat loop list` | List loops with optional status filter |
-| `beat loop get <loop-id>` | Get loop details and iteration history |
+| `beat loop status <loop-id>` | Get loop details and iteration history |
 | `beat loop cancel <loop-id>` | Cancel a loop |
 | `beat config show\|set\|reset\|path` | Manage configuration |
 | `beat help` | Show help |

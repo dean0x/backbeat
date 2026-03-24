@@ -59,10 +59,10 @@ await CancelSchedule({ scheduleId: "...", cancelTasks: true });
 beat schedule cancel <id> --cancel-tasks
 ```
 
-### ListSchedules / GetSchedule Enhancements
+### ListSchedules / ScheduleStatus Enhancements
 
 - `ListSchedules` response includes `isPipeline` and `stepCount` indicators
-- `GetSchedule` response includes full `pipelineSteps` when present
+- `ScheduleStatus` response includes full `pipelineSteps` when present
 
 ### Architectural Simplification
 

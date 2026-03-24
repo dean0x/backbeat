@@ -34,7 +34,7 @@ Schedule tasks for future or recurring execution with full lifecycle management.
 **MCP Tools (6 new):**
 - `ScheduleTask` - Create cron or one-time schedules
 - `ListSchedules` - List with optional status filtering
-- `GetSchedule` - Get schedule details with execution history
+- `ScheduleStatus` - Get schedule details with execution history
 - `CancelSchedule` - Cancel with reason tracking
 - `PauseSchedule` / `ResumeSchedule` - Pause and resume schedules
 
@@ -48,7 +48,7 @@ beat schedule create "deploy v2" --type one_time --at "2026-03-01T09:00:00Z"
 
 # List and manage
 beat schedule list --status active
-beat schedule get <id> --history
+beat schedule status <id> --history
 beat schedule pause <id>
 beat schedule resume <id>
 beat schedule cancel <id> "no longer needed"

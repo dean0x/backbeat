@@ -39,10 +39,10 @@ Repeat a multi-step pipeline (2-20 steps) per iteration instead of a single task
 ### CLI Commands
 
 - `beat loop <prompt> --until <cmd>`: Create a retry loop
-- `beat loop <prompt> --eval <cmd> --direction minimize|maximize`: Create an optimize loop
+- `beat loop <prompt> --eval <cmd> --minimize|--maximize`: Create an optimize loop
 - `beat loop --pipeline --step "..." --step "..." --until <cmd>`: Create a pipeline loop
 - `beat loop list [--status <status>]`: List loops with optional status filter
-- `beat loop get <loop-id> [--history]`: Get loop details and iteration history
+- `beat loop status <loop-id> [--history]`: Get loop details and iteration history
 - `beat loop cancel <loop-id> [--cancel-tasks] [reason]`: Cancel a loop
 
 ### Event System

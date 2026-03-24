@@ -73,7 +73,8 @@ function parseScheduleLoopFlags(args: readonly string[]): Result<ParsedLoopFlags
   let untilCmd: string | undefined;
   let evalCmd: string | undefined;
   let explicitStrategy: LoopStrategy | undefined;
-  let loopDirection: 'minimize' | 'maximize' | undefined;
+  let loopMinimize = false;
+  let loopMaximize = false;
   let loopMaxIterations: number | undefined;
   let loopMaxFailures: number | undefined;
   let loopCooldown: number | undefined;
@@ -97,12 +98,10 @@ function parseScheduleLoopFlags(args: readonly string[]): Result<ParsedLoopFlags
       }
       explicitStrategy = next === 'retry' ? LoopStrategy.RETRY : LoopStrategy.OPTIMIZE;
       i++;
-    } else if (arg === '--direction' && next) {
-      if (next !== 'minimize' && next !== 'maximize') {
-        return err('--direction must be "minimize" or "maximize"');
-      }
-      loopDirection = next;
-      i++;
+    } else if (arg === '--minimize') {
+      loopMinimize = true;
+    } else if (arg === '--maximize') {
+      loopMaximize = true;
     } else if (arg === '--max-iterations' && next) {
       loopMaxIterations = parseInt(next, 10);
       if (isNaN(loopMaxIterations) || loopMaxIterations < 0) {
@@ -127,7 +126,7 @@ function parseScheduleLoopFlags(args: readonly string[]): Result<ParsedLoopFlags
         return err('--eval-timeout must be >= 1000 (ms)');
       }
       i++;
-    } else if (arg === '--continue-context') {
+    } else if (arg === '--checkpoint') {
       loopContinueContext = true;
     } else if (arg === '--git-branch' && next) {
       loopGitBranch = next;
@@ -135,6 +134,16 @@ function parseScheduleLoopFlags(args: readonly string[]): Result<ParsedLoopFlags
     }
     // Non-loop flags are silently skipped — they are handled by the parent parser
   }
+
+  // Validate direction flags
+  if (loopMinimize && loopMaximize) {
+    return err('Cannot specify both --minimize and --maximize');
+  }
+  const loopDirection: 'minimize' | 'maximize' | undefined = loopMinimize
+    ? 'minimize'
+    : loopMaximize
+      ? 'maximize'
+      : undefined;
 
   return ok({
     untilCmd,
@@ -244,17 +253,18 @@ export function parseScheduleCreateArgs(scheduleArgs: string[]): Result<ParsedSc
       arg === '--until' ||
       arg === '--eval' ||
       arg === '--strategy' ||
-      arg === '--direction' ||
+      arg === '--minimize' ||
+      arg === '--maximize' ||
       arg === '--max-iterations' ||
       arg === '--max-failures' ||
       arg === '--cooldown' ||
       arg === '--eval-timeout' ||
-      arg === '--continue-context' ||
+      arg === '--checkpoint' ||
       arg === '--git-branch'
     ) {
       // These are loop-specific flags — skip them here, they'll be parsed by parseScheduleLoopFlags()
-      // Advance past the value if the flag takes one
-      if (arg !== '--continue-context' && next && !next.startsWith('-')) {
+      // Advance past the value if the flag takes one (boolean flags don't consume next arg)
+      if (arg !== '--checkpoint' && arg !== '--minimize' && arg !== '--maximize' && next && !next.startsWith('-')) {
         i++;
       }
     } else if (arg.startsWith('-')) {
@@ -300,17 +310,17 @@ export function parseScheduleCreateArgs(scheduleArgs: string[]): Result<ParsedSc
       return err('Cannot specify both --until and --eval. Use --until for retry, --eval for optimize.');
     }
     if (!lf.untilCmd && !lf.evalCmd) {
-      return err('--loop requires --until <cmd> or --eval <cmd> --direction minimize|maximize');
+      return err('--loop requires --until <cmd> or --eval <cmd> --minimize|--maximize');
     }
 
     const isOptimize = !!lf.evalCmd;
     const exitCondition = isOptimize ? lf.evalCmd! : lf.untilCmd!;
 
     if (isOptimize && !lf.loopDirection) {
-      return err('--direction minimize|maximize is required with --eval (optimize strategy)');
+      return err('--minimize or --maximize is required with --eval (optimize strategy)');
     }
     if (!isOptimize && lf.loopDirection) {
-      return err('--direction is only valid with --eval (optimize strategy)');
+      return err('--minimize/--maximize is only valid with --eval (optimize strategy)');
     }
 
     const loopConfig: ParsedLoopConfig = {
@@ -390,12 +400,12 @@ export function parseScheduleCreateArgs(scheduleArgs: string[]): Result<ParsedSc
 
 export async function handleScheduleCommand(subCmd: string | undefined, scheduleArgs: string[]): Promise<void> {
   if (!subCmd) {
-    ui.error('Usage: beat schedule <create|list|get|cancel|pause|resume>');
+    ui.error('Usage: beat schedule <create|list|status|cancel|pause|resume>');
     process.exit(1);
   }
 
   // Read-only subcommands: lightweight context, no full bootstrap
-  if (subCmd === 'list' || subCmd === 'get') {
+  if (subCmd === 'list' || subCmd === 'status') {
     const s = ui.createSpinner();
     s.start(subCmd === 'list' ? 'Fetching schedules...' : 'Fetching schedule...');
     const ctx = withReadOnlyContext(s);
@@ -405,7 +415,7 @@ export async function handleScheduleCommand(subCmd: string | undefined, schedule
       if (subCmd === 'list') {
         await scheduleList(ctx.scheduleRepository, scheduleArgs);
       } else {
-        await scheduleGet(ctx.scheduleRepository, scheduleArgs);
+        await scheduleStatus(ctx.scheduleRepository, scheduleArgs);
       }
     } finally {
       ctx.close();
@@ -434,7 +444,7 @@ export async function handleScheduleCommand(subCmd: string | undefined, schedule
       break;
     default:
       ui.error(`Unknown schedule subcommand: ${subCmd}`);
-      process.stderr.write('Valid subcommands: create, list, get, cancel, pause, resume\n');
+      process.stderr.write('Valid subcommands: create, list, status, cancel, pause, resume\n');
       process.exit(1);
   }
   process.exit(0);
@@ -574,10 +584,10 @@ async function scheduleList(repo: ScheduleRepository, scheduleArgs: string[]): P
   }
 }
 
-async function scheduleGet(repo: ScheduleRepository, scheduleArgs: string[]): Promise<void> {
+async function scheduleStatus(repo: ScheduleRepository, scheduleArgs: string[]): Promise<void> {
   const scheduleId = scheduleArgs[0];
   if (!scheduleId) {
-    ui.error('Usage: beat schedule get <schedule-id> [--history] [--history-limit N]');
+    ui.error('Usage: beat schedule status <schedule-id> [--history] [--history-limit N]');
     process.exit(1);
   }
 

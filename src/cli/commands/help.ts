@@ -61,7 +61,7 @@ ${bold('Schedule Commands:')}
     --after <schedule-id>              Chain: wait for this schedule's task to complete
 
   ${cyan('schedule list')} [--status active|paused|...] [--limit N]
-  ${cyan('schedule get')} <schedule-id> [--history] [--history-limit N]
+  ${cyan('schedule status')} <schedule-id> [--history] [--history-limit N]
   ${cyan('schedule cancel')} <schedule-id> [reason]
   ${cyan('schedule pause')} <schedule-id>
   ${cyan('schedule resume')} <schedule-id>
@@ -79,7 +79,7 @@ ${bold('Pipeline Commands:')}
 
 ${bold('Loop Commands:')}
   ${cyan('loop')} <prompt> --until <cmd>           Retry loop (run until exit condition passes)
-  ${cyan('loop')} <prompt> --eval <cmd> --direction minimize|maximize
+  ${cyan('loop')} <prompt> --eval <cmd> --minimize|--maximize
                                          Optimize loop (minimize/maximize a score)
   ${cyan('loop')} --pipeline --step "..." --step "..." --until <cmd>
                                          Pipeline loop (multi-step iterations)
@@ -87,10 +87,10 @@ ${bold('Loop Commands:')}
     --max-failures N                     Max consecutive failures (default: 3)
     --cooldown N                         Cooldown between iterations in ms (default: 0)
     --eval-timeout N                     Eval script timeout in ms (default: 60000)
-    --continue-context                   Continue from checkpoint (default: fresh context)
+    --checkpoint                         Use checkpoints between iterations (default: fresh context)
 
   ${cyan('loop list')} [--status running|completed|failed|cancelled]
-  ${cyan('loop get')} <loop-id> [--history] [--history-limit N]
+  ${cyan('loop status')} <loop-id> [--history] [--history-limit N]
   ${cyan('loop cancel')} <loop-id> [--cancel-tasks] [reason]
 
 ${bold('Configuration:')}

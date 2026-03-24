@@ -34,7 +34,7 @@ Nothing yet.
 - **Pipeline Loops**: Repeat a multi-step pipeline (2-20 steps) per iteration with linear dependencies and tail-task tracking
 - **Safety Controls**: Max iterations (default 10), max consecutive failures (default 3), configurable cooldown between iterations
 - **4 New MCP Tools**: `CreateLoop`, `LoopStatus`, `ListLoops`, `CancelLoop`
-- **CLI Commands**: `beat loop`, `beat loop list`, `beat loop get`, `beat loop cancel` with pipeline support (`--pipeline --step`)
+- **CLI Commands**: `beat loop`, `beat loop list`, `beat loop status`, `beat loop cancel` with pipeline support (`--pipeline --step`)
 
 ### 🧪 Test Coverage
 - 94 new loop tests (45 repository + 24 service + 20 handler + 5 integration)
@@ -54,7 +54,7 @@ Nothing yet.
 - **Scheduled Pipelines**: `SchedulePipeline` MCP tool — cron/one-time multi-step pipelines with linear dependencies, per-step config, concurrency tracking, and `afterScheduleId` chaining
 - **CLI Pipeline Scheduling**: `beat schedule create --pipeline --step "..." --cron "..."`
 - **Cancel with In-Flight Tasks**: `CancelSchedule` supports `cancelTasks` flag to cancel all active execution tasks
-- **ListSchedules/GetSchedule Enhancements**: `isPipeline`, `stepCount`, and full `pipelineSteps` in responses
+- **ListSchedules/ScheduleStatus Enhancements**: `isPipeline`, `stepCount`, and full `pipelineSteps` in responses
 
 ### 🏗️ Architecture
 - **Event System Simplification**: 42 → 25 events; removed 18 overhead events and 3 services (QueryHandler, OutputHandler, AutoscalingManager); hybrid model (commands via events, queries via direct calls)
@@ -115,7 +115,7 @@ Nothing yet.
 First release as **backbeat** (renamed from `claudine`). 17 commits since v0.3.3, covering scheduling, resumption, architectural simplification, CLI overhaul, and two-phase rename.
 
 ### 🚀 Major Features
-- **Task Scheduling**: Cron and one-time schedule support with 6 new MCP tools (`ScheduleTask`, `ListSchedules`, `GetSchedule`, `CancelSchedule`, `PauseSchedule`, `ResumeSchedule`) and 6 CLI commands. Full lifecycle management with pause/resume, missed run policies, timezone support, and execution history
+- **Task Scheduling**: Cron and one-time schedule support with 6 new MCP tools (`ScheduleTask`, `ListSchedules`, `ScheduleStatus`, `CancelSchedule`, `PauseSchedule`, `ResumeSchedule`) and 6 CLI commands. Full lifecycle management with pause/resume, missed run policies, timezone support, and execution history
 - **Task Resumption**: Resume failed/completed tasks with auto-checkpoints capturing output summary and git state. New `ResumeTask` MCP tool and `beat resume` CLI command
 - **Session Continuation** (`continueFrom`): Pass checkpoint context through dependency chains — dependent tasks automatically receive output, git state, and errors from predecessors
 - **CLI Detach Mode**: `--detach` flag (now default) re-spawns CLI as background process for fire-and-forget delegation. Use `--no-detach` for foreground mode

@@ -39,7 +39,7 @@ export function exitOnNull<T>(
 /**
  * Create a lightweight read-only context for query commands.
  *
- * **Read-only commands** (status, logs, list, schedule list/get): Use this —
+ * **Read-only commands** (status, logs, list, schedule list/status): Use this —
  * opens Database + repos directly, skipping EventBus, handlers, WorkerPool, etc.
  *
  * **Mutation commands** (run, cancel, retry, resume, schedule create/cancel/pause/resume):

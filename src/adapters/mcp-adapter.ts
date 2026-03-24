@@ -121,7 +121,7 @@ const CancelScheduleSchema = z.object({
     .describe('Also cancel in-flight pipeline tasks from the current execution'),
 });
 
-const GetScheduleSchema = z.object({
+const ScheduleStatusSchema = z.object({
   scheduleId: z.string().describe('Schedule ID'),
   includeHistory: z.boolean().optional().default(false),
   historyLimit: z.number().min(1).max(100).optional().default(10),
@@ -353,8 +353,8 @@ export class MCPAdapter {
         return await this.handleScheduleTask(args);
       case 'ListSchedules':
         return await this.handleListSchedules(args);
-      case 'GetSchedule':
-        return await this.handleGetSchedule(args);
+      case 'ScheduleStatus':
+        return await this.handleScheduleStatus(args);
       case 'CancelSchedule':
         return await this.handleCancelSchedule(args);
       case 'PauseSchedule':
@@ -658,7 +658,7 @@ export class MCPAdapter {
               },
             },
             {
-              name: 'GetSchedule',
+              name: 'ScheduleStatus',
               description: 'Get details of a specific schedule including execution history',
               inputSchema: {
                 type: 'object',
@@ -1601,11 +1601,11 @@ export class MCPAdapter {
   }
 
   /**
-   * Handle GetSchedule tool call
+   * Handle ScheduleStatus tool call
    * Gets details of a specific schedule with optional execution history
    */
-  private async handleGetSchedule(args: unknown): Promise<MCPToolResponse> {
-    const parseResult = GetScheduleSchema.safeParse(args);
+  private async handleScheduleStatus(args: unknown): Promise<MCPToolResponse> {
+    const parseResult = ScheduleStatusSchema.safeParse(args);
     if (!parseResult.success) {
       return {
         content: [{ type: 'text', text: `Validation error: ${parseResult.error.message}` }],

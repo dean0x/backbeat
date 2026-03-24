@@ -99,7 +99,7 @@ Condition-driven iteration — repeat a task or pipeline until an exit condition
 - Fresh context per iteration (default) or continue from checkpoint
 - Safety controls: max iterations, max consecutive failures, cooldown, eval timeout
 - 4 MCP tools: `CreateLoop`, `LoopStatus`, `ListLoops`, `CancelLoop`
-- 4 CLI commands: `beat loop`, `beat loop list`, `beat loop get`, `beat loop cancel`
+- 4 CLI commands: `beat loop`, `beat loop list`, `beat loop status`, `beat loop cancel`
 - 4 events: `LoopCreated`, `LoopIterationCompleted`, `LoopCompleted`, `LoopCancelled`
 
 #### Builds On
