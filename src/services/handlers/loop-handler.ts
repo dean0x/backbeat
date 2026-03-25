@@ -769,21 +769,7 @@ export class LoopHandler extends BaseEventHandler {
    */
   private async handleRetryResult(loop: Loop, iteration: LoopIteration, evalResult: EvalResult): Promise<void> {
     if (evalResult.passed) {
-      // Git: commit changes before persisting pass result (v0.8.1)
-      let gitCommitSha: string | undefined;
-      let gitDiffSummary: string | undefined;
-      if (iteration.preIterationCommitSha) {
-        try {
-          const gitResult = await this.commitAndCaptureDiff(loop, iteration, 'pass');
-          gitCommitSha = gitResult.gitCommitSha;
-          gitDiffSummary = gitResult.gitDiffSummary;
-        } catch (gitError) {
-          this.logger.warn('Git commit failed on retry pass, continuing without git', {
-            loopId: loop.id,
-            error: gitError instanceof Error ? gitError.message : String(gitError),
-          });
-        }
-      }
+      const { gitCommitSha, gitDiffSummary } = await this.handleIterationGitOutcome(loop, iteration, 'pass');
 
       // Atomic: iteration pass + loop completion in single transaction
       const txResult = this.database.runInTransaction(() => {
