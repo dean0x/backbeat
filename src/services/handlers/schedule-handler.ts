@@ -41,7 +41,7 @@ import {
 } from '../../core/interfaces.js';
 import { err, ok, Result } from '../../core/result.js';
 import { getNextRunTime, isValidTimezone, validateCronExpression } from '../../utils/cron.js';
-import { captureGitState } from '../../utils/git-state.js';
+import { captureLoopGitContext } from '../../utils/git-state.js';
 
 /**
  * Options for ScheduleHandler configuration
@@ -557,21 +557,26 @@ export class ScheduleHandler extends BaseEventHandler {
     // Create loop from loopConfig via domain factory
     const loop = createLoop(loopConfig, workingDirectory, scheduleId);
 
-    // Capture gitBaseBranch if loopConfig has gitBranch (mirrors LoopManagerService.createLoop pattern)
-    // ARCHITECTURE: createLoop() sets gitBaseBranch to undefined; override here because
-    // captureGitState is async (not available in pure domain factory)
+    // Capture gitStartCommitSha (v0.8.1)
+    // ARCHITECTURE: createLoop() sets these to undefined; override here because
+    // git operations are async (not available in pure domain factory)
+    // gitBaseBranch is a legacy field still populated for DB backward compatibility
     let loopWithGit = loop;
-    if (loopConfig.gitBranch) {
-      const gitStateResult = await captureGitState(workingDirectory);
-      if (gitStateResult.ok && gitStateResult.value) {
-        loopWithGit = updateLoop(loop, { gitBaseBranch: gitStateResult.value.branch });
-      } else if (!gitStateResult.ok) {
-        this.logger.warn('Failed to capture git state for scheduled loop — proceeding without gitBaseBranch', {
-          scheduleId,
-          loopId: loop.id,
-          error: gitStateResult.error.message,
+    const gitContextResult = await captureLoopGitContext(workingDirectory, loopConfig.gitBranch);
+    if (gitContextResult.ok) {
+      const { gitBaseBranch, gitStartCommitSha } = gitContextResult.value;
+      if (gitBaseBranch || gitStartCommitSha) {
+        loopWithGit = updateLoop(loop, {
+          ...(gitBaseBranch ? { gitBaseBranch } : {}),
+          ...(gitStartCommitSha ? { gitStartCommitSha } : {}),
         });
       }
+    } else {
+      this.logger.warn('Failed to capture git state for scheduled loop — proceeding without git context', {
+        scheduleId,
+        loopId: loop.id,
+        error: gitContextResult.error.message,
+      });
     }
 
     // Pure computation OUTSIDE transaction

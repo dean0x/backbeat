@@ -1,6 +1,6 @@
 # Backbeat v0.8.0 — Loop Pause/Resume, Scheduled Loops & Git Integration
 
-Enhanced loop lifecycle with pause/resume controls, cron-scheduled loop execution, per-iteration git branch isolation, and CLI naming standardization.
+Enhanced loop lifecycle with pause/resume controls, cron-scheduled loop execution, git-aware loop iteration tracking, and CLI naming standardization.
 
 ---
 
@@ -26,11 +26,11 @@ Compose loops with cron or one-time schedules:
 
 ### Git Integration (PR #115)
 
-Optional branch-per-iteration strategy for loops:
+Optional git-aware loop iteration tracking:
 
-- **`--git-branch`**: Creates an isolated branch for each iteration
+- **`--git-branch`**: Creates a branch for the loop and tracks changes per iteration
 - **Diff Tracking**: Diffs automatically tracked between iterations
-- **Automatic Cleanup**: Branches cleaned up on loop completion
+- **Note**: v0.8.1 corrects the git integration design from branch-per-iteration to commit-per-iteration for correctness
 
 ---
 

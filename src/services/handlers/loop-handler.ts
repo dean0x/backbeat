@@ -42,7 +42,13 @@ import type {
   TransactionRunner,
 } from '../../core/interfaces.js';
 import { err, ok, type Result } from '../../core/result.js';
-import { captureGitDiff, createAndCheckoutBranch } from '../../utils/git-state.js';
+import {
+  captureGitDiff,
+  commitAllChanges,
+  createAndCheckoutBranch,
+  getCurrentCommitSha,
+  resetToCommit,
+} from '../../utils/git-state.js';
 
 export class LoopHandler extends BaseEventHandler {
   // In-memory state (rebuilt from DB on restart)
@@ -241,6 +247,9 @@ export class LoopHandler extends BaseEventHandler {
         // Task FAILED — record failure, check limits
         const failedEvent = event as TaskFailedEvent;
         const newConsecutiveFailures = loop.consecutiveFailures + 1;
+
+        // Git reset: revert working directory to pre-iteration state on failure (v0.8.1)
+        await this.resetIterationGitState(loop, iteration, 'task failure');
 
         // Atomic: iteration fail + consecutiveFailures in single transaction
         const updatedLoop = updateLoop(loop, { consecutiveFailures: newConsecutiveFailures });
@@ -501,38 +510,73 @@ export class LoopHandler extends BaseEventHandler {
       strategy: updatedLoop.strategy,
     });
 
-    // Git branch per iteration (v0.8.0)
-    let iterationGitBranch: string | undefined;
-    if (updatedLoop.gitBranch) {
-      const previousBranch =
-        iterationNumber === 1 ? updatedLoop.gitBaseBranch : `${updatedLoop.gitBranch}/iteration-${iterationNumber - 1}`;
-      const branchName = `${updatedLoop.gitBranch}/iteration-${iterationNumber}`;
+    const preIterationCommitSha = await this.setupGitForIteration(updatedLoop, iterationNumber);
 
-      const branchResult = await createAndCheckoutBranch(updatedLoop.workingDirectory, branchName, previousBranch);
+    if (updatedLoop.pipelineSteps && updatedLoop.pipelineSteps.length > 0) {
+      await this.startPipelineIteration(updatedLoop, iterationNumber, preIterationCommitSha);
+    } else {
+      await this.startSingleTaskIteration(updatedLoop, iterationNumber, preIterationCommitSha);
+    }
+  }
+
+  /**
+   * Set up git state for a new iteration.
+   * - Iteration 1 with gitBranch: create and checkout branch from base
+   * - Iteration > 1 with gitBranch: re-checkout the branch (user/agent may have switched)
+   * - Always (when git-enabled): capture pre-iteration commit SHA for revert/diff baseline
+   *
+   * Best-effort: logs warnings on failure, never throws.
+   * @returns preIterationCommitSha if captured, undefined otherwise
+   */
+  private async setupGitForIteration(loop: Loop, iterationNumber: number): Promise<string | undefined> {
+    const isGitLoop = !!(loop.gitBranch || loop.gitStartCommitSha);
+    if (!isGitLoop) return undefined;
+
+    // Create branch ONCE on first iteration only
+    if (iterationNumber === 1 && loop.gitBranch) {
+      const branchResult = await createAndCheckoutBranch(loop.workingDirectory, loop.gitBranch, loop.gitBaseBranch);
       if (branchResult.ok) {
-        iterationGitBranch = branchName;
-        this.logger.info('Created git branch for iteration', {
-          loopId,
-          iterationNumber,
-          branchName,
-          previousBranch,
+        this.logger.info('Created git branch for loop', {
+          loopId: loop.id,
+          branchName: loop.gitBranch,
+          baseBranch: loop.gitBaseBranch,
         });
       } else {
-        // Graceful degradation: log warning and continue without git for this iteration
-        this.logger.warn('Failed to create git branch for iteration, continuing without git', {
-          loopId,
-          iterationNumber,
-          branchName,
+        this.logger.warn('Failed to create git branch for loop, continuing without git', {
+          loopId: loop.id,
+          branchName: loop.gitBranch,
           error: branchResult.error.message,
+        });
+      }
+    } else if (iterationNumber > 1 && loop.gitBranch) {
+      // Re-checkout the loop's branch (user/agent may have switched)
+      const checkoutResult = await createAndCheckoutBranch(loop.workingDirectory, loop.gitBranch);
+      if (!checkoutResult.ok) {
+        this.logger.warn('Failed to re-checkout loop branch, continuing without git', {
+          loopId: loop.id,
+          branchName: loop.gitBranch,
+          error: checkoutResult.error.message,
         });
       }
     }
 
-    if (updatedLoop.pipelineSteps && updatedLoop.pipelineSteps.length > 0) {
-      await this.startPipelineIteration(updatedLoop, iterationNumber, iterationGitBranch);
-    } else {
-      await this.startSingleTaskIteration(updatedLoop, iterationNumber, iterationGitBranch);
+    // Capture pre-iteration commit SHA for revert/diff baseline
+    const shaResult = await getCurrentCommitSha(loop.workingDirectory);
+    if (shaResult.ok) {
+      this.logger.debug('Captured pre-iteration commit SHA', {
+        loopId: loop.id,
+        iterationNumber,
+        preIterationCommitSha: shaResult.value,
+      });
+      return shaResult.value;
     }
+
+    this.logger.warn('Failed to capture pre-iteration commit SHA', {
+      loopId: loop.id,
+      iterationNumber,
+      error: shaResult.error.message,
+    });
+    return undefined;
   }
 
   /**
@@ -542,7 +586,7 @@ export class LoopHandler extends BaseEventHandler {
   private async startSingleTaskIteration(
     loop: Loop,
     iterationNumber: number,
-    iterationGitBranch?: string,
+    preIterationCommitSha?: string,
   ): Promise<void> {
     const loopId = loop.id;
     let prompt = loop.taskTemplate.prompt;
@@ -565,7 +609,7 @@ export class LoopHandler extends BaseEventHandler {
       loopId,
       iterationNumber,
       taskId: task.id,
-      gitBranch: iterationGitBranch,
+      preIterationCommitSha,
       status: 'running',
       startedAt: Date.now(),
     };
@@ -614,7 +658,7 @@ export class LoopHandler extends BaseEventHandler {
   private async startPipelineIteration(
     loop: Loop,
     iterationNumber: number,
-    iterationGitBranch?: string,
+    preIterationCommitSha?: string,
   ): Promise<void> {
     const loopId = loop.id;
     const steps = loop.pipelineSteps!;
@@ -662,7 +706,7 @@ export class LoopHandler extends BaseEventHandler {
         iterationNumber,
         taskId: lastTaskId,
         pipelineTaskIds: allTaskIds,
-        gitBranch: iterationGitBranch,
+        preIterationCommitSha,
         status: 'running',
         startedAt: Date.now(),
       });
@@ -733,12 +777,16 @@ export class LoopHandler extends BaseEventHandler {
    */
   private async handleRetryResult(loop: Loop, iteration: LoopIteration, evalResult: EvalResult): Promise<void> {
     if (evalResult.passed) {
+      const { gitCommitSha, gitDiffSummary } = await this.handleIterationGitOutcome(loop, iteration, 'pass');
+
       // Atomic: iteration pass + loop completion in single transaction
       const txResult = this.database.runInTransaction(() => {
         this.loopRepo.updateIterationSync({
           ...iteration,
           status: 'pass',
           exitCode: evalResult.exitCode,
+          gitCommitSha,
+          gitDiffSummary,
           completedAt: Date.now(),
         });
         this.loopRepo.updateSync(
@@ -1032,29 +1080,11 @@ export class LoopHandler extends BaseEventHandler {
     loopUpdate: Partial<Loop>,
     evalResult?: { score?: number; exitCode?: number; errorMessage?: string },
   ): Promise<void> {
-    const updatedLoop = updateLoop(loop, loopUpdate);
+    const { gitCommitSha, gitDiffSummary } = await this.handleIterationGitOutcome(loop, iteration, iterationStatus);
 
-    // Git diff capture (v0.8.0): capture diff summary before persisting
-    let gitDiffSummary: string | undefined;
-    if (loop.gitBranch && iteration.gitBranch) {
-      const previousBranch =
-        iteration.iterationNumber === 1
-          ? loop.gitBaseBranch
-          : `${loop.gitBranch}/iteration-${iteration.iterationNumber - 1}`;
-
-      if (previousBranch) {
-        const diffResult = await captureGitDiff(loop.workingDirectory, previousBranch, iteration.gitBranch);
-        if (diffResult.ok && diffResult.value) {
-          gitDiffSummary = diffResult.value;
-        } else if (!diffResult.ok) {
-          this.logger.warn('Failed to capture git diff for iteration', {
-            loopId: loop.id,
-            iterationNumber: iteration.iterationNumber,
-            error: diffResult.error.message,
-          });
-        }
-      }
-    }
+    const fullUpdate =
+      iterationStatus === 'keep' && gitCommitSha ? { ...loopUpdate, bestIterationCommitSha: gitCommitSha } : loopUpdate;
+    const updatedLoop = updateLoop(loop, fullUpdate);
 
     // Atomic: both DB writes in single transaction
     const txResult = this.database.runInTransaction(() => {
@@ -1064,6 +1094,7 @@ export class LoopHandler extends BaseEventHandler {
         score: evalResult?.score ?? iteration.score,
         exitCode: evalResult?.exitCode ?? iteration.exitCode,
         errorMessage: evalResult?.errorMessage ?? iteration.errorMessage,
+        gitCommitSha,
         gitDiffSummary: gitDiffSummary ?? iteration.gitDiffSummary,
         completedAt: Date.now(),
       });
@@ -1105,6 +1136,132 @@ export class LoopHandler extends BaseEventHandler {
     }
     // Default: MAXIMIZE
     return newScore > bestScore;
+  }
+
+  /**
+   * Handle git commit or revert based on iteration outcome.
+   * - pass/keep: commit all changes, capture diff summary
+   * - fail/discard/crash: delegate to resetIterationGitState for clean revert
+   *
+   * Best-effort: logs warnings on failure, never throws.
+   * @returns { gitCommitSha, gitDiffSummary } — both undefined if non-git or on failure/discard
+   */
+  private async handleIterationGitOutcome(
+    loop: Loop,
+    iteration: LoopIteration,
+    iterationStatus: LoopIteration['status'],
+  ): Promise<{ gitCommitSha?: string; gitDiffSummary?: string }> {
+    if (!iteration.preIterationCommitSha) return {};
+
+    try {
+      const isCommitPath = iterationStatus === 'pass' || iterationStatus === 'keep';
+      if (isCommitPath) {
+        return await this.commitAndCaptureDiff(loop, iteration, iterationStatus);
+      }
+
+      // Discard path: delegate to resetIterationGitState (single source of truth for git reset)
+      await this.resetIterationGitState(loop, iteration, 'iteration discard');
+      return {};
+    } catch (gitError) {
+      this.logger.warn('Git operation failed during iteration outcome handling, continuing without git', {
+        loopId: loop.id,
+        iterationNumber: iteration.iterationNumber,
+        error: gitError instanceof Error ? gitError.message : String(gitError),
+      });
+      return {};
+    }
+  }
+
+  /**
+   * Commit all changes and capture diff summary for an iteration.
+   * Handles both explicit commits and agent-already-committed cases.
+   * @returns { gitCommitSha, gitDiffSummary } — either or both may be undefined on failure
+   */
+  private async commitAndCaptureDiff(
+    loop: Loop,
+    iteration: LoopIteration,
+    iterationStatus: LoopIteration['status'],
+  ): Promise<{ gitCommitSha?: string; gitDiffSummary?: string }> {
+    let gitCommitSha: string | undefined;
+    let gitDiffSummary: string | undefined;
+
+    const commitResult = await commitAllChanges(
+      loop.workingDirectory,
+      `Loop ${loop.id} iteration ${iteration.iterationNumber} — ${iterationStatus}`,
+    );
+    if (commitResult.ok && commitResult.value) {
+      gitCommitSha = commitResult.value;
+    } else if (commitResult.ok) {
+      // null = nothing to commit (agent already committed)
+      const shaResult = await getCurrentCommitSha(loop.workingDirectory);
+      if (shaResult.ok) {
+        gitCommitSha = shaResult.value;
+      }
+    } else {
+      this.logger.warn('Failed to commit iteration changes', {
+        loopId: loop.id,
+        iterationNumber: iteration.iterationNumber,
+        error: commitResult.error.message,
+      });
+    }
+
+    // Capture diff summary between pre-iteration and new commit
+    if (gitCommitSha && iteration.preIterationCommitSha) {
+      const diffResult = await captureGitDiff(loop.workingDirectory, iteration.preIterationCommitSha, gitCommitSha);
+      if (diffResult.ok && diffResult.value) {
+        gitDiffSummary = diffResult.value;
+      }
+    }
+
+    return { gitCommitSha, gitDiffSummary };
+  }
+
+  /**
+   * Determine the commit SHA to reset to after a failed/discarded iteration.
+   * - Retry fail: reset to loop.gitStartCommitSha (start fresh)
+   * - Optimize discard/crash: reset to best iteration's gitCommitSha if available,
+   *   fallback to loop.gitStartCommitSha
+   * @returns SHA to reset to, or undefined if no git tracking
+   */
+  private getResetTargetSha(loop: Loop): string | undefined {
+    if (loop.strategy === LoopStrategy.OPTIMIZE && loop.bestIterationCommitSha) {
+      return loop.bestIterationCommitSha;
+    }
+    return loop.gitStartCommitSha;
+  }
+
+  /**
+   * Reset the working directory to the appropriate commit after a failed/discarded iteration.
+   * No-op when the iteration has no preIterationCommitSha (non-git loop).
+   * Logs warnings on failure but never throws — git reset is best-effort.
+   *
+   * @param loop - The loop owning the iteration
+   * @param iteration - The iteration that failed/was discarded
+   * @param context - Human-readable label for log messages (e.g., "task failure", "pipeline step failure")
+   */
+  private async resetIterationGitState(loop: Loop, iteration: LoopIteration, context: string): Promise<void> {
+    if (!iteration.preIterationCommitSha) return;
+
+    try {
+      const resetTarget = this.getResetTargetSha(loop);
+      if (!resetTarget) return;
+
+      const resetResult = await resetToCommit(loop.workingDirectory, resetTarget);
+      if (!resetResult.ok) {
+        this.logger.warn(`Failed to reset git state after ${context}`, {
+          loopId: loop.id,
+          iterationNumber: iteration.iterationNumber,
+          resetTarget,
+          error: resetResult.error.message,
+        });
+      }
+    } catch (gitError) {
+      this.logger.warn(`Git reset failed after ${context}, continuing without git`, {
+        loopId: loop.id,
+        iterationNumber: iteration.iterationNumber,
+        error: gitError instanceof Error ? gitError.message : String(gitError),
+      });
+    }
   }
 
   /**
@@ -1216,6 +1373,9 @@ export class LoopHandler extends BaseEventHandler {
     });
 
     await this.cancelRemainingPipelineTasks(iteration.pipelineTaskIds, taskId, loopId);
+
+    // Git reset: revert working directory to pre-iteration state on pipeline failure (v0.8.1)
+    await this.resetIterationGitState(loop, iteration, 'pipeline step failure');
 
     // Atomic: iteration fail + consecutiveFailures in single transaction
     const newConsecutiveFailures = loop.consecutiveFailures + 1;
@@ -1439,6 +1599,9 @@ export class LoopHandler extends BaseEventHandler {
 
     if (task.status === TaskStatus.FAILED) {
       const newConsecutiveFailures = loop.consecutiveFailures + 1;
+
+      // Git reset: revert working directory to pre-iteration state on recovered failure (v0.8.1)
+      await this.resetIterationGitState(loop, latestIteration, 'recovered task failure');
 
       // Atomic: iteration fail + consecutiveFailures in single transaction
       const updatedLoop = updateLoop(loop, { consecutiveFailures: newConsecutiveFailures });

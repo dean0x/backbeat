@@ -1,10 +1,10 @@
 # Backbeat Development Roadmap
 
-## Current Status: v0.7.0 ✅
+## Current Status: v0.8.0 ✅
 
-**Status**: Released (2026-03-21)
+**Status**: Released (2026-03-25)
 
-Backbeat v0.7.0 adds task/pipeline loops — condition-driven iteration with retry and optimize strategies. See [FEATURES.md](./FEATURES.md) for complete list of current capabilities.
+Backbeat v0.8.0 adds loop lifecycle control (pause/resume), scheduled loops, and git integration for loops. See [FEATURES.md](./FEATURES.md) for complete list of current capabilities.
 
 ---
 
@@ -110,43 +110,29 @@ Condition-driven iteration — repeat a task or pipeline until an exit condition
 
 ---
 
-### v0.8.0 - Loop Enhancements
-**Goal**: Loop lifecycle control, schedule composition, and git-aware iterations
-**Priority**: High — completes the loop story started in v0.7.0
+### v0.8.0 - Loop Enhancements ✅
+**Status**: **RELEASED** (2026-03-25)
+
+Loop lifecycle control (pause/resume), scheduled loops, and git integration for loops.
 
 #### Features
-- **Loop + Schedule Composition**: "Every night, loop until spec is done" — composable loops with cron/one-time schedules. A schedule trigger creates a loop instance per execution.
-- **Loop Pause/Resume**: Pause an active loop mid-iteration and resume it later. Paused loops retain iteration state and checkpoint.
-- **Git Integration for Loops**: Loop-aware git state management — branch per iteration, diff tracking between iterations, automatic branch cleanup on loop completion.
+- **Loop + Schedule Composition**: Composable loops with cron/one-time schedules. Each trigger creates a new loop instance.
+- **Loop Pause/Resume**: Pause active loops mid-iteration, resume from last checkpoint.
+- **Git Integration**: Optional `--git-branch` for per-iteration git tracking with diff summaries.
 
-#### CLI
-```bash
-# Schedule a loop
-beat schedule create --cron "0 9 * * *" --loop \
-  --prompt "implement next item from spec.md" \
-  --exit-condition "./check-spec-complete.sh" \
-  --max-iterations 10
+See [RELEASE_NOTES_v0.8.0.md](./releases/RELEASE_NOTES_v0.8.0.md) for full details.
 
-# Pause/resume
-beat loop pause <loop-id>
-beat loop resume <loop-id>
+---
 
-# Git integration
-beat loop create "refactor auth module" \
-  --exit-condition "./tests-pass.sh" \
-  --git-branch-per-iteration \
-  --base-branch main
-```
+### v0.8.1 - Git Integration Fix
+**Goal**: Fix git integration design — replace branch-per-iteration with commit-per-iteration
+**Priority**: High — corrects v0.8.0 git behavior
 
-#### MCP Tools
-- `ScheduleLoop` — create a scheduled loop (cron/one-time trigger → loop)
-- `PauseLoop` / `ResumeLoop` — lifecycle control
-- `CreateLoop` updated — optional `gitConfig` parameter for branch-per-iteration
-
-#### Builds On
-- v0.4.0 scheduling (cron/one-time), checkpoints
-- v0.6.0 scheduled pipelines pattern
-- v0.7.0 task/pipeline loops
+#### Changes
+- **Commit-per-iteration**: One branch for the entire loop, one commit per successful iteration
+- **Revert on failure**: Failed/discarded iterations fully reverted to last good commit
+- **Domain model**: `gitBaseBranch` → `gitStartCommitSha`, `gitBranch` on iteration → `gitCommitSha`
+- **Database**: Migration 12 adds new columns; old columns kept (dead, harmless)
 
 ---
 
@@ -281,7 +267,8 @@ beat recipe create my-workflow  # interactive recipe builder
 | v0.5.0 | ✅ Released | Multi-Agent Support |
 | v0.6.0 | ✅ Released | Architectural Simplification + Bug Fixes |
 | v0.7.0 | ✅ Released | Task/Pipeline Loops |
-| v0.8.0 | 📋 Planned | Loop Enhancements |
+| v0.8.0 | ✅ Released | Loop Enhancements |
+| v0.8.1 | 🔧 In Progress | Git Integration Fix |
 | v0.9.0 | 📋 Planned | Agent Failover + Smart Routing |
 | v0.10.0 | 📋 Planned | Workflow Recipes & Templates |
 | v0.11.0 | 💭 Research | Monitoring + REST API + Dashboard |

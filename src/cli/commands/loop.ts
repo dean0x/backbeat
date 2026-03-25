@@ -385,7 +385,8 @@ async function handleLoopStatus(loopArgs: string[]): Promise<void> {
     lines.push(`Fresh Context: ${loop.freshContext}`);
     lines.push(`Working Dir:   ${loop.workingDirectory}`);
     if (loop.gitBranch) lines.push(`Git Branch:    ${loop.gitBranch}`);
-    if (loop.gitBaseBranch) lines.push(`Git Base:      ${loop.gitBaseBranch}`);
+    if (loop.gitStartCommitSha) lines.push(`Git Start:     ${loop.gitStartCommitSha.slice(0, 8)}`);
+    else if (loop.gitBaseBranch) lines.push(`Git Base:      ${loop.gitBaseBranch}`);
     if (loop.scheduleId) lines.push(`Schedule:      ${loop.scheduleId}`);
     lines.push(`Created:       ${new Date(loop.createdAt).toISOString()}`);
     if (loop.completedAt) lines.push(`Completed:     ${new Date(loop.completedAt).toISOString()}`);
@@ -415,7 +416,12 @@ async function handleLoopStatus(loopArgs: string[]): Promise<void> {
           const score = iter.score !== undefined ? ` | score: ${iter.score}` : '';
           const task = iter.taskId ? ` | task: ${iter.taskId}` : ' | task: cleaned up';
           const error = iter.errorMessage ? ` | error: ${iter.errorMessage}` : '';
-          const git = iter.gitBranch ? ` | branch: ${iter.gitBranch}` : '';
+          let git = '';
+          if (iter.gitCommitSha) {
+            git = ` | commit: ${iter.gitCommitSha.slice(0, 8)}`;
+          } else if (iter.gitBranch) {
+            git = ` | branch: ${iter.gitBranch}`;
+          }
           process.stderr.write(
             `  #${iter.iterationNumber} ${ui.colorStatus(iter.status)}${score}${task}${error}${git}\n`,
           );

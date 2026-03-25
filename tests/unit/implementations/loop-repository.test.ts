@@ -189,7 +189,13 @@ describe('SQLiteLoopRepository - Unit Tests', () => {
       });
       await repo.save(loop);
 
-      const updated = { ...loop, bestScore: 0.95, bestIterationId: 3, updatedAt: Date.now() };
+      const updated = {
+        ...loop,
+        bestScore: 0.95,
+        bestIterationId: 3,
+        bestIterationCommitSha: 'abc123def456abc123def456abc123def456abc1',
+        updatedAt: Date.now(),
+      };
       await repo.update(updated);
 
       const findResult = await repo.findById(loop.id);
@@ -198,6 +204,7 @@ describe('SQLiteLoopRepository - Unit Tests', () => {
 
       expect(findResult.value!.bestScore).toBe(0.95);
       expect(findResult.value!.bestIterationId).toBe(3);
+      expect(findResult.value!.bestIterationCommitSha).toBe('abc123def456abc123def456abc123def456abc1');
     });
   });
 
@@ -1060,6 +1067,74 @@ describe('SQLiteLoopRepository - Unit Tests', () => {
       if (!iters.ok) return;
       expect(iters.value[0].gitBranch).toBeUndefined();
       expect(iters.value[0].gitDiffSummary).toBeUndefined();
+    });
+  });
+
+  describe('gitStartCommitSha on loops (v0.8.1)', () => {
+    it('should save and read gitStartCommitSha', async () => {
+      const loop = createLoop({ prompt: 'git sha test', strategy: LoopStrategy.RETRY, exitCondition: 'true' }, '/tmp');
+      const loopWithGit = { ...loop, gitStartCommitSha: 'abc1234567890abcdef1234567890abcdef123456' };
+      await repo.save(loopWithGit);
+
+      const found = await repo.findById(loopWithGit.id);
+      expect(found.ok).toBe(true);
+      if (!found.ok) return;
+      expect(found.value).toBeDefined();
+      expect(found.value!.gitStartCommitSha).toBe('abc1234567890abcdef1234567890abcdef123456');
+    });
+
+    it('should default gitStartCommitSha to undefined when not set', async () => {
+      const loop = createTestLoop();
+      await repo.save(loop);
+
+      const found = await repo.findById(loop.id);
+      expect(found.ok).toBe(true);
+      if (!found.ok) return;
+      expect(found.value!.gitStartCommitSha).toBeUndefined();
+    });
+  });
+
+  describe('gitCommitSha and preIterationCommitSha on iterations (v0.8.1)', () => {
+    it('should save and read gitCommitSha and preIterationCommitSha', async () => {
+      const loop = createTestLoop();
+      await repo.save(loop);
+
+      const taskId = TaskId('task-git-iter-sha');
+      await createTaskInRepo(taskId);
+
+      await repo.recordIteration({
+        id: 0,
+        loopId: loop.id,
+        iterationNumber: 1,
+        taskId,
+        status: 'pass',
+        startedAt: Date.now(),
+        completedAt: Date.now(),
+        preIterationCommitSha: 'pre_abc1234567890abcdef1234567890abcdef1234',
+        gitCommitSha: 'post_def4567890abcdef1234567890abcdef12345678',
+      });
+
+      const iters = await repo.getIterations(loop.id);
+      expect(iters.ok).toBe(true);
+      if (!iters.ok) return;
+      expect(iters.value).toHaveLength(1);
+      expect(iters.value[0].preIterationCommitSha).toBe('pre_abc1234567890abcdef1234567890abcdef1234');
+      expect(iters.value[0].gitCommitSha).toBe('post_def4567890abcdef1234567890abcdef12345678');
+    });
+
+    it('should default iteration git SHA fields to undefined when not set', async () => {
+      const loop = createTestLoop();
+      await repo.save(loop);
+
+      const taskId = TaskId('task-no-git-sha-iter');
+      await createTaskInRepo(taskId);
+      await repo.recordIteration(createTestIteration(loop.id, 1, { taskId }));
+
+      const iters = await repo.getIterations(loop.id);
+      expect(iters.ok).toBe(true);
+      if (!iters.ok) return;
+      expect(iters.value[0].preIterationCommitSha).toBeUndefined();
+      expect(iters.value[0].gitCommitSha).toBeUndefined();
     });
   });
 

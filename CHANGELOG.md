@@ -10,12 +10,26 @@ Nothing yet.
 
 ---
 
+## [0.8.1] - 2026-03-25
+
+### 🐛 Bug Fixes
+- **Git Integration**: Replaced broken branch-per-iteration strategy with correct commit-per-iteration design. One branch for the entire loop, one commit per successful iteration. Failed/discarded iterations fully reverted to the appropriate target commit.
+
+### 🔄 Refactoring
+- **Domain model**: Added `gitStartCommitSha` (loop), `gitCommitSha` and `preIterationCommitSha` (iteration). Old fields kept for migration safety.
+- **Git utilities**: Added `getCurrentCommitSha()`, `commitAllChanges()`, `resetToCommit()` with SHA validation.
+
+### 🗄️ Database
+- **Migration 12**: Adds `git_start_commit_sha` to loops, `git_commit_sha` and `pre_iteration_commit_sha` to loop_iterations.
+
+---
+
 ## [0.8.0] - 2026-03-25
 
 ### 🚀 Features
 - **Loop Pause/Resume**: Pause active loops mid-iteration, resume from last checkpoint. Paused state persists across restart. MCP: `PauseLoop`, `ResumeLoop`. CLI: `beat loop pause`, `beat loop resume`
 - **Scheduled Loops**: Compose loops with cron/one-time schedules. Each execution creates a new loop instance. MCP: `ScheduleLoop`. CLI: `beat schedule create --loop`
-- **Git Integration**: Optional `--git-branch` for branch-per-iteration strategy. Diffs tracked between iterations. Automatic cleanup on completion
+- **Git Integration**: Optional `--git-branch` for git-aware loop iteration tracking. Diffs tracked between iterations. (Corrected in v0.8.1)
 
 ### 🖥️ CLI Improvements
 - `--direction minimize|maximize` → `--minimize`/`--maximize` boolean flags (mutual exclusion validated)
