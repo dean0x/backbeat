@@ -416,11 +416,12 @@ async function handleLoopStatus(loopArgs: string[]): Promise<void> {
           const score = iter.score !== undefined ? ` | score: ${iter.score}` : '';
           const task = iter.taskId ? ` | task: ${iter.taskId}` : ' | task: cleaned up';
           const error = iter.errorMessage ? ` | error: ${iter.errorMessage}` : '';
-          const git = iter.gitCommitSha
-            ? ` | commit: ${iter.gitCommitSha.slice(0, 8)}`
-            : iter.gitBranch
-              ? ` | branch: ${iter.gitBranch}`
-              : '';
+          let git = '';
+          if (iter.gitCommitSha) {
+            git = ` | commit: ${iter.gitCommitSha.slice(0, 8)}`;
+          } else if (iter.gitBranch) {
+            git = ` | branch: ${iter.gitBranch}`;
+          }
           process.stderr.write(
             `  #${iter.iterationNumber} ${ui.colorStatus(iter.status)}${score}${task}${error}${git}\n`,
           );

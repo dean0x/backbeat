@@ -1477,39 +1477,18 @@ describe('LoopHandler - Behavioral Tests', () => {
     });
 
     it('should reset to gitStartCommitSha on pipeline intermediate step failure', async () => {
-      const loop = createLoop(
-        {
-          pipelineSteps: ['lint the code', 'run the tests', 'deploy'],
-          strategy: LoopStrategy.RETRY,
-          exitCondition: 'test -f /tmp/done',
-          maxIterations: 10,
-          maxConsecutiveFailures: 5,
-          cooldownMs: 0,
-          freshContext: true,
-          evalTimeout: 60000,
-          gitBranch: 'feat/pipeline-work',
-        },
-        '/tmp',
-      );
+      const loop = await createGitLoop({
+        pipelineSteps: ['lint the code', 'run the tests', 'deploy'],
+        prompt: undefined,
+        maxConsecutiveFailures: 5,
+      });
 
-      // Inject git context (normally done by LoopManagerService)
-      const loopWithGit = {
-        ...loop,
-        gitStartCommitSha: 'aaa1111222233334444555566667777888899990000',
-        gitBaseBranch: 'main',
-      };
-
-      await eventBus.emit('LoopCreated', { loop: loopWithGit });
-      await flushEventLoop();
-
-      // Get pipeline task IDs from the iteration
-      const iteration = await getLatestIteration(loopWithGit.id);
+      const iteration = await getLatestIteration(loop.id);
       expect(iteration).toBeDefined();
       expect(iteration!.pipelineTaskIds).toBeDefined();
       expect(iteration!.pipelineTaskIds!.length).toBe(3);
       const taskIds = iteration!.pipelineTaskIds!;
 
-      // Clear the resetToCommit mock to isolate this assertion
       vi.mocked(resetToCommit).mockClear();
 
       // Fail the first (intermediate) pipeline task
@@ -1524,7 +1503,7 @@ describe('LoopHandler - Behavioral Tests', () => {
       expect(vi.mocked(resetToCommit)).toHaveBeenCalledWith('/tmp', 'aaa1111222233334444555566667777888899990000');
 
       // Iteration should be marked as 'fail' with pipeline step failure message
-      const allIters = await loopRepo.getIterations(loopWithGit.id, 10);
+      const allIters = await loopRepo.getIterations(loop.id, 10);
       expect(allIters.ok).toBe(true);
       if (!allIters.ok) return;
       const iter1 = allIters.value.find((i) => i.iterationNumber === 1);
