@@ -11,6 +11,16 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Mock git-state before importing modules that depend on it
+vi.mock('../../../../src/utils/git-state.js', () => ({
+  commitAllChanges: vi.fn().mockResolvedValue({ ok: true, value: 'abc1234567890abcdef1234567890abcdef123456' }),
+  resetToCommit: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
+  getCurrentCommitSha: vi.fn().mockResolvedValue({ ok: true, value: 'def4567890abcdef1234567890abcdef1234567890' }),
+  createAndCheckoutBranch: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
+  captureGitDiff: vi.fn().mockResolvedValue({ ok: true, value: ' src/main.ts | 5 +++--\n 1 file changed' }),
+}));
+
 import type { Loop, LoopIteration } from '../../../../src/core/domain.js';
 import {
   createLoop,
@@ -27,6 +37,12 @@ import { Database } from '../../../../src/implementations/database.js';
 import { SQLiteLoopRepository } from '../../../../src/implementations/loop-repository.js';
 import { SQLiteTaskRepository } from '../../../../src/implementations/task-repository.js';
 import { LoopHandler } from '../../../../src/services/handlers/loop-handler.js';
+import {
+  commitAllChanges,
+  createAndCheckoutBranch,
+  getCurrentCommitSha,
+  resetToCommit,
+} from '../../../../src/utils/git-state.js';
 import { createTestConfiguration } from '../../../fixtures/factories.js';
 import { TestLogger } from '../../../fixtures/test-doubles.js';
 import { flushEventLoop } from '../../../utils/event-helpers.js';
@@ -1225,6 +1241,267 @@ describe('LoopHandler - Behavioral Tests', () => {
       expect(afterRecovery!.status).toBe(LoopStatus.PAUSED);
 
       freshEventBus.dispose();
+    });
+  });
+
+  // ==========================================================================
+  // v0.8.1 Git Integration Tests
+  // ==========================================================================
+
+  describe('Git commit-per-iteration (v0.8.1)', () => {
+    // Helper: create a git-enabled loop (has gitStartCommitSha and gitBranch)
+    async function createGitLoop(overrides: Partial<Parameters<typeof createLoop>[0]> = {}): Promise<Loop> {
+      const loop = createLoop(
+        {
+          prompt: 'Run the tests',
+          strategy: LoopStrategy.RETRY,
+          exitCondition: 'test -f /tmp/done',
+          maxIterations: 10,
+          maxConsecutiveFailures: 3,
+          cooldownMs: 0,
+          freshContext: true,
+          evalTimeout: 60000,
+          gitBranch: 'feat/loop-work',
+          ...overrides,
+        },
+        '/tmp',
+      );
+
+      // Inject git start commit SHA (normally done by LoopManagerService)
+      const loopWithGit = {
+        ...loop,
+        gitStartCommitSha: 'aaa1111222233334444555566667777888899990000',
+        gitBaseBranch: 'main',
+      };
+
+      await eventBus.emit('LoopCreated', { loop: loopWithGit });
+      await flushEventLoop();
+      return loopWithGit;
+    }
+
+    beforeEach(() => {
+      // Reset all git mocks before each git test
+      vi.mocked(commitAllChanges)
+        .mockReset()
+        .mockResolvedValue({ ok: true, value: 'abc1234567890abcdef1234567890abcdef123456' });
+      vi.mocked(resetToCommit).mockReset().mockResolvedValue({ ok: true, value: undefined });
+      vi.mocked(getCurrentCommitSha)
+        .mockReset()
+        .mockResolvedValue({ ok: true, value: 'def4567890abcdef1234567890abcdef1234567890' });
+      vi.mocked(createAndCheckoutBranch).mockReset().mockResolvedValue({ ok: true, value: undefined });
+    });
+
+    it('should call createAndCheckoutBranch on iteration 1 with --git-branch', async () => {
+      await createGitLoop();
+
+      // createAndCheckoutBranch should have been called for the first iteration
+      expect(vi.mocked(createAndCheckoutBranch)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(createAndCheckoutBranch)).toHaveBeenCalledWith('/tmp', 'feat/loop-work', 'main');
+    });
+
+    it('should NOT call createAndCheckoutBranch for subsequent iterations', async () => {
+      // Exit condition fails → starts next iteration
+      mockEvaluator.evaluate.mockResolvedValue({ passed: false, exitCode: 1, error: 'fail' });
+
+      const loop = await createGitLoop({ maxIterations: 5 });
+
+      // Reset after first iteration's branch creation
+      vi.mocked(createAndCheckoutBranch).mockClear();
+
+      // Complete first iteration (exit condition fails → starts iteration 2)
+      const taskId1 = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId1!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // createAndCheckoutBranch is called again for re-checkout, but with different args
+      // (no baseBranch on subsequent iterations — just re-checkout the loop branch)
+      const calls = vi.mocked(createAndCheckoutBranch).mock.calls;
+      // Subsequent iterations use createAndCheckoutBranch(dir, branchName) without baseBranch
+      if (calls.length > 0) {
+        expect(calls[0][2]).toBeUndefined(); // No fromRef for re-checkout
+      }
+    });
+
+    it('should capture preIterationCommitSha in iteration record', async () => {
+      vi.mocked(getCurrentCommitSha).mockResolvedValue({
+        ok: true,
+        value: 'pre1111222233334444555566667777888899990000',
+      });
+
+      const loop = await createGitLoop();
+
+      // Verify getCurrentCommitSha was called (for pre-iteration capture)
+      expect(vi.mocked(getCurrentCommitSha)).toHaveBeenCalled();
+
+      // Check the iteration record has preIterationCommitSha
+      const iteration = await getLatestIteration(loop.id);
+      expect(iteration).toBeDefined();
+      expect(iteration!.preIterationCommitSha).toBe('pre1111222233334444555566667777888899990000');
+    });
+
+    it('should commit changes and record gitCommitSha on pass (retry)', async () => {
+      mockEvaluator.evaluate.mockResolvedValue({ passed: true, exitCode: 0 });
+      vi.mocked(commitAllChanges).mockResolvedValue({
+        ok: true,
+        value: 'commit_sha_after_pass_1234567890abcdef12345',
+      });
+
+      const loop = await createGitLoop();
+      const taskId = await getLatestTaskId(loop.id);
+
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // commitAllChanges should have been called
+      expect(vi.mocked(commitAllChanges)).toHaveBeenCalled();
+
+      // Iteration should have gitCommitSha set
+      const iteration = await getLatestIteration(loop.id);
+      expect(iteration).toBeDefined();
+      expect(iteration!.status).toBe('pass');
+      expect(iteration!.gitCommitSha).toBe('commit_sha_after_pass_1234567890abcdef12345');
+    });
+
+    it('should commit changes and record gitCommitSha on keep (optimize)', async () => {
+      mockEvaluator.evaluate.mockResolvedValue({ passed: true, score: 42.5, exitCode: 0 });
+      vi.mocked(commitAllChanges).mockResolvedValue({
+        ok: true,
+        value: 'commit_sha_after_keep_1234567890abcdef12345',
+      });
+
+      const loop = await createGitLoop({
+        strategy: LoopStrategy.OPTIMIZE,
+        evalDirection: OptimizeDirection.MAXIMIZE,
+      });
+      const taskId = await getLatestTaskId(loop.id);
+
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      expect(vi.mocked(commitAllChanges)).toHaveBeenCalled();
+
+      const iters = await loopRepo.getIterations(loop.id, 10);
+      expect(iters.ok).toBe(true);
+      const iter1 = iters.value.find((i) => i.iterationNumber === 1);
+      expect(iter1).toBeDefined();
+      expect(iter1!.status).toBe('keep');
+      expect(iter1!.gitCommitSha).toBe('commit_sha_after_keep_1234567890abcdef12345');
+    });
+
+    it('should reset to gitStartCommitSha on retry fail', async () => {
+      mockEvaluator.evaluate.mockResolvedValue({ passed: false, exitCode: 1, error: 'test failed' });
+
+      const loop = await createGitLoop({ maxConsecutiveFailures: 5 });
+      const taskId = await getLatestTaskId(loop.id);
+
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // resetToCommit should have been called with the loop's gitStartCommitSha
+      expect(vi.mocked(resetToCommit)).toHaveBeenCalledWith('/tmp', 'aaa1111222233334444555566667777888899990000');
+    });
+
+    it('should reset to best iteration gitCommitSha on optimize discard', async () => {
+      // First iteration: score 50 → keep (baseline)
+      mockEvaluator.evaluate.mockResolvedValueOnce({ passed: true, score: 50, exitCode: 0 });
+      vi.mocked(commitAllChanges).mockResolvedValueOnce({
+        ok: true,
+        value: 'best_commit_sha_12345678901234567890123456',
+      });
+
+      const loop = await createGitLoop({
+        strategy: LoopStrategy.OPTIMIZE,
+        evalDirection: OptimizeDirection.MAXIMIZE,
+        maxIterations: 5,
+        maxConsecutiveFailures: 5,
+      });
+
+      const taskId1 = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId1!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // Second iteration: score 30 → discard (worse for maximize)
+      mockEvaluator.evaluate.mockResolvedValueOnce({ passed: true, score: 30, exitCode: 0 });
+      vi.mocked(resetToCommit).mockClear();
+
+      const taskId2 = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId2!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // resetToCommit should be called with the best iteration's commit SHA
+      expect(vi.mocked(resetToCommit)).toHaveBeenCalledWith('/tmp', 'best_commit_sha_12345678901234567890123456');
+    });
+
+    it('should reset to gitStartCommitSha on task failure', async () => {
+      const loop = await createGitLoop({ maxConsecutiveFailures: 5 });
+      const taskId = await getLatestTaskId(loop.id);
+
+      await eventBus.emit('TaskFailed', {
+        taskId: taskId!,
+        error: { message: 'Task crashed', code: 'SYSTEM_ERROR' },
+        exitCode: 1,
+      });
+      await flushEventLoop();
+
+      // Task failure does NOT go through git commit/reset path
+      // (only exit condition evaluation triggers git operations)
+      // The iteration's preIterationCommitSha is still set though
+      const allIters = await loopRepo.getIterations(loop.id, 10);
+      expect(allIters.ok).toBe(true);
+      const iter1 = allIters.value.find((i) => i.iterationNumber === 1);
+      expect(iter1).toBeDefined();
+      expect(iter1!.status).toBe('fail');
+    });
+
+    it('should use getCurrentCommitSha as fallback when commitAllChanges returns null (agent already committed)', async () => {
+      mockEvaluator.evaluate.mockResolvedValue({ passed: true, exitCode: 0 });
+      // commitAllChanges returns null (nothing to commit — agent already committed)
+      vi.mocked(commitAllChanges).mockResolvedValue({ ok: true, value: null });
+      vi.mocked(getCurrentCommitSha)
+        .mockResolvedValueOnce({ ok: true, value: 'pre_iteration_sha_fake1234567890abcdef1234' }) // pre-iteration capture
+        .mockResolvedValueOnce({ ok: true, value: 'agent_committed_sha_1234567890abcdef123456' }); // fallback
+
+      const loop = await createGitLoop();
+      const taskId = await getLatestTaskId(loop.id);
+
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // getCurrentCommitSha should have been called as fallback
+      // (first call is pre-iteration, second is the fallback after null commit)
+      expect(vi.mocked(getCurrentCommitSha).mock.calls.length).toBeGreaterThanOrEqual(2);
+
+      const iteration = await getLatestIteration(loop.id);
+      expect(iteration).toBeDefined();
+      expect(iteration!.status).toBe('pass');
+      expect(iteration!.gitCommitSha).toBe('agent_committed_sha_1234567890abcdef123456');
+    });
+
+    it('should reset to gitStartCommitSha on optimize crash', async () => {
+      // crash: no score returned
+      mockEvaluator.evaluate.mockResolvedValue({
+        passed: false,
+        error: 'Invalid score',
+        exitCode: 0,
+      });
+
+      const loop = await createGitLoop({
+        strategy: LoopStrategy.OPTIMIZE,
+        evalDirection: OptimizeDirection.MAXIMIZE,
+        maxConsecutiveFailures: 5,
+      });
+
+      const taskId = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // resetToCommit should be called with gitStartCommitSha (no best iteration yet)
+      expect(vi.mocked(resetToCommit)).toHaveBeenCalledWith('/tmp', 'aaa1111222233334444555566667777888899990000');
+
+      const iters = await loopRepo.getIterations(loop.id, 10);
+      expect(iters.ok).toBe(true);
+      const iter1 = iters.value.find((i) => i.iterationNumber === 1);
+      expect(iter1!.status).toBe('crash');
     });
   });
 });

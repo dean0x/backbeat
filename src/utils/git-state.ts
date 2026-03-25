@@ -212,29 +212,29 @@ export async function createAndCheckoutBranch(
 }
 
 /**
- * Capture git diff summary between two branches
+ * Capture git diff summary between two refs (branch names or commit SHAs)
  * Returns the `git diff --stat` output as a summary string, or null if there are no changes.
  * Uses execFile (not exec) to prevent shell injection.
  *
  * @param workingDirectory - Absolute path to the working directory
- * @param fromBranch - Base branch for comparison
- * @param toBranch - Target branch for comparison
+ * @param fromRef - Base branch name or commit SHA for comparison
+ * @param toRef - Target branch name or commit SHA for comparison
  * @returns Result containing diff summary string or null if no changes
  */
 export async function captureGitDiff(
   workingDirectory: string,
-  fromBranch: string,
-  toBranch: string,
+  fromRef: string,
+  toRef: string,
 ): Promise<Result<string | null, BackbeatError>> {
-  const fromValidation = validateGitRefName(fromBranch, 'branch');
+  const fromValidation = validateGitRefName(fromRef, 'ref');
   if (!fromValidation.ok) return fromValidation;
 
-  const toValidation = validateGitRefName(toBranch, 'branch');
+  const toValidation = validateGitRefName(toRef, 'ref');
   if (!toValidation.ok) return toValidation;
 
   try {
     // '--' separator prevents ref names from being interpreted as flags
-    const diffResult = await execFileAsync('git', ['diff', '--stat', `${fromBranch}..${toBranch}`, '--'], {
+    const diffResult = await execFileAsync('git', ['diff', '--stat', `${fromRef}..${toRef}`, '--'], {
       cwd: workingDirectory,
       timeout: GIT_TIMEOUT_MS,
     });
@@ -249,8 +249,8 @@ export async function captureGitDiff(
     return err(
       new BackbeatError(
         ErrorCode.SYSTEM_ERROR,
-        `Failed to capture git diff (${fromBranch}..${toBranch}): ${error instanceof Error ? error.message : String(error)}`,
-        { workingDirectory, fromBranch, toBranch },
+        `Failed to capture git diff (${fromRef}..${toRef}): ${error instanceof Error ? error.message : String(error)}`,
+        { workingDirectory, fromRef, toRef },
       ),
     );
   }

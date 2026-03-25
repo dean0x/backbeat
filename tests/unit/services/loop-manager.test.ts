@@ -4,13 +4,23 @@
  * Pattern: Behavior-driven testing with Result pattern validation
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Mock git-state before importing modules that depend on it
+vi.mock('../../../src/utils/git-state.js', () => ({
+  captureGitState: vi.fn().mockResolvedValue({ ok: true, value: null }),
+  getCurrentCommitSha: vi.fn().mockResolvedValue({ ok: true, value: 'abc1234567890abcdef1234567890abcdef123456' }),
+  validateGitRefName: vi.fn().mockReturnValue({ ok: true, value: undefined }),
+}));
+
 import type { Loop, LoopCreateRequest } from '../../../src/core/domain.js';
 import { createLoop, LoopId, LoopStatus, LoopStrategy, OptimizeDirection } from '../../../src/core/domain.js';
+import type { Result } from '../../../src/core/result.js';
 import { Database } from '../../../src/implementations/database.js';
 import { SQLiteLoopRepository } from '../../../src/implementations/loop-repository.js';
 import { LoopManagerService } from '../../../src/services/loop-manager.js';
 import { toOptimizeDirection } from '../../../src/utils/format.js';
+import { captureGitState, getCurrentCommitSha } from '../../../src/utils/git-state.js';
 import { createTestConfiguration } from '../../fixtures/factories.js';
 import { TestEventBus, TestLogger } from '../../fixtures/test-doubles.js';
 
@@ -476,6 +486,88 @@ describe('LoopManagerService - Unit Tests', () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error.message).toContain('not found');
+    });
+  });
+
+  // ==========================================================================
+  // v0.8.1 Git auto-capture tests
+  // ==========================================================================
+
+  describe('createLoop() - git auto-capture (v0.8.1)', () => {
+    it('should auto-capture gitStartCommitSha in a git repo even without --git-branch', async () => {
+      // Mock: in a git repo (captureGitState returns branch info)
+      vi.mocked(captureGitState).mockResolvedValue({
+        ok: true,
+        value: { branch: 'main', commitSha: 'abc123', dirtyFiles: [] },
+      });
+      vi.mocked(getCurrentCommitSha).mockResolvedValue({
+        ok: true,
+        value: 'start_sha_1234567890abcdef1234567890abcdef1234',
+      });
+
+      const result = await service.createLoop(retryRequest());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.gitStartCommitSha).toBe('start_sha_1234567890abcdef1234567890abcdef1234');
+      // No gitBranch requested, so gitBaseBranch should be undefined
+      expect(result.value.gitBaseBranch).toBeUndefined();
+      expect(result.value.gitBranch).toBeUndefined();
+    });
+
+    it('should capture gitStartCommitSha and gitBaseBranch with --git-branch', async () => {
+      // Mock: in a git repo on 'main' branch
+      vi.mocked(captureGitState).mockResolvedValue({
+        ok: true,
+        value: { branch: 'main', commitSha: 'abc123', dirtyFiles: [] },
+      });
+      vi.mocked(getCurrentCommitSha).mockResolvedValue({
+        ok: true,
+        value: 'start_sha_abcdef1234567890abcdef1234567890abcd',
+      });
+
+      const result = await service.createLoop(retryRequest({ gitBranch: 'feat/my-loop' }));
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.gitBranch).toBe('feat/my-loop');
+      expect(result.value.gitBaseBranch).toBe('main');
+      expect(result.value.gitStartCommitSha).toBe('start_sha_abcdef1234567890abcdef1234567890abcd');
+    });
+
+    it('should have no git fields in a non-git repo', async () => {
+      // Mock: not in a git repo (captureGitState returns null)
+      vi.mocked(captureGitState).mockResolvedValue({ ok: true, value: null });
+
+      const result = await service.createLoop(retryRequest());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.gitStartCommitSha).toBeUndefined();
+      expect(result.value.gitBaseBranch).toBeUndefined();
+      expect(result.value.gitBranch).toBeUndefined();
+    });
+
+    it('should have no gitStartCommitSha when getCurrentCommitSha fails', async () => {
+      // Mock: in a git repo but getCurrentCommitSha fails
+      vi.mocked(captureGitState).mockResolvedValue({
+        ok: true,
+        value: { branch: 'main', commitSha: 'abc123', dirtyFiles: [] },
+      });
+      vi.mocked(getCurrentCommitSha).mockResolvedValue({
+        ok: false,
+        error: new Error('git not available'),
+      } as Result<string>);
+
+      const result = await service.createLoop(retryRequest());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.gitStartCommitSha).toBeUndefined();
     });
   });
 });
