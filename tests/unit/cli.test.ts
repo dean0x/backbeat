@@ -3310,9 +3310,7 @@ describe('CLI - Loop Commands', () => {
 
       await expect(handleLoopCommand('get', ['loop-123'])).rejects.toThrow('process.exit');
 
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('beat loop status'),
-      );
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('beat loop status'));
       expect(exitSpy).toHaveBeenCalledWith(1);
 
       errorSpy.mockRestore();
@@ -3433,7 +3431,13 @@ describe('CLI - Schedule --loop flag', () => {
 
   it('should reject --loop with both --minimize and --maximize', () => {
     const result = parseScheduleCreateArgs([
-      '--loop', '--eval', 'echo 42', '--minimize', '--maximize', '--cron', '0 9 * * *',
+      '--loop',
+      '--eval',
+      'echo 42',
+      '--minimize',
+      '--maximize',
+      '--cron',
+      '0 9 * * *',
     ]);
     expect(result.ok).toBe(false);
     if (result.ok) return;

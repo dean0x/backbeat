@@ -10,6 +10,37 @@ Nothing yet.
 
 ---
 
+## [0.8.0] - 2026-03-25
+
+### 🚀 Features
+- **Loop Pause/Resume**: Pause active loops mid-iteration, resume from last checkpoint. Paused state persists across restart. MCP: `PauseLoop`, `ResumeLoop`. CLI: `beat loop pause`, `beat loop resume`
+- **Scheduled Loops**: Compose loops with cron/one-time schedules. Each execution creates a new loop instance. MCP: `ScheduleLoop`. CLI: `beat schedule create --loop`
+- **Git Integration**: Optional `--git-branch` for branch-per-iteration strategy. Diffs tracked between iterations. Automatic cleanup on completion
+
+### 🖥️ CLI Improvements
+- `--direction minimize|maximize` → `--minimize`/`--maximize` boolean flags (mutual exclusion validated)
+- `--continue-context` → `--checkpoint`
+- `schedule get` / `loop get` → `schedule status` / `loop status`
+- Deprecated `beat loop get` prints rename hint
+
+### 🔄 Refactoring
+- Parser types converted to discriminated unions for exhaustive pattern matching (#114)
+- `parseScheduleCreateArgs` extracted as pure function
+- Schedule parser consistency and usability improvements
+
+### ⚠️ Breaking Changes
+- **MCP Tool Rename**: `GetSchedule` → `ScheduleStatus`
+- **CLI Flag Renames**: `--direction` → `--minimize`/`--maximize`, `--continue-context` → `--checkpoint`
+- **CLI Subcommand Renames**: `get` → `status` (schedule and loop)
+
+### 🗄️ Database
+- **Migration 11**: `loop_pause_state` column, `schedule_id` FK on loops table, git config storage
+
+### 🔄 Events
+- 2 new events (31 total): `LoopPaused`, `LoopResumed`
+
+---
+
 ## [0.7.2] - 2026-03-22
 
 ### 📦 Dependencies
