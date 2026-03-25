@@ -1088,40 +1088,9 @@ export class LoopHandler extends BaseEventHandler {
   ): Promise<void> {
     const updatedLoop = updateLoop(loop, loopUpdate);
 
-    // Git commit/revert (v0.8.1): commit on pass/keep, revert on fail/discard/crash
-    let gitCommitSha: string | undefined;
-    let gitDiffSummary: string | undefined;
-    if (iteration.preIterationCommitSha) {
-      try {
-        const isCommitPath = iterationStatus === 'pass' || iterationStatus === 'keep';
-        if (isCommitPath) {
-          const gitResult = await this.commitAndCaptureDiff(loop, iteration, iterationStatus);
-          gitCommitSha = gitResult.gitCommitSha;
-          gitDiffSummary = gitResult.gitDiffSummary;
-        } else {
-          // Discard path: reset to the appropriate target
-          const resetTarget = await this.getResetTargetSha(loop);
-          if (resetTarget) {
-            const resetResult = await resetToCommit(loop.workingDirectory, resetTarget);
-            if (!resetResult.ok) {
-              this.logger.warn('Failed to reset to commit after iteration failure', {
-                loopId: loop.id,
-                iterationNumber: iteration.iterationNumber,
-                resetTarget,
-                error: resetResult.error.message,
-              });
-            }
-          }
-          // gitCommitSha stays undefined for discarded iterations
-        }
-      } catch (gitError) {
-        this.logger.warn('Git operation failed in recordAndContinue, continuing without git', {
-          loopId: loop.id,
-          iterationNumber: iteration.iterationNumber,
-          error: gitError instanceof Error ? gitError.message : String(gitError),
-        });
-      }
-    }
+    const { gitCommitSha, gitDiffSummary } = await this.handleIterationGitOutcome(
+      loop, iteration, iterationStatus,
+    );
 
     // Atomic: both DB writes in single transaction
     const txResult = this.database.runInTransaction(() => {
@@ -1173,6 +1142,40 @@ export class LoopHandler extends BaseEventHandler {
     }
     // Default: MAXIMIZE
     return newScore > bestScore;
+  }
+
+  /**
+   * Handle git commit or revert based on iteration outcome.
+   * - pass/keep: commit all changes, capture diff summary
+   * - fail/discard/crash: delegate to resetIterationGitState for clean revert
+   *
+   * Best-effort: logs warnings on failure, never throws.
+   * @returns { gitCommitSha, gitDiffSummary } — both undefined if non-git or on failure/discard
+   */
+  private async handleIterationGitOutcome(
+    loop: Loop,
+    iteration: LoopIteration,
+    iterationStatus: LoopIteration['status'],
+  ): Promise<{ gitCommitSha?: string; gitDiffSummary?: string }> {
+    if (!iteration.preIterationCommitSha) return {};
+
+    try {
+      const isCommitPath = iterationStatus === 'pass' || iterationStatus === 'keep';
+      if (isCommitPath) {
+        return await this.commitAndCaptureDiff(loop, iteration, iterationStatus);
+      }
+
+      // Discard path: delegate to resetIterationGitState (single source of truth for git reset)
+      await this.resetIterationGitState(loop, iteration, 'iteration discard');
+      return {};
+    } catch (gitError) {
+      this.logger.warn('Git operation failed during iteration outcome handling, continuing without git', {
+        loopId: loop.id,
+        iterationNumber: iteration.iterationNumber,
+        error: gitError instanceof Error ? gitError.message : String(gitError),
+      });
+      return {};
+    }
   }
 
   /**
