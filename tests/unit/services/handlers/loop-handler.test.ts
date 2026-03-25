@@ -1316,10 +1316,9 @@ describe('LoopHandler - Behavioral Tests', () => {
       // createAndCheckoutBranch is called again for re-checkout, but with different args
       // (no baseBranch on subsequent iterations — just re-checkout the loop branch)
       const calls = vi.mocked(createAndCheckoutBranch).mock.calls;
-      // Subsequent iterations use createAndCheckoutBranch(dir, branchName) without baseBranch
-      if (calls.length > 0) {
-        expect(calls[0][2]).toBeUndefined(); // No fromRef for re-checkout
-      }
+      // Subsequent iterations re-checkout the branch without fromRef (baseBranch)
+      expect(calls).toHaveLength(1);
+      expect(calls[0][2]).toBeUndefined(); // No fromRef for re-checkout
     });
 
     it('should capture preIterationCommitSha in iteration record', async () => {

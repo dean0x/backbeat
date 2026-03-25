@@ -433,6 +433,19 @@ describe('commitAllChanges', () => {
     if (result.ok) return;
     expect(result.error.message).toContain('Failed to commit changes');
   });
+
+  it('should return error when git commit fails (e.g., pre-commit hook rejection)', async () => {
+    mockExecFileSequence([
+      { stdout: '' }, // git add -A succeeds
+      { error: new Error('exit code 1') }, // git diff --cached --quiet → non-zero = things staged
+      { error: new Error('pre-commit hook rejected: lint errors found') }, // git commit -m fails
+    ]);
+
+    const result = await commitAllChanges('/workspace', 'Loop iteration 1');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('Failed to commit changes');
+  });
 });
 
 describe('resetToCommit', () => {
