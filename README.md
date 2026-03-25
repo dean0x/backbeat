@@ -232,7 +232,7 @@ Checkpoints are captured automatically on task completion/failure, preserving th
 
 | Tool | Role | What It Does |
 |------|------|-------------|
-| **[Skim](https://github.com/dean0x/skim)** | Context Optimization | Compresses code, test output, build output, and git output for optimal LLM reasoning |
+| **[Skim](https://github.com/dean0x/skim)** | Context Optimization | Code-aware AST parsing across 12 languages, command rewriting, test/build/git output compression |
 | **[DevFlow](https://github.com/dean0x/devflow)** | Quality Orchestration | 18 parallel reviewers, working memory, self-learning, composable plugin system |
 | **Backbeat** | Agent Orchestration | Orchestration at scale. Karpathy optimization loops, multi-agent pipelines, DAG dependencies, autoscaling |
 
