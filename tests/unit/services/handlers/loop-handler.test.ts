@@ -1431,6 +1431,31 @@ describe('LoopHandler - Behavioral Tests', () => {
       expect(vi.mocked(resetToCommit)).toHaveBeenCalledWith('/tmp', 'best_commit_sha_12345678901234567890123456');
     });
 
+    it('should cache bestIterationCommitSha on loop after optimize keep', async () => {
+      mockEvaluator.evaluate.mockResolvedValueOnce({ passed: true, score: 50, exitCode: 0 });
+      vi.mocked(commitAllChanges).mockResolvedValueOnce({
+        ok: true,
+        value: 'cached_sha_1234567890abcdef1234567890abcdef12',
+      });
+
+      const loop = await createGitLoop({
+        strategy: LoopStrategy.OPTIMIZE,
+        evalDirection: OptimizeDirection.MAXIMIZE,
+        maxIterations: 5,
+        maxConsecutiveFailures: 5,
+      });
+
+      const taskId1 = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId1!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // After keep, the loop should have bestIterationCommitSha cached
+      const updatedLoop = await loopRepo.findById(loop.id);
+      expect(updatedLoop.ok).toBe(true);
+      if (!updatedLoop.ok) return;
+      expect(updatedLoop.value!.bestIterationCommitSha).toBe('cached_sha_1234567890abcdef1234567890abcdef12');
+    });
+
     it('should reset to gitStartCommitSha on task failure', async () => {
       const loop = await createGitLoop({ maxConsecutiveFailures: 5 });
       const taskId = await getLatestTaskId(loop.id);

@@ -47,6 +47,7 @@ const LoopRowSchema = z.object({
   current_iteration: z.number(),
   best_score: z.number().nullable(),
   best_iteration_id: z.number().nullable(),
+  best_iteration_commit_sha: z.string().nullable(),
   consecutive_failures: z.number(),
   created_at: z.number(),
   updated_at: z.number(),
@@ -125,6 +126,7 @@ interface LoopRow {
   readonly current_iteration: number;
   readonly best_score: number | null;
   readonly best_iteration_id: number | null;
+  readonly best_iteration_commit_sha: string | null;
   readonly consecutive_failures: number;
   readonly created_at: number;
   readonly updated_at: number;
@@ -181,15 +183,15 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
         id, strategy, task_template, pipeline_steps, exit_condition,
         eval_direction, eval_timeout, working_directory, max_iterations,
         max_consecutive_failures, cooldown_ms, fresh_context, status,
-        current_iteration, best_score, best_iteration_id, consecutive_failures,
-        created_at, updated_at, completed_at,
+        current_iteration, best_score, best_iteration_id, best_iteration_commit_sha,
+        consecutive_failures, created_at, updated_at, completed_at,
         git_branch, git_base_branch, git_start_commit_sha, schedule_id
       ) VALUES (
         @id, @strategy, @taskTemplate, @pipelineSteps, @exitCondition,
         @evalDirection, @evalTimeout, @workingDirectory, @maxIterations,
         @maxConsecutiveFailures, @cooldownMs, @freshContext, @status,
-        @currentIteration, @bestScore, @bestIterationId, @consecutiveFailures,
-        @createdAt, @updatedAt, @completedAt,
+        @currentIteration, @bestScore, @bestIterationId, @bestIterationCommitSha,
+        @consecutiveFailures, @createdAt, @updatedAt, @completedAt,
         @gitBranch, @gitBaseBranch, @gitStartCommitSha, @scheduleId
       )
     `);
@@ -211,6 +213,7 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
         current_iteration = @currentIteration,
         best_score = @bestScore,
         best_iteration_id = @bestIterationId,
+        best_iteration_commit_sha = @bestIterationCommitSha,
         consecutive_failures = @consecutiveFailures,
         updated_at = @updatedAt,
         completed_at = @completedAt,
@@ -540,6 +543,7 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
       currentIteration: loop.currentIteration,
       bestScore: loop.bestScore ?? null,
       bestIterationId: loop.bestIterationId ?? null,
+      bestIterationCommitSha: loop.bestIterationCommitSha ?? null,
       consecutiveFailures: loop.consecutiveFailures,
       createdAt: loop.createdAt,
       updatedAt: loop.updatedAt,
@@ -596,6 +600,7 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
       currentIteration: data.current_iteration,
       bestScore: data.best_score ?? undefined,
       bestIterationId: data.best_iteration_id ?? undefined,
+      bestIterationCommitSha: data.best_iteration_commit_sha ?? undefined,
       consecutiveFailures: data.consecutive_failures,
       gitBranch: data.git_branch ?? undefined,
       gitBaseBranch: data.git_base_branch ?? undefined,

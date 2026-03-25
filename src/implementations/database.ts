@@ -711,6 +711,13 @@ export class Database implements TransactionRunner {
           // SQLite cannot DROP COLUMN easily and dead columns are harmless
         },
       },
+      {
+        version: 13,
+        description: 'Add best_iteration_commit_sha to loops for O(1) reset target lookup',
+        up: (db) => {
+          db.exec(`ALTER TABLE loops ADD COLUMN best_iteration_commit_sha TEXT`);
+        },
+      },
     ];
   }
 

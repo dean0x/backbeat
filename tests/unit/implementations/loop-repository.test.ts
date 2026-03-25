@@ -189,7 +189,13 @@ describe('SQLiteLoopRepository - Unit Tests', () => {
       });
       await repo.save(loop);
 
-      const updated = { ...loop, bestScore: 0.95, bestIterationId: 3, updatedAt: Date.now() };
+      const updated = {
+        ...loop,
+        bestScore: 0.95,
+        bestIterationId: 3,
+        bestIterationCommitSha: 'abc123def456abc123def456abc123def456abc1',
+        updatedAt: Date.now(),
+      };
       await repo.update(updated);
 
       const findResult = await repo.findById(loop.id);
@@ -198,6 +204,7 @@ describe('SQLiteLoopRepository - Unit Tests', () => {
 
       expect(findResult.value!.bestScore).toBe(0.95);
       expect(findResult.value!.bestIterationId).toBe(3);
+      expect(findResult.value!.bestIterationCommitSha).toBe('abc123def456abc123def456abc123def456abc1');
     });
   });
 

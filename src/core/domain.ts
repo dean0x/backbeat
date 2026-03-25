@@ -539,6 +539,7 @@ export interface Loop {
   readonly currentIteration: number;
   readonly bestScore?: number;
   readonly bestIterationId?: number;
+  readonly bestIterationCommitSha?: string;
   readonly consecutiveFailures: number;
   readonly status: LoopStatus;
   readonly gitBranch?: string; // Branch name for loop iteration work (v0.8.0)
@@ -621,6 +622,7 @@ export const createLoop = (request: LoopCreateRequest, workingDirectory: string,
     currentIteration: 0,
     bestScore: undefined,
     bestIterationId: undefined,
+    bestIterationCommitSha: undefined,
     consecutiveFailures: 0,
     status: LoopStatus.RUNNING,
     gitBranch: request.gitBranch,

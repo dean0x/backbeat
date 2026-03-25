@@ -1080,9 +1080,11 @@ export class LoopHandler extends BaseEventHandler {
     loopUpdate: Partial<Loop>,
     evalResult?: { score?: number; exitCode?: number; errorMessage?: string },
   ): Promise<void> {
-    const updatedLoop = updateLoop(loop, loopUpdate);
-
     const { gitCommitSha, gitDiffSummary } = await this.handleIterationGitOutcome(loop, iteration, iterationStatus);
+
+    const fullUpdate =
+      iterationStatus === 'keep' && gitCommitSha ? { ...loopUpdate, bestIterationCommitSha: gitCommitSha } : loopUpdate;
+    const updatedLoop = updateLoop(loop, fullUpdate);
 
     // Atomic: both DB writes in single transaction
     const txResult = this.database.runInTransaction(() => {
@@ -1221,19 +1223,10 @@ export class LoopHandler extends BaseEventHandler {
    *   fallback to loop.gitStartCommitSha
    * @returns SHA to reset to, or undefined if no git tracking
    */
-  private async getResetTargetSha(loop: Loop): Promise<string | undefined> {
-    // For optimize strategy: try to reset to the best iteration's commit
-    if (loop.strategy === LoopStrategy.OPTIMIZE && loop.bestIterationId !== undefined) {
-      const iterationsResult = await this.loopRepo.getIterations(loop.id, 100);
-      if (iterationsResult.ok) {
-        const bestIteration = iterationsResult.value.find((i) => i.iterationNumber === loop.bestIterationId);
-        if (bestIteration?.gitCommitSha) {
-          return bestIteration.gitCommitSha;
-        }
-      }
+  private getResetTargetSha(loop: Loop): string | undefined {
+    if (loop.strategy === LoopStrategy.OPTIMIZE && loop.bestIterationCommitSha) {
+      return loop.bestIterationCommitSha;
     }
-
-    // Fallback: reset to the loop's start commit SHA
     return loop.gitStartCommitSha;
   }
 
@@ -1250,7 +1243,7 @@ export class LoopHandler extends BaseEventHandler {
     if (!iteration.preIterationCommitSha) return;
 
     try {
-      const resetTarget = await this.getResetTargetSha(loop);
+      const resetTarget = this.getResetTargetSha(loop);
       if (!resetTarget) return;
 
       const resetResult = await resetToCommit(loop.workingDirectory, resetTarget);
