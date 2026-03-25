@@ -17,6 +17,7 @@ import { execFile } from 'child_process';
 import {
   captureGitDiff,
   captureGitState,
+  captureLoopGitContext,
   commitAllChanges,
   createAndCheckoutBranch,
   getCurrentCommitSha,
@@ -120,6 +121,62 @@ describe('captureGitState', () => {
     if (!result.ok) return;
     expect(result.value).not.toBeNull();
     expect(result.value!.dirtyFiles).toEqual([]);
+  });
+});
+
+describe('captureLoopGitContext', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should propagate error when captureGitState returns err()', async () => {
+    // Simulate a timeout (killed process) — captureGitState returns err()
+    const killedError = Object.assign(new Error('Command timed out'), { killed: true });
+    mockExecFileSequence([{ error: killedError }]);
+
+    const result = await captureLoopGitContext('/workspace');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('Failed to capture git state');
+  });
+
+  it('should return empty context when not a git repo (captureGitState returns null)', async () => {
+    // Not a git repo — rev-parse --abbrev-ref HEAD fails with non-timeout error
+    mockExecFileSequence([{ error: new Error('fatal: not a git repository') }]);
+
+    const result = await captureLoopGitContext('/tmp/not-a-repo');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.gitBaseBranch).toBeUndefined();
+    expect(result.value.gitStartCommitSha).toBeUndefined();
+  });
+
+  it('should return gitStartCommitSha but no gitBaseBranch when gitBranch is not provided', async () => {
+    mockExecFileSequence([
+      { stdout: 'main\n' }, // rev-parse --abbrev-ref HEAD
+      { stdout: 'abc123def456\n' }, // rev-parse HEAD
+      { stdout: '' }, // git status --porcelain
+    ]);
+
+    const result = await captureLoopGitContext('/workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.gitBaseBranch).toBeUndefined();
+    expect(result.value.gitStartCommitSha).toBe('abc123def456');
+  });
+
+  it('should return both gitBaseBranch and gitStartCommitSha when gitBranch is provided', async () => {
+    mockExecFileSequence([
+      { stdout: 'main\n' }, // rev-parse --abbrev-ref HEAD (current branch)
+      { stdout: 'deadbeef1234\n' }, // rev-parse HEAD
+      { stdout: '' }, // git status --porcelain
+    ]);
+
+    const result = await captureLoopGitContext('/workspace', 'feat/loop-work');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.gitBaseBranch).toBe('main');
+    expect(result.value.gitStartCommitSha).toBe('deadbeef1234');
   });
 });
 

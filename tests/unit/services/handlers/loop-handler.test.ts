@@ -1476,6 +1476,62 @@ describe('LoopHandler - Behavioral Tests', () => {
       expect(iteration!.gitCommitSha).toBe('agent_committed_sha_1234567890abcdef123456');
     });
 
+    it('should reset to gitStartCommitSha on pipeline intermediate step failure', async () => {
+      const loop = createLoop(
+        {
+          pipelineSteps: ['lint the code', 'run the tests', 'deploy'],
+          strategy: LoopStrategy.RETRY,
+          exitCondition: 'test -f /tmp/done',
+          maxIterations: 10,
+          maxConsecutiveFailures: 5,
+          cooldownMs: 0,
+          freshContext: true,
+          evalTimeout: 60000,
+          gitBranch: 'feat/pipeline-work',
+        },
+        '/tmp',
+      );
+
+      // Inject git context (normally done by LoopManagerService)
+      const loopWithGit = {
+        ...loop,
+        gitStartCommitSha: 'aaa1111222233334444555566667777888899990000',
+        gitBaseBranch: 'main',
+      };
+
+      await eventBus.emit('LoopCreated', { loop: loopWithGit });
+      await flushEventLoop();
+
+      // Get pipeline task IDs from the iteration
+      const iteration = await getLatestIteration(loopWithGit.id);
+      expect(iteration).toBeDefined();
+      expect(iteration!.pipelineTaskIds).toBeDefined();
+      expect(iteration!.pipelineTaskIds!.length).toBe(3);
+      const taskIds = iteration!.pipelineTaskIds!;
+
+      // Clear the resetToCommit mock to isolate this assertion
+      vi.mocked(resetToCommit).mockClear();
+
+      // Fail the first (intermediate) pipeline task
+      await eventBus.emit('TaskFailed', {
+        taskId: taskIds[0],
+        error: { message: 'Lint failed', code: 'SYSTEM_ERROR' },
+        exitCode: 1,
+      });
+      await flushEventLoop();
+
+      // resetToCommit should have been called with the loop's gitStartCommitSha
+      expect(vi.mocked(resetToCommit)).toHaveBeenCalledWith('/tmp', 'aaa1111222233334444555566667777888899990000');
+
+      // Iteration should be marked as 'fail' with pipeline step failure message
+      const allIters = await loopRepo.getIterations(loopWithGit.id, 10);
+      expect(allIters.ok).toBe(true);
+      if (!allIters.ok) return;
+      const iter1 = allIters.value.find((i) => i.iterationNumber === 1);
+      expect(iter1!.status).toBe('fail');
+      expect(iter1!.errorMessage).toContain('Pipeline step failed');
+    });
+
     it('should reset to gitStartCommitSha on optimize crash', async () => {
       // crash: no score returned
       mockEvaluator.evaluate.mockResolvedValue({
