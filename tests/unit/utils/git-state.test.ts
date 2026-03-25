@@ -17,7 +17,10 @@ import { execFile } from 'child_process';
 import {
   captureGitDiff,
   captureGitState,
+  commitAllChanges,
   createAndCheckoutBranch,
+  getCurrentCommitSha,
+  resetToCommit,
   validateGitRefName,
 } from '../../../src/utils/git-state.js';
 
@@ -364,5 +367,133 @@ describe('git exec timeout protection', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.message).toContain('Failed to capture git state');
+  });
+});
+
+describe('getCurrentCommitSha', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should return the current HEAD commit SHA', async () => {
+    mockExecFileSequence([{ stdout: 'abc123def4567890abc123def4567890abc123de\n' }]);
+
+    const result = await getCurrentCommitSha('/workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toBe('abc123def4567890abc123def4567890abc123de');
+  });
+
+  it('should return error when git rev-parse fails', async () => {
+    mockExecFileSequence([{ error: new Error('fatal: not a git repository') }]);
+
+    const result = await getCurrentCommitSha('/tmp/not-a-repo');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('Failed to get current commit SHA');
+  });
+});
+
+describe('commitAllChanges', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should stage, commit, and return new SHA on success', async () => {
+    mockExecFileSequence([
+      { stdout: '' }, // git add -A
+      { error: new Error('exit code 1') }, // git diff --cached --quiet → non-zero = things staged
+      { stdout: '' }, // git commit -m
+      { stdout: 'deadbeef1234567890deadbeef1234567890dead\n' }, // git rev-parse HEAD
+    ]);
+
+    const result = await commitAllChanges('/workspace', 'Loop iteration 1');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toBe('deadbeef1234567890deadbeef1234567890dead');
+  });
+
+  it('should return null when nothing to commit (agent already committed)', async () => {
+    mockExecFileSequence([
+      { stdout: '' }, // git add -A
+      { stdout: '' }, // git diff --cached --quiet → exit 0 = nothing staged
+    ]);
+
+    const result = await commitAllChanges('/workspace', 'Loop iteration 1');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toBeNull();
+  });
+
+  it('should return error when git add fails', async () => {
+    mockExecFileSequence([{ error: new Error('fatal: not a git repository') }]);
+
+    const result = await commitAllChanges('/tmp/not-a-repo', 'commit msg');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('Failed to commit changes');
+  });
+});
+
+describe('resetToCommit', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should reset and clean on valid SHA', async () => {
+    mockExecFileSequence([
+      { stdout: '' }, // git reset --hard <sha>
+      { stdout: '' }, // git clean -fd
+    ]);
+
+    const result = await resetToCommit('/workspace', 'abc123def4567890abc123def4567890abc123de');
+    expect(result.ok).toBe(true);
+  });
+
+  it('should reject SHA that is too short (< 7 chars)', async () => {
+    const result = await resetToCommit('/workspace', 'abc12');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('Invalid commit SHA format');
+  });
+
+  it('should reject SHA with leading dash (argument injection)', async () => {
+    const result = await resetToCommit('/workspace', '-abc1234');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('Invalid commit SHA format');
+  });
+
+  it('should reject SHA containing ".." (traversal)', async () => {
+    const result = await resetToCommit('/workspace', 'abc12..def34');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('Invalid commit SHA format');
+  });
+
+  it('should reject SHA with non-hex characters', async () => {
+    const result = await resetToCommit('/workspace', 'ghijklm');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('Invalid commit SHA format');
+  });
+
+  it('should return error when git reset fails', async () => {
+    mockExecFileSequence([{ error: new Error('fatal: bad revision') }]);
+
+    const result = await resetToCommit('/workspace', 'abc123def4567890abc123def4567890abc123de');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('Failed to reset to commit');
+  });
+
+  it('should accept 7-char short SHA', async () => {
+    mockExecFileSequence([
+      { stdout: '' }, // git reset --hard
+      { stdout: '' }, // git clean -fd
+    ]);
+
+    const result = await resetToCommit('/workspace', 'abc1234');
+    expect(result.ok).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
 /**
- * Git state capture and branch management utilities
+ * Git state capture, branch management, and commit utilities
  * ARCHITECTURE: Pure functions returning Result, uses execFile for security (no shell injection)
  */
 
@@ -251,6 +251,139 @@ export async function captureGitDiff(
         ErrorCode.SYSTEM_ERROR,
         `Failed to capture git diff (${fromBranch}..${toBranch}): ${error instanceof Error ? error.message : String(error)}`,
         { workingDirectory, fromBranch, toBranch },
+      ),
+    );
+  }
+}
+
+/**
+ * Get the current HEAD commit SHA
+ * Returns the full 40-character hex SHA of the current HEAD commit.
+ *
+ * @param workingDirectory - Absolute path to the working directory
+ * @returns Result containing the 40-char hex SHA, or error on failure
+ */
+export async function getCurrentCommitSha(
+  workingDirectory: string,
+): Promise<Result<string, BackbeatError>> {
+  try {
+    const result = await execFileAsync('git', ['rev-parse', 'HEAD'], {
+      cwd: workingDirectory,
+      timeout: GIT_TIMEOUT_MS,
+    });
+    return ok(result.stdout.trim());
+  } catch (error) {
+    return err(
+      new BackbeatError(
+        ErrorCode.SYSTEM_ERROR,
+        `Failed to get current commit SHA: ${error instanceof Error ? error.message : String(error)}`,
+        { workingDirectory },
+      ),
+    );
+  }
+}
+
+/**
+ * Stage all changes and create a commit
+ * Runs `git add -A`, checks if anything is staged, and commits if so.
+ * Returns the commit SHA on success, or null if nothing to commit
+ * (e.g., the agent already committed everything).
+ *
+ * @param workingDirectory - Absolute path to the working directory
+ * @param message - Commit message
+ * @returns Result containing commit SHA (string) or null if nothing to commit
+ */
+export async function commitAllChanges(
+  workingDirectory: string,
+  message: string,
+): Promise<Result<string | null, BackbeatError>> {
+  try {
+    const execOpts = { cwd: workingDirectory, timeout: GIT_TIMEOUT_MS };
+
+    // Stage all changes
+    await execFileAsync('git', ['add', '-A', '--'], execOpts);
+
+    // Check if anything is staged — exit code 0 means nothing staged
+    try {
+      await execFileAsync('git', ['diff', '--cached', '--quiet'], execOpts);
+      // Exit code 0 = nothing staged = nothing to commit
+      return ok(null);
+    } catch {
+      // Non-zero exit = there are staged changes = proceed to commit
+    }
+
+    // Commit with the provided message — use '--' to prevent message interpretation
+    await execFileAsync('git', ['commit', '-m', message, '--'], execOpts);
+
+    // Get the SHA of the new commit
+    const shaResult = await execFileAsync('git', ['rev-parse', 'HEAD'], execOpts);
+    return ok(shaResult.stdout.trim());
+  } catch (error) {
+    return err(
+      new BackbeatError(
+        ErrorCode.SYSTEM_ERROR,
+        `Failed to commit changes: ${error instanceof Error ? error.message : String(error)}`,
+        { workingDirectory },
+      ),
+    );
+  }
+}
+
+/**
+ * Validate a commit SHA format for safe use in git commands.
+ * Accepts 7-40 hex characters, rejects patterns that could be used for injection.
+ *
+ * @returns true if valid, false otherwise
+ */
+function isValidCommitSha(sha: string): boolean {
+  if (!sha || sha.length < 7 || sha.length > 40) return false;
+  if (sha.startsWith('-')) return false;
+  if (sha.includes('..')) return false;
+  return /^[0-9a-f]+$/.test(sha);
+}
+
+/**
+ * Hard-reset the working directory to a specific commit SHA
+ * Runs `git reset --hard <sha>` followed by `git clean -fd` to also remove
+ * untracked files created by agents.
+ *
+ * CRITICAL: `git clean -fd` is needed because `git reset --hard` alone does NOT
+ * remove untracked files that were created after the target commit.
+ *
+ * @param workingDirectory - Absolute path to the working directory
+ * @param commitSha - Hex SHA (7-40 chars) to reset to
+ * @returns Result<void> on success, error on failure or invalid SHA
+ */
+export async function resetToCommit(
+  workingDirectory: string,
+  commitSha: string,
+): Promise<Result<void, BackbeatError>> {
+  if (!isValidCommitSha(commitSha)) {
+    return err(
+      new BackbeatError(
+        ErrorCode.INVALID_INPUT,
+        `Invalid commit SHA format: "${commitSha}" — must be 7-40 hex characters, no leading '-', no '..'`,
+        { workingDirectory, commitSha },
+      ),
+    );
+  }
+
+  try {
+    const execOpts = { cwd: workingDirectory, timeout: GIT_TIMEOUT_MS };
+
+    // Reset tracked files to target commit — '--' prevents SHA from being interpreted as flag
+    await execFileAsync('git', ['reset', '--hard', commitSha, '--'], execOpts);
+
+    // Remove untracked files and directories created after the target commit
+    await execFileAsync('git', ['clean', '-fd'], execOpts);
+
+    return ok(undefined);
+  } catch (error) {
+    return err(
+      new BackbeatError(
+        ErrorCode.SYSTEM_ERROR,
+        `Failed to reset to commit ${commitSha}: ${error instanceof Error ? error.message : String(error)}`,
+        { workingDirectory, commitSha },
       ),
     );
   }
