@@ -1178,7 +1178,7 @@ export class LoopHandler extends BaseEventHandler {
   private async commitAndCaptureDiff(
     loop: Loop,
     iteration: LoopIteration,
-    iterationStatus: string,
+    iterationStatus: LoopIteration['status'],
   ): Promise<{ gitCommitSha?: string; gitDiffSummary?: string }> {
     let gitCommitSha: string | undefined;
     let gitDiffSummary: string | undefined;
@@ -1606,6 +1606,9 @@ export class LoopHandler extends BaseEventHandler {
 
     if (task.status === TaskStatus.FAILED) {
       const newConsecutiveFailures = loop.consecutiveFailures + 1;
+
+      // Git reset: revert working directory to pre-iteration state on recovered failure (v0.8.1)
+      await this.resetIterationGitState(loop, latestIteration, 'recovered task failure');
 
       // Atomic: iteration fail + consecutiveFailures in single transaction
       const updatedLoop = updateLoop(loop, { consecutiveFailures: newConsecutiveFailures });
