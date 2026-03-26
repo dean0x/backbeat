@@ -1,8 +1,8 @@
-# Backbeat Testing Architecture Documentation
+# Autobeat Testing Architecture Documentation
 
 ## Overview
 
-This document provides a comprehensive overview of Backbeat's testing architecture, patterns, and best practices. The test suite validates the event-driven task delegation system through multiple testing layers.
+This document provides a comprehensive overview of Autobeat's testing architecture, patterns, and best practices. The test suite validates the event-driven task delegation system through multiple testing layers.
 
 ## Testing Philosophy
 
@@ -524,7 +524,7 @@ npm test -- --grep "should handle concurrent"
 node --inspect-brk ./node_modules/.bin/vitest
 
 # Set debug environment
-DEBUG=backbeat:* npm test
+DEBUG=autobeat:* npm test
 ```
 
 ### Common Debug Patterns
@@ -657,7 +657,7 @@ afterEach(async () => {
 
 ## Conclusion
 
-Backbeat's testing architecture emphasizes:
+Autobeat's testing architecture emphasizes:
 - **Event-driven validation** matching the system architecture
 - **Type-safe error handling** with Result types
 - **Behavioral testing** over implementation details

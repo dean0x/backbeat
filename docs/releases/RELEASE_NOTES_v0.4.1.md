@@ -1,4 +1,4 @@
-# Backbeat v0.4.1 — CreatePipeline MCP Tool
+# Autobeat v0.4.1 — CreatePipeline MCP Tool
 
 Closes the last functional gap between CLI and MCP: pipeline creation is now available as an MCP tool.
 
@@ -49,16 +49,16 @@ Pipeline creation logic extracted from the CLI `beat pipeline` command into `Sch
 ## Installation
 
 ```bash
-npm install -g backbeat@0.4.1
+npm install -g autobeat@0.4.1
 ```
 
 Or use npx:
 ```json
 {
   "mcpServers": {
-    "backbeat": {
+    "autobeat": {
       "command": "npx",
-      "args": ["-y", "backbeat", "mcp", "start"]
+      "args": ["-y", "autobeat", "mcp", "start"]
     }
   }
 }
@@ -68,6 +68,6 @@ Or use npx:
 
 ## Links
 
-- NPM Package: https://www.npmjs.com/package/backbeat
-- Documentation: https://github.com/dean0x/backbeat/blob/main/docs/FEATURES.md
-- Issues: https://github.com/dean0x/backbeat/issues
+- NPM Package: https://www.npmjs.com/package/autobeat
+- Documentation: https://github.com/dean0x/autobeat/blob/main/docs/FEATURES.md
+- Issues: https://github.com/dean0x/autobeat/issues

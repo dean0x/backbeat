@@ -17,7 +17,7 @@ describe('validatePath', () => {
 
   beforeEach(() => {
     // Resolve symlinks (macOS /var → /private/var) so assertions match realpathSync output
-    tempDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'backbeat-validation-')));
+    tempDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'autobeat-validation-')));
   });
 
   afterEach(() => {

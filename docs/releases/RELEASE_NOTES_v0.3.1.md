@@ -147,7 +147,7 @@ e2fe6a2 perf: batch dependency resolution for 10x speedup (#10) (#26)
 This is a drop-in replacement. No migration required.
 
 ```bash
-npm install -g backbeat@0.3.1
+npm install -g autobeat@0.3.1
 ```
 
 ### Breaking Changes
@@ -161,4 +161,4 @@ None. This is a fully backward-compatible patch release.
 - [Full Changelog](../../CHANGELOG.md)
 - [Task Dependencies Documentation](../TASK-DEPENDENCIES.md)
 - [Architecture Documentation](../architecture/)
-- [GitHub Issues](https://github.com/dean0x/backbeat/issues)
+- [GitHub Issues](https://github.com/dean0x/autobeat/issues)

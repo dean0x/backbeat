@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 #
 # Cleanup orphaned test processes
-# ARCHITECTURE: Only kills processes spawned by Backbeat tests, not user's Claude instances
+# ARCHITECTURE: Only kills processes spawned by Autobeat tests, not user's Claude instances
 #
 
 set -euo pipefail
 
 echo "🧹 Cleaning up orphaned test processes..."
 
-# Only kill processes with BACKBEAT_WORKER=true environment variable
+# Only kill processes with AUTOBEAT_WORKER=true environment variable
 # This ensures we don't kill user's active Claude Code instances
 pgrep -f "claude.*--print" | while read -r pid; do
-  # Check if process has BACKBEAT_WORKER env var
-  if grep -q "BACKBEAT_WORKER=true" "/proc/$pid/environ" 2>/dev/null; then
+  # Check if process has AUTOBEAT_WORKER env var
+  if grep -q "AUTOBEAT_WORKER=true" "/proc/$pid/environ" 2>/dev/null; then
     echo "  Killing test worker PID: $pid"
     kill -TERM "$pid" 2>/dev/null || true
   fi

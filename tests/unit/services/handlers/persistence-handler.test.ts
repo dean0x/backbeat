@@ -3,7 +3,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTask, TaskId, TaskStatus } from '../../../../src/core/domain';
-import { BackbeatError, ErrorCode } from '../../../../src/core/errors';
+import { AutobeatError, ErrorCode } from '../../../../src/core/errors';
 import { InMemoryEventBus } from '../../../../src/core/events/event-bus';
 import type { TaskEnqueuer } from '../../../../src/core/interfaces';
 import { Database } from '../../../../src/implementations/database';
@@ -131,7 +131,7 @@ describe('PersistenceHandler', () => {
       const task = createTask({ prompt: 'test task' });
       await taskRepo.save(task);
 
-      const error = new BackbeatError(ErrorCode.TASK_FAILED, 'Process crashed');
+      const error = new AutobeatError(ErrorCode.TASK_FAILED, 'Process crashed');
       await eventBus.emit('TaskFailed', { taskId: task.id, error, exitCode: 1 });
       await flushEventLoop();
 
@@ -163,7 +163,7 @@ describe('PersistenceHandler', () => {
       const task = createTask({ prompt: 'test task' });
       await taskRepo.save(task);
 
-      const error = new BackbeatError(ErrorCode.TASK_TIMEOUT, 'Task exceeded timeout');
+      const error = new AutobeatError(ErrorCode.TASK_TIMEOUT, 'Task exceeded timeout');
       await eventBus.emit('TaskTimeout', { taskId: task.id, error });
       await flushEventLoop();
 

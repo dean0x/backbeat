@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea for Backbeat
+about: Suggest an idea for Autobeat
 title: '[FEATURE] '
 labels: enhancement
 assignees: ''

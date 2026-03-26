@@ -8,14 +8,14 @@
 - **Dependencies:** MCP server running, sufficient resources
 
 ## Test Description
-Verify that Backbeat can handle multiple concurrent tasks and properly manage worker pool scaling.
+Verify that Autobeat can handle multiple concurrent tasks and properly manage worker pool scaling.
 
 ## Prerequisites
 ```yaml
 preconditions:
   - At least 4GB RAM available
   - CPU usage below 50%
-  - No running backbeat processes
+  - No running autobeat processes
 ```
 
 ## Test Steps

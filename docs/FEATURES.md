@@ -1,6 +1,6 @@
-# Backbeat Features
+# Autobeat Features
 
-This document lists all features that are **currently implemented and working** in Backbeat.
+This document lists all features that are **currently implemented and working** in Autobeat.
 
 Last Updated: March 2026 (v0.8.1)
 
@@ -253,7 +253,7 @@ Last Updated: March 2026 (v0.8.1)
 - **Pluggable Adapters**: Agent registry with adapter pattern for agent lifecycle management
 - **Built-in Agents**: Claude (`claude`), OpenAI Codex (`codex`), Google Gemini (`gemini-cli`)
 - **Per-Task Selection**: Choose which agent runs each task via MCP `agent` field or CLI `--agent` flag
-- **Default Agent**: System-wide default agent configured via `beat init` or `~/.backbeat/config.json`
+- **Default Agent**: System-wide default agent configured via `beat init` or `~/.autobeat/config.json`
 - **Auth Checking**: Verify agent CLI tools are installed and authenticated before delegation
 
 ### CLI Commands

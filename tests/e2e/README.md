@@ -1,4 +1,4 @@
-# E2E Testing Framework for Backbeat
+# E2E Testing Framework for Autobeat
 
 ## Overview
 
@@ -110,7 +110,7 @@ Execute tests in priority order (P0 → P1 → P2) to ensure critical functional
 ## Troubleshooting
 
 ### Common Issues
-- **Database locks**: Clean `.backbeat/` directory
+- **Database locks**: Clean `.autobeat/` directory
 - **Orphaned processes**: Run `pkill -f beat`
 - **Stale results**: Re-run tests marked with 🔴
 

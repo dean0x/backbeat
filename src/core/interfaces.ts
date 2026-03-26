@@ -29,7 +29,7 @@ import {
   WorkerId,
   WorkerRegistration,
 } from './domain.js';
-import { BackbeatEvent, BaseEvent, EventHandler } from './events/events.js';
+import { AutobeatEvent, BaseEvent, EventHandler } from './events/events.js';
 import { Result } from './result.js';
 
 /**

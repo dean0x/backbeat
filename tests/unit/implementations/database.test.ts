@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { TaskId } from '../../../src/core/domain';
-import { BackbeatError, ErrorCode } from '../../../src/core/errors';
+import { AutobeatError, ErrorCode } from '../../../src/core/errors';
 import { Database } from '../../../src/implementations/database';
 import { TEST_COUNTS } from '../../constants';
 import { TaskFactory } from '../../fixtures/factories';
@@ -324,14 +324,14 @@ describe('Database - REAL Database Operations (In-Memory)', () => {
       expect(result.error.code).toBe(ErrorCode.SYSTEM_ERROR);
     });
 
-    it('should preserve BackbeatError types thrown inside', () => {
+    it('should preserve AutobeatError types thrown inside', () => {
       const result = db.runInTransaction(() => {
-        throw new BackbeatError(ErrorCode.TASK_NOT_FOUND, 'Task xyz not found');
+        throw new AutobeatError(ErrorCode.TASK_NOT_FOUND, 'Task xyz not found');
       });
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.error).toBeInstanceOf(BackbeatError);
+      expect(result.error).toBeInstanceOf(AutobeatError);
       expect(result.error.code).toBe(ErrorCode.TASK_NOT_FOUND);
       expect(result.error.message).toBe('Task xyz not found');
     });

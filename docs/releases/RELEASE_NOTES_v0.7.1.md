@@ -1,4 +1,4 @@
-# Backbeat v0.7.1 — Dependency Fix
+# Autobeat v0.7.1 — Dependency Fix
 
 Fixes a missing dependency that caused `beat help` (and all CLI commands using colored output) to crash when installed globally via npm.
 
@@ -13,13 +13,13 @@ Fixes a missing dependency that caused `beat help` (and all CLI commands using c
 ## Installation
 
 ```bash
-npm install -g backbeat@0.7.1
+npm install -g autobeat@0.7.1
 ```
 
 ---
 
 ## Links
 
-- NPM Package: https://www.npmjs.com/package/backbeat
-- Documentation: https://github.com/dean0x/backbeat/blob/main/docs/FEATURES.md
-- Issues: https://github.com/dean0x/backbeat/issues
+- NPM Package: https://www.npmjs.com/package/autobeat
+- Documentation: https://github.com/dean0x/autobeat/blob/main/docs/FEATURES.md
+- Issues: https://github.com/dean0x/autobeat/issues

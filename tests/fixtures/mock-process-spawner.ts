@@ -1,6 +1,6 @@
 import { ChildProcess, spawn } from 'child_process';
 import { EventEmitter } from 'events';
-import { BackbeatError } from '../../src/core/errors';
+import { AutobeatError } from '../../src/core/errors';
 import { ProcessSpawner } from '../../src/core/interfaces';
 import { err, ok, Result } from '../../src/core/result';
 
@@ -16,7 +16,7 @@ export class MockProcessSpawner implements ProcessSpawner {
 
   spawn(prompt: string, workingDirectory: string, taskId?: string): Result<{ process: ChildProcess; pid: number }> {
     if (this.shouldFail) {
-      return err(new BackbeatError(this.failureMessage, 'SPAWN_FAILED'));
+      return err(new AutobeatError(this.failureMessage, 'SPAWN_FAILED'));
     }
 
     // Simulate Claude command execution
@@ -192,7 +192,7 @@ class MockChildProcess extends EventEmitter {
     } else if (this.prompt.includes('pwd')) {
       // Simulate pwd command
       this.timeout = setTimeout(() => {
-        this.stdout.emit('data', Buffer.from('/workspace/backbeat\n'));
+        this.stdout.emit('data', Buffer.from('/workspace/autobeat\n'));
         this.exitCode = 0;
         this.emit('exit', 0, null);
       }, this.executionDelay);

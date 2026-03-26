@@ -131,8 +131,8 @@ export function loadConfiguration(): Configuration {
     envConfig.retryInitialDelayMs = parseEnvNumber(process.env.RETRY_INITIAL_DELAY_MS, 0);
   if (process.env.RETRY_MAX_DELAY_MS) envConfig.retryMaxDelayMs = parseEnvNumber(process.env.RETRY_MAX_DELAY_MS, 0);
   if (process.env.TASK_RETENTION_DAYS) envConfig.taskRetentionDays = parseEnvNumber(process.env.TASK_RETENTION_DAYS, 0);
-  if (process.env.BACKBEAT_DEFAULT_AGENT && isAgentProvider(process.env.BACKBEAT_DEFAULT_AGENT))
-    envConfig.defaultAgent = process.env.BACKBEAT_DEFAULT_AGENT;
+  if (process.env.AUTOBEAT_DEFAULT_AGENT && isAgentProvider(process.env.AUTOBEAT_DEFAULT_AGENT))
+    envConfig.defaultAgent = process.env.AUTOBEAT_DEFAULT_AGENT;
 
   // Layer 2: Config file values (lower priority than env vars)
   const fileConfig = loadConfigFile();
@@ -151,7 +151,7 @@ export function loadConfiguration(): Configuration {
   // Try env-only so valid env vars aren't dropped by a corrupt config file.
   const errors = parseResult.error.errors.map((e) => `  - ${e.path.join('.')}: ${e.message}`).join('\n');
   console.warn(
-    `[Backbeat] Configuration file validation failed, falling back to environment variables and defaults:\n${errors}`,
+    `[Autobeat] Configuration file validation failed, falling back to environment variables and defaults:\n${errors}`,
   );
 
   const envOnlyResult = ConfigurationSchema.safeParse(envConfig);
@@ -164,16 +164,16 @@ export function loadConfiguration(): Configuration {
 }
 
 // ============================================================================
-// Config File Persistence (~/.backbeat/config.json)
+// Config File Persistence (~/.autobeat/config.json)
 // ============================================================================
 
 type ConfigWriteResult = { ok: true } | { ok: false; error: string };
 
 // Display path for CLI (always shows real home path)
-export const CONFIG_FILE_PATH = path.join(homedir(), '.backbeat', 'config.json');
+export const CONFIG_FILE_PATH = path.join(homedir(), '.autobeat', 'config.json');
 
 // Internal mutable paths — overridable via _testSetConfigDir() for test isolation
-let _configDir = path.join(homedir(), '.backbeat');
+let _configDir = path.join(homedir(), '.autobeat');
 let _configFilePath = CONFIG_FILE_PATH;
 
 /** Test helper: redirect config reads/writes to a temp directory. Returns restore function. */
@@ -208,7 +208,7 @@ export function loadConfigFile(): Record<string, unknown> {
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
     return parsed as Record<string, unknown>;
   } catch {
-    console.warn(`[Backbeat] Failed to parse config file, ignoring: ${_configFilePath}`);
+    console.warn(`[Autobeat] Failed to parse config file, ignoring: ${_configFilePath}`);
     return {};
   }
 }

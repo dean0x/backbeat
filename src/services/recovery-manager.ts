@@ -4,7 +4,7 @@
  */
 
 import { isTerminalState, Task, TaskStatus } from '../core/domain.js';
-import { BackbeatError, ErrorCode } from '../core/errors.js';
+import { AutobeatError, ErrorCode } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
 import {
   DependencyRepository,
@@ -137,7 +137,7 @@ export class RecoveryManager {
           // Emit TaskFailed so DependencyHandler resolves deps for downstream tasks
           const failedEmitResult = await this.eventBus.emit('TaskFailed', {
             taskId: reg.taskId,
-            error: new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Worker process died (dead PID detected)'),
+            error: new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Worker process died (dead PID detected)'),
             exitCode: -1,
           });
           if (!failedEmitResult.ok) {
@@ -292,7 +292,7 @@ export class RecoveryManager {
         // Emit TaskFailed so DependencyHandler resolves deps for downstream tasks
         const failedEmitResult = await this.eventBus.emit('TaskFailed', {
           taskId: task.id,
-          error: new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Worker process crashed during execution'),
+          error: new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Worker process crashed during execution'),
           exitCode: -1,
         });
         if (!failedEmitResult.ok) {

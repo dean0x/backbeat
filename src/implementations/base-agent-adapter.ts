@@ -15,7 +15,7 @@
 import { ChildProcess, spawn } from 'child_process';
 import { AGENT_AUTH, AgentAdapter, AgentAuthConfig, AgentProvider, isCommandInPath } from '../core/agents.js';
 import { Configuration, loadAgentConfig } from '../core/configuration.js';
-import { agentMisconfigured, BackbeatError, ErrorCode, processSpawnFailed } from '../core/errors.js';
+import { AutobeatError, agentMisconfigured, ErrorCode, processSpawnFailed } from '../core/errors.js';
 import { err, ok, Result, tryCatch } from '../core/result.js';
 
 export abstract class BaseAgentAdapter implements AgentAdapter {
@@ -117,8 +117,8 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
         ...this.additionalEnv,
         ...cleanEnv,
         ...authResult.value.injectedEnv,
-        BACKBEAT_WORKER: 'true',
-        ...(taskId && { BACKBEAT_TASK_ID: taskId }),
+        AUTOBEAT_WORKER: 'true',
+        ...(taskId && { AUTOBEAT_TASK_ID: taskId }),
       };
 
       const child = spawn(this.command, [...args], {
@@ -156,7 +156,7 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
         this.killTimeouts.set(pid, timeoutId);
       },
       (error) =>
-        new BackbeatError(ErrorCode.PROCESS_KILL_FAILED, `Failed to kill process ${pid}: ${error}`, { pid, error }),
+        new AutobeatError(ErrorCode.PROCESS_KILL_FAILED, `Failed to kill process ${pid}: ${error}`, { pid, error }),
     );
   }
 

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentRegistry } from '../../../src/core/agents';
 import type { Task } from '../../../src/core/domain';
 import { TaskId, WorkerId } from '../../../src/core/domain';
-import { BackbeatError, ErrorCode } from '../../../src/core/errors';
+import { AutobeatError, ErrorCode } from '../../../src/core/errors';
 import type { EventBus } from '../../../src/core/events/event-bus';
 import type { Logger, OutputCapture, ProcessSpawner, ResourceMonitor } from '../../../src/core/interfaces';
 import { err, ok } from '../../../src/core/result';
@@ -138,7 +138,7 @@ describe('EventDrivenWorkerPool', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect((result.error as BackbeatError).code).toBe(ErrorCode.WORKER_SPAWN_FAILED);
+      expect((result.error as AutobeatError).code).toBe(ErrorCode.WORKER_SPAWN_FAILED);
       expect(result.error.message).toContain('no agent assigned');
     });
 
@@ -167,12 +167,12 @@ describe('EventDrivenWorkerPool', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.error).toBeInstanceOf(BackbeatError);
-      expect((result.error as BackbeatError).code).toBe(ErrorCode.INSUFFICIENT_RESOURCES);
+      expect(result.error).toBeInstanceOf(AutobeatError);
+      expect((result.error as AutobeatError).code).toBe(ErrorCode.INSUFFICIENT_RESOURCES);
     });
 
     it('should return error when canSpawnWorker returns err', async () => {
-      const monitorError = new BackbeatError(ErrorCode.RESOURCE_MONITORING_FAILED, 'monitor broken');
+      const monitorError = new AutobeatError(ErrorCode.RESOURCE_MONITORING_FAILED, 'monitor broken');
       (monitor.canSpawnWorker as ReturnType<typeof vi.fn>).mockResolvedValue(err(monitorError));
       const task = buildTask();
 
@@ -184,7 +184,7 @@ describe('EventDrivenWorkerPool', () => {
     });
 
     it('should propagate agent registry errors without wrapping', async () => {
-      const registryError = new BackbeatError(ErrorCode.AGENT_NOT_FOUND, "Agent 'unknown' not found");
+      const registryError = new AutobeatError(ErrorCode.AGENT_NOT_FOUND, "Agent 'unknown' not found");
       // Replace registry with one that returns an error
       const failRegistry = {
         get: vi.fn().mockReturnValue(err(registryError)),
@@ -208,11 +208,11 @@ describe('EventDrivenWorkerPool', () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error).toBe(registryError);
-      expect((result.error as BackbeatError).code).toBe(ErrorCode.AGENT_NOT_FOUND);
+      expect((result.error as AutobeatError).code).toBe(ErrorCode.AGENT_NOT_FOUND);
     });
 
     it('should propagate adapter spawn errors without wrapping', async () => {
-      const spawnError = new BackbeatError(
+      const spawnError = new AutobeatError(
         ErrorCode.AGENT_MISCONFIGURED,
         "Agent 'claude' is misconfigured: CLI not found",
       );
@@ -239,7 +239,7 @@ describe('EventDrivenWorkerPool', () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error).toBe(spawnError);
-      expect((result.error as BackbeatError).code).toBe(ErrorCode.AGENT_MISCONFIGURED);
+      expect((result.error as AutobeatError).code).toBe(ErrorCode.AGENT_MISCONFIGURED);
     });
 
     it('should use task.workingDirectory when provided', async () => {
@@ -309,7 +309,7 @@ describe('EventDrivenWorkerPool', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect((result.error as BackbeatError).code).toBe(ErrorCode.WORKER_NOT_FOUND);
+      expect((result.error as AutobeatError).code).toBe(ErrorCode.WORKER_NOT_FOUND);
     });
 
     it('should kill process with SIGTERM', async () => {
@@ -689,7 +689,7 @@ describe('EventDrivenWorkerPool', () => {
     });
 
     it('should return error when workerRepository.register fails (UNIQUE constraint)', async () => {
-      const registrationError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'UNIQUE constraint failed: workers.task_id');
+      const registrationError = new AutobeatError(ErrorCode.SYSTEM_ERROR, 'UNIQUE constraint failed: workers.task_id');
       workerRepository.register.mockReturnValue(err(registrationError));
 
       const task = buildTask();

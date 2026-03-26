@@ -13,7 +13,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Task } from '../../../src/core/domain';
 import { TaskId, TaskStatus, WorkerId } from '../../../src/core/domain';
-import { BackbeatError, ErrorCode } from '../../../src/core/errors';
+import { AutobeatError, ErrorCode } from '../../../src/core/errors';
 import type { EventBus } from '../../../src/core/events/event-bus';
 import type {
   DependencyRepository,
@@ -309,7 +309,7 @@ describe('RecoveryManager', () => {
         startedAt: Date.now(),
       };
       workerRepo.findAll.mockReturnValue(ok([deadWorker]));
-      const findError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'DB read failed');
+      const findError = new AutobeatError(ErrorCode.SYSTEM_ERROR, 'DB read failed');
       repo.findById.mockResolvedValue(err(findError));
       setupFindByStatus([], []);
 
@@ -419,7 +419,7 @@ describe('RecoveryManager', () => {
     it('should enqueue conservatively on dependency check failure', async () => {
       const task = buildQueuedTask('dep-error');
       setupFindByStatus([task], []);
-      const depError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'DB read failed');
+      const depError = new AutobeatError(ErrorCode.SYSTEM_ERROR, 'DB read failed');
       dependencyRepo.isBlocked.mockResolvedValue(err(depError));
 
       const result = await manager.recover();
@@ -456,7 +456,7 @@ describe('RecoveryManager', () => {
       const task2 = buildQueuedTask('succeed-enqueue');
       setupFindByStatus([task1, task2], []);
 
-      const enqueueError = new BackbeatError(ErrorCode.QUEUE_FULL, 'Queue is full');
+      const enqueueError = new AutobeatError(ErrorCode.QUEUE_FULL, 'Queue is full');
       queue.enqueue.mockReturnValueOnce(err(enqueueError)).mockReturnValueOnce(ok(undefined));
 
       const result = await manager.recover();
@@ -574,7 +574,7 @@ describe('RecoveryManager', () => {
       const task = buildRunningTask('crashed-update-fail');
       setupFindByStatus([], [task]);
       // Default: findByTaskId returns ok(null) — no worker
-      const updateError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'DB write failed');
+      const updateError = new AutobeatError(ErrorCode.SYSTEM_ERROR, 'DB write failed');
       repo.update.mockResolvedValue(err(updateError));
 
       await manager.recover();
@@ -633,7 +633,7 @@ describe('RecoveryManager', () => {
       repo.findById.mockResolvedValue(ok(buildRunningTask('task-dead-fail')));
       setupFindByStatus([], []);
 
-      const emitError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Event bus error');
+      const emitError = new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Event bus error');
       // First emit call is TaskFailed for dead worker — make it fail
       eventBus.emit.mockResolvedValueOnce(err(emitError));
 
@@ -656,7 +656,7 @@ describe('RecoveryManager', () => {
       setupFindByStatus([], [task]);
       workerRepo.findByTaskId.mockReturnValue(ok(null));
 
-      const emitError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Event bus error');
+      const emitError = new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Event bus error');
       // TaskFailed emit for crashed running task — make it fail
       eventBus.emit.mockResolvedValueOnce(err(emitError));
 
@@ -696,7 +696,7 @@ describe('RecoveryManager', () => {
 
   describe('Error propagation', () => {
     it('should return error when findByStatus for QUEUED tasks fails', async () => {
-      const findError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'DB read failed');
+      const findError = new AutobeatError(ErrorCode.SYSTEM_ERROR, 'DB read failed');
       repo.findByStatus.mockResolvedValueOnce(err(findError));
 
       const result = await manager.recover();
@@ -708,7 +708,7 @@ describe('RecoveryManager', () => {
     });
 
     it('should return error when findByStatus for RUNNING tasks fails', async () => {
-      const findError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'DB read failed');
+      const findError = new AutobeatError(ErrorCode.SYSTEM_ERROR, 'DB read failed');
       repo.findByStatus
         .mockResolvedValueOnce(ok([])) // QUEUED succeeds
         .mockResolvedValueOnce(err(findError)); // RUNNING fails
@@ -811,7 +811,7 @@ describe('RecoveryManager', () => {
     it('should log TaskQueued event emit failure but still count task as recovered', async () => {
       const task = buildQueuedTask('event-fail');
       setupFindByStatus([task], []);
-      const emitError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Event bus error');
+      const emitError = new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Event bus error');
 
       // TaskQueued fails
       eventBus.emit.mockResolvedValueOnce(err(emitError));

@@ -37,7 +37,7 @@
   <!-- Install block -->
   <rect x="100" y="420" width="380" height="48" rx="10" fill="#14141f" stroke="#1e1e2e" stroke-width="1" />
   <text x="120" y="451" font-family="'SF Mono', 'Fira Code', monospace" font-size="18" fill="#6366f1">$</text>
-  <text x="142" y="451" font-family="'SF Mono', 'Fira Code', monospace" font-size="18" fill="#e8e8f0">npx -y backbeat mcp start</text>
+  <text x="142" y="451" font-family="'SF Mono', 'Fira Code', monospace" font-size="18" fill="#e8e8f0">npx -y autobeat mcp start</text>
 
   <!-- Feature pills -->
   <rect x="100" y="500" width="118" height="30" rx="6" fill="#14141f" stroke="#1e1e2e" stroke-width="1" />

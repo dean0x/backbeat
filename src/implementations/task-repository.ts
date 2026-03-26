@@ -7,7 +7,7 @@ import SQLite from 'better-sqlite3';
 import { z } from 'zod';
 import { AGENT_PROVIDERS_TUPLE, AgentProvider } from '../core/agents.js';
 import { Priority, Task, TaskId, TaskStatus, WorkerId } from '../core/domain.js';
-import { BackbeatError, ErrorCode, operationErrorHandler } from '../core/errors.js';
+import { AutobeatError, ErrorCode, operationErrorHandler } from '../core/errors.js';
 import { SyncTaskOperations, TaskRepository } from '../core/interfaces.js';
 import { err, ok, Result, tryCatchAsync } from '../core/result.js';
 import { Database } from './database.js';
@@ -210,7 +210,7 @@ export class SQLiteTaskRepository implements TaskRepository, SyncTaskOperations 
     }
 
     if (!existingResult.value) {
-      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Task ${taskId} not found`));
+      return err(new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Task ${taskId} not found`));
     }
 
     const updatedTask = { ...existingResult.value, ...update };
@@ -241,7 +241,7 @@ export class SQLiteTaskRepository implements TaskRepository, SyncTaskOperations 
   updateSync(taskId: TaskId, update: Partial<Task>): void {
     const existing = this.findByIdSync(taskId);
     if (!existing) {
-      throw new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Task ${taskId} not found`);
+      throw new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Task ${taskId} not found`);
     }
     const updatedTask = { ...existing, ...update };
     this.updateStmt.run(this.toDbFormat(updatedTask));

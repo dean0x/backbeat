@@ -1,10 +1,10 @@
-# Backbeat Setup Guide
+# Autobeat Setup Guide
 
 ## Quick Setup (2 minutes)
 
-### Step 1: Build Backbeat
+### Step 1: Build Autobeat
 ```bash
-cd /workspace/backbeat
+cd /workspace/autobeat
 npm run build
 ```
 
@@ -26,9 +26,9 @@ cat ~/.config/claude/mcp_servers.json
 ```json
 {
   "mcpServers": {
-    "backbeat": {
+    "autobeat": {
       "command": "node",
-      "args": ["/workspace/backbeat/dist/index.js"],
+      "args": ["/workspace/autobeat/dist/index.js"],
       "env": {
         "MOCK_MODE": "true"
       }
@@ -40,7 +40,7 @@ cat ~/.config/claude/mcp_servers.json
 3. If it doesn't exist, create it:
 ```bash
 mkdir -p ~/.config/claude
-cp /workspace/backbeat/config/mcp-config-ready.json ~/.config/claude/mcp_servers.json
+cp /workspace/autobeat/config/mcp-config-ready.json ~/.config/claude/mcp_servers.json
 ```
 
 ### Step 3: Start a New Coding Session
@@ -51,7 +51,7 @@ cp /workspace/backbeat/config/mcp-config-ready.json ~/.config/claude/mcp_servers
 exit
 
 # Start fresh session
-claude "Let's test Backbeat MCP tools"
+claude "Let's test Autobeat MCP tools"
 ```
 
 ### Step 4: Test Integration
@@ -62,7 +62,7 @@ In the new coding session, try:
    > "What MCP tools are available?"
 
 2. **Test delegation**:
-   > "Use DelegateTask to run: echo 'Backbeat is working!'"
+   > "Use DelegateTask to run: echo 'Autobeat is working!'"
 
 3. **Check status**:
    > "Use TaskStatus to check the current task"
@@ -79,14 +79,14 @@ When working correctly, you should see:
 ### "Tools not found"
 - Ensure NEW session (not --continue)
 - Check config exists: `ls ~/.config/claude/mcp_servers.json`
-- Verify path is correct: `/workspace/backbeat/dist/index.js`
+- Verify path is correct: `/workspace/autobeat/dist/index.js`
 
 ### "Server won't start"
 ```bash
 # Test directly
-MOCK_MODE=true node /workspace/backbeat/dist/index.js
+MOCK_MODE=true node /workspace/autobeat/dist/index.js
 
-# Should see: "Backbeat MCP Server running"
+# Should see: "Autobeat MCP Server running"
 ```
 
 ### "Build errors"
@@ -108,7 +108,7 @@ To use with an actual agent CLI (not mock):
 
 ## What You Can Do Now
 
-With Backbeat running, you can:
+With Autobeat running, you can:
 
 1. **Parallel Development**:
    > "Use DelegateTask to run: Update all test files while I work on the API"
@@ -134,7 +134,7 @@ ls -la ~/.config/claude/mcp_servers.json
 cat ~/.config/claude/mcp_servers.json
 
 # Test server directly
-MOCK_MODE=true timeout 5 node /workspace/backbeat/dist/index.js
+MOCK_MODE=true timeout 5 node /workspace/autobeat/dist/index.js
 
 # Run full validation
 npm run validate
@@ -142,7 +142,7 @@ npm run validate
 
 ## Success!
 
-Once you see the tools in your MCP client, Backbeat is ready!
+Once you see the tools in your MCP client, Autobeat is ready!
 You can now delegate tasks to background AI agent instances.
 
 ---

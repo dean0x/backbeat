@@ -82,7 +82,7 @@ beat run "curl http://nonexistent.domain.local"
 ### Step 8: Verify Database Consistency
 **Action:** Check database state
 ```bash
-sqlite3 .backbeat/backbeat.db "SELECT status, COUNT(*) FROM tasks GROUP BY status"
+sqlite3 .autobeat/autobeat.db "SELECT status, COUNT(*) FROM tasks GROUP BY status"
 ```
 **Expected:** Correct task counts
 **Verify:** Failed tasks properly recorded

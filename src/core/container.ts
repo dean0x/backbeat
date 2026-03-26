@@ -3,7 +3,7 @@
  * Manages service lifecycle and dependencies
  */
 
-import { BackbeatError, ErrorCode } from './errors.js';
+import { AutobeatError, ErrorCode } from './errors.js';
 import { err, ok, Result } from './result.js';
 
 type Factory<T> = () => T | Promise<T>;
@@ -32,7 +32,7 @@ export class Container {
    */
   registerSingleton<T>(name: string, factory: Factory<T>): Result<void> {
     if (this.services.has(name)) {
-      return err(new BackbeatError(ErrorCode.CONFIGURATION_ERROR, `Service ${name} already registered`));
+      return err(new AutobeatError(ErrorCode.CONFIGURATION_ERROR, `Service ${name} already registered`));
     }
 
     this.services.set(name, { factory, singleton: true });
@@ -44,7 +44,7 @@ export class Container {
    */
   registerTransient<T>(name: string, factory: Factory<T>): Result<void> {
     if (this.services.has(name)) {
-      return err(new BackbeatError(ErrorCode.CONFIGURATION_ERROR, `Service ${name} already registered`));
+      return err(new AutobeatError(ErrorCode.CONFIGURATION_ERROR, `Service ${name} already registered`));
     }
 
     this.services.set(name, { factory, singleton: false });
@@ -56,7 +56,7 @@ export class Container {
    */
   registerValue<T>(name: string, value: T): Result<void> {
     if (this.services.has(name)) {
-      return err(new BackbeatError(ErrorCode.CONFIGURATION_ERROR, `Service ${name} already registered`));
+      return err(new AutobeatError(ErrorCode.CONFIGURATION_ERROR, `Service ${name} already registered`));
     }
 
     this.services.set(name, {
@@ -74,12 +74,12 @@ export class Container {
     const service = this.services.get(name);
 
     if (!service) {
-      return err(new BackbeatError(ErrorCode.CONFIGURATION_ERROR, `Service ${name} not registered`));
+      return err(new AutobeatError(ErrorCode.CONFIGURATION_ERROR, `Service ${name} not registered`));
     }
 
     // Check for circular dependencies
     if (this.resolving.has(name)) {
-      return err(new BackbeatError(ErrorCode.CONFIGURATION_ERROR, `Circular dependency detected for ${name}`));
+      return err(new AutobeatError(ErrorCode.CONFIGURATION_ERROR, `Circular dependency detected for ${name}`));
     }
 
     try {
@@ -103,7 +103,7 @@ export class Container {
       return ok(instance);
     } catch (error) {
       this.resolving.delete(name);
-      return err(new BackbeatError(ErrorCode.SYSTEM_ERROR, `Failed to resolve service ${name}: ${error}`));
+      return err(new AutobeatError(ErrorCode.SYSTEM_ERROR, `Failed to resolve service ${name}: ${error}`));
     }
   }
 
@@ -114,7 +114,7 @@ export class Container {
     const service = this.services.get(name);
 
     if (!service) {
-      return err(new BackbeatError(ErrorCode.CONFIGURATION_ERROR, `Service ${name} not registered`));
+      return err(new AutobeatError(ErrorCode.CONFIGURATION_ERROR, `Service ${name} not registered`));
     }
 
     // If singleton and already created, return it
@@ -127,7 +127,7 @@ export class Container {
       const instance = service.factory();
       if (instance instanceof Promise) {
         return err(
-          new BackbeatError(ErrorCode.CONFIGURATION_ERROR, `Service ${name} has async factory, use resolve() instead`),
+          new AutobeatError(ErrorCode.CONFIGURATION_ERROR, `Service ${name} has async factory, use resolve() instead`),
         );
       }
 
@@ -137,7 +137,7 @@ export class Container {
 
       return ok(instance as T);
     } catch (error) {
-      return err(new BackbeatError(ErrorCode.SYSTEM_ERROR, `Failed to get service ${name}: ${error}`));
+      return err(new AutobeatError(ErrorCode.SYSTEM_ERROR, `Failed to get service ${name}: ${error}`));
     }
   }
 

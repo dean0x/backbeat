@@ -1,17 +1,17 @@
-# Contributing to Backbeat
+# Contributing to Autobeat
 
 ## Development Setup
 
 ```bash
-git clone https://github.com/dean0x/backbeat.git
-cd backbeat
+git clone https://github.com/dean0x/autobeat.git
+cd autobeat
 npm install
 npm run build
 ```
 
 ## Running Tests
 
-Backbeat uses [Vitest](https://vitest.dev/) with grouped test commands. The full suite is memory-intensive, so tests are split into safe groups:
+Autobeat uses [Vitest](https://vitest.dev/) with grouped test commands. The full suite is memory-intensive, so tests are split into safe groups:
 
 ```bash
 # Safe to run individually
@@ -45,7 +45,7 @@ Biome enforces `noExplicitAny` as an error in `src/` and a warning in `tests/`. 
 
 ## Architecture
 
-Backbeat uses an event-driven architecture. Key rules:
+Autobeat uses an event-driven architecture. Key rules:
 
 - **All state changes go through EventBus** - no direct repository access from services
 - **Commands** use fire-and-forget `emit()`

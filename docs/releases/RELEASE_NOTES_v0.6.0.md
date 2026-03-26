@@ -1,4 +1,4 @@
-# Backbeat v0.6.0 — Architectural Simplification + Scheduled Pipelines
+# Autobeat v0.6.0 — Architectural Simplification + Scheduled Pipelines
 
 v0.6.0 is a dual-theme release: **architectural simplification** (hybrid event model, SQLite worker coordination, ReadOnlyContext, atomic transactions) and **scheduled pipelines** (recurring/one-time multi-step pipelines with dependency failure cascade). Also includes bug fixes and tech debt cleanup across 8 PRs.
 
@@ -161,16 +161,16 @@ EventBus reduced from 42 to 25 events. Query operations (task status, logs, list
 ## Installation
 
 ```bash
-npm install -g backbeat@0.6.0
+npm install -g autobeat@0.6.0
 ```
 
 Or use npx:
 ```json
 {
   "mcpServers": {
-    "backbeat": {
+    "autobeat": {
       "command": "npx",
-      "args": ["-y", "backbeat", "mcp", "start"]
+      "args": ["-y", "autobeat", "mcp", "start"]
     }
   }
 }
@@ -180,6 +180,6 @@ Or use npx:
 
 ## Links
 
-- NPM Package: https://www.npmjs.com/package/backbeat
-- Documentation: https://github.com/dean0x/backbeat/blob/main/docs/FEATURES.md
-- Issues: https://github.com/dean0x/backbeat/issues
+- NPM Package: https://www.npmjs.com/package/autobeat
+- Documentation: https://github.com/dean0x/autobeat/blob/main/docs/FEATURES.md
+- Issues: https://github.com/dean0x/autobeat/issues

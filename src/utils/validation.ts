@@ -5,7 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { BackbeatError, ErrorCode } from '../core/errors.js';
+import { AutobeatError, ErrorCode } from '../core/errors.js';
 import { err, ok, Result } from '../core/result.js';
 
 /**
@@ -32,7 +32,7 @@ export function validatePath(inputPath: string, baseDir?: string, mustExist = fa
     try {
       resolvedBase = fs.realpathSync(base);
     } catch (error) {
-      return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Base directory does not exist: ${base}`));
+      return err(new AutobeatError(ErrorCode.INVALID_INPUT, `Base directory does not exist: ${base}`));
     }
 
     // First resolve relative path
@@ -40,7 +40,7 @@ export function validatePath(inputPath: string, baseDir?: string, mustExist = fa
 
     // Check if path exists (optional)
     if (mustExist && !fs.existsSync(absolutePath)) {
-      return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Path does not exist: ${inputPath}`));
+      return err(new AutobeatError(ErrorCode.INVALID_INPUT, `Path does not exist: ${inputPath}`));
     }
 
     // SECURITY: Resolve real path if it exists, otherwise validate the resolved path
@@ -50,7 +50,7 @@ export function validatePath(inputPath: string, baseDir?: string, mustExist = fa
         resolvedPath = fs.realpathSync(absolutePath);
       } catch (error) {
         return err(
-          new BackbeatError(
+          new AutobeatError(
             ErrorCode.INVALID_INPUT,
             `Cannot resolve path: ${error instanceof Error ? error.message : String(error)}`,
           ),
@@ -66,7 +66,7 @@ export function validatePath(inputPath: string, baseDir?: string, mustExist = fa
           resolvedPath = path.join(resolvedParent, basename);
         } catch (error) {
           return err(
-            new BackbeatError(
+            new AutobeatError(
               ErrorCode.INVALID_INPUT,
               `Cannot resolve parent directory: ${error instanceof Error ? error.message : String(error)}`,
             ),
@@ -82,7 +82,7 @@ export function validatePath(inputPath: string, baseDir?: string, mustExist = fa
     // This catches symlink attacks where a symlink points outside the base
     if (!resolvedPath.startsWith(resolvedBase + path.sep) && resolvedPath !== resolvedBase) {
       return err(
-        new BackbeatError(
+        new AutobeatError(
           ErrorCode.INVALID_INPUT,
           `Path traversal detected: ${inputPath} resolves to ${resolvedPath} which is outside of ${resolvedBase}`,
         ),
@@ -92,7 +92,7 @@ export function validatePath(inputPath: string, baseDir?: string, mustExist = fa
     return ok(resolvedPath);
   } catch (error) {
     return err(
-      new BackbeatError(
+      new AutobeatError(
         ErrorCode.INVALID_INPUT,
         `Invalid path: ${error instanceof Error ? error.message : String(error)}`,
       ),
@@ -111,11 +111,11 @@ export function validateBufferSize(size: number): Result<number> {
   const MAX_BUFFER = 1073741824; // 1GB
 
   if (isNaN(size) || size < MIN_BUFFER) {
-    return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Buffer size must be at least ${MIN_BUFFER} bytes`));
+    return err(new AutobeatError(ErrorCode.INVALID_INPUT, `Buffer size must be at least ${MIN_BUFFER} bytes`));
   }
 
   if (size > MAX_BUFFER) {
-    return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Buffer size cannot exceed ${MAX_BUFFER} bytes (1GB)`));
+    return err(new AutobeatError(ErrorCode.INVALID_INPUT, `Buffer size cannot exceed ${MAX_BUFFER} bytes (1GB)`));
   }
 
   return ok(size);
@@ -132,11 +132,11 @@ export function validateTimeout(timeout: number): Result<number> {
   const MAX_TIMEOUT = 86400000; // 24 hours
 
   if (isNaN(timeout) || timeout < MIN_TIMEOUT) {
-    return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Timeout must be at least ${MIN_TIMEOUT}ms`));
+    return err(new AutobeatError(ErrorCode.INVALID_INPUT, `Timeout must be at least ${MIN_TIMEOUT}ms`));
   }
 
   if (timeout > MAX_TIMEOUT) {
-    return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Timeout cannot exceed ${MAX_TIMEOUT}ms (24 hours)`));
+    return err(new AutobeatError(ErrorCode.INVALID_INPUT, `Timeout cannot exceed ${MAX_TIMEOUT}ms (24 hours)`));
   }
 
   return ok(timeout);

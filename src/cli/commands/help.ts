@@ -12,7 +12,7 @@ export function showHelp(dirname: string): void {
   const pkg = JSON.parse(readFileSync(path.join(dirname, '..', 'package.json'), 'utf-8'));
   const v = pkg.version ?? '0.0.0';
 
-  stdout(`${bold(`Backbeat v${v}`)} ${cyan('Task Delegation MCP Server')}
+  stdout(`${bold(`Autobeat v${v}`)} ${cyan('Task Delegation MCP Server')}
 
 ${bold('Usage:')}
   beat <command> [options...]
@@ -95,10 +95,11 @@ ${bold('Loop Commands:')}
 
 ${bold('Configuration:')}
   ${cyan('config show')}                Show current configuration (resolved values)
-  ${cyan('config set')} <key> <value>   Set a config value (persisted to ~/.backbeat/config.json)
+  ${cyan('config set')} <key> <value>   Set a config value (persisted to ~/.autobeat/config.json)
   ${cyan('config reset')} <key>         Remove a key from config file (revert to default)
   ${cyan('config path')}                Print config file location
 
+  ${cyan('migrate')}                    Migrate from backbeat to autobeat (data, config, MCP)
   ${cyan('help')}                       Show this help message
 
 ${bold('Examples:')}
@@ -129,5 +130,5 @@ ${bold('Examples:')}
   beat config set timeout 300000
   beat config reset timeout
 
-Repository: https://github.com/dean0x/backbeat`);
+Repository: https://github.com/dean0x/autobeat`);
 }

@@ -17,7 +17,7 @@ describe('Agent Config Storage', () => {
   let restore: () => void;
 
   beforeEach(() => {
-    testDir = path.join(tmpdir(), `backbeat-agent-config-test-${Date.now()}`);
+    testDir = path.join(tmpdir(), `autobeat-agent-config-test-${Date.now()}`);
     mkdirSync(testDir, { recursive: true });
     restore = _testSetConfigDir(testDir);
   });

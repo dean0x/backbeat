@@ -5,7 +5,7 @@
 
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { BackbeatError, ErrorCode } from '../core/errors.js';
+import { AutobeatError, ErrorCode } from '../core/errors.js';
 import { err, ok, Result } from '../core/result.js';
 
 const execFileAsync = promisify(execFile);
@@ -25,32 +25,32 @@ function isTimeoutError(error: unknown): boolean {
  *
  * @returns Result<void> - ok if valid, err with descriptive message if invalid
  */
-export function validateGitRefName(name: string, label = 'branch'): Result<void, BackbeatError> {
+export function validateGitRefName(name: string, label = 'branch'): Result<void, AutobeatError> {
   if (!name || name.trim().length === 0) {
-    return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not be empty`));
+    return err(new AutobeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not be empty`));
   }
 
   // Prevent argument injection: names starting with '-' are interpreted as git flags
   if (name.startsWith('-')) {
-    return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not start with '-': ${name}`));
+    return err(new AutobeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not start with '-': ${name}`));
   }
 
   // git-check-ref-format disallows '..' (directory traversal)
   if (name.includes('..')) {
-    return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not contain '..': ${name}`));
+    return err(new AutobeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not contain '..': ${name}`));
   }
 
   // Reject control characters (ASCII 0x00-0x1F and 0x7F)
   if (/[\x00-\x1f\x7f]/.test(name)) {
     return err(
-      new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not contain control characters: ${name}`),
+      new AutobeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not contain control characters: ${name}`),
     );
   }
 
   // git-check-ref-format disallows space, tilde, caret, colon, backslash
   if (/[\s~^:\\]/.test(name)) {
     return err(
-      new BackbeatError(
+      new AutobeatError(
         ErrorCode.INVALID_INPUT,
         `Git ${label} name contains invalid characters (space, ~, ^, :, or \\): ${name}`,
       ),
@@ -59,30 +59,30 @@ export function validateGitRefName(name: string, label = 'branch'): Result<void,
 
   // git-check-ref-format disallows '@{' (reflog syntax)
   if (name.includes('@{')) {
-    return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not contain '@{': ${name}`));
+    return err(new AutobeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not contain '@{': ${name}`));
   }
 
   // git-check-ref-format disallows trailing '.'
   if (name.endsWith('.')) {
-    return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not end with '.': ${name}`));
+    return err(new AutobeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not end with '.': ${name}`));
   }
 
   // git-check-ref-format disallows '.lock' suffix
   if (name.endsWith('.lock')) {
-    return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not end with '.lock': ${name}`));
+    return err(new AutobeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not end with '.lock': ${name}`));
   }
 
   // git-check-ref-format disallows glob characters ?, *, [
   if (/[?*\[]/.test(name)) {
     return err(
-      new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name contains glob characters (?, *, or [): ${name}`),
+      new AutobeatError(ErrorCode.INVALID_INPUT, `Git ${label} name contains glob characters (?, *, or [): ${name}`),
     );
   }
 
   // git-check-ref-format disallows consecutive slashes '//'
   if (name.includes('//')) {
     return err(
-      new BackbeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not contain consecutive slashes: ${name}`),
+      new AutobeatError(ErrorCode.INVALID_INPUT, `Git ${label} name must not contain consecutive slashes: ${name}`),
     );
   }
 
@@ -91,7 +91,7 @@ export function validateGitRefName(name: string, label = 'branch'): Result<void,
   for (const component of components) {
     if (component.startsWith('.')) {
       return err(
-        new BackbeatError(
+        new AutobeatError(
           ErrorCode.INVALID_INPUT,
           `Git ${label} name must not have path components starting with '.': ${name}`,
         ),
@@ -116,7 +116,7 @@ export interface GitState {
  * @param workingDirectory - Absolute path to the working directory
  * @returns GitState if in a git repo, null if not, or error on unexpected failure
  */
-export async function captureGitState(workingDirectory: string): Promise<Result<GitState | null, BackbeatError>> {
+export async function captureGitState(workingDirectory: string): Promise<Result<GitState | null, AutobeatError>> {
   try {
     const execOpts = { cwd: workingDirectory, timeout: GIT_TIMEOUT_MS };
 
@@ -161,7 +161,7 @@ export async function captureGitState(workingDirectory: string): Promise<Result<
     return ok({ branch, commitSha, dirtyFiles });
   } catch (error) {
     return err(
-      new BackbeatError(
+      new AutobeatError(
         ErrorCode.SYSTEM_ERROR,
         `Failed to capture git state: ${error instanceof Error ? error.message : String(error)}`,
         { workingDirectory },
@@ -185,7 +185,7 @@ export async function createAndCheckoutBranch(
   workingDirectory: string,
   branchName: string,
   fromRef?: string,
-): Promise<Result<void, BackbeatError>> {
+): Promise<Result<void, AutobeatError>> {
   const nameValidation = validateGitRefName(branchName, 'branch');
   if (!nameValidation.ok) return nameValidation;
 
@@ -202,7 +202,7 @@ export async function createAndCheckoutBranch(
     return ok(undefined);
   } catch (error) {
     return err(
-      new BackbeatError(
+      new AutobeatError(
         ErrorCode.SYSTEM_ERROR,
         `Failed to create/checkout branch '${branchName}': ${error instanceof Error ? error.message : String(error)}`,
         { workingDirectory, branchName, fromRef },
@@ -225,7 +225,7 @@ export async function captureGitDiff(
   workingDirectory: string,
   fromRef: string,
   toRef: string,
-): Promise<Result<string | null, BackbeatError>> {
+): Promise<Result<string | null, AutobeatError>> {
   const fromValidation = validateGitRefName(fromRef, 'ref');
   if (!fromValidation.ok) return fromValidation;
 
@@ -247,7 +247,7 @@ export async function captureGitDiff(
     return ok(summary);
   } catch (error) {
     return err(
-      new BackbeatError(
+      new AutobeatError(
         ErrorCode.SYSTEM_ERROR,
         `Failed to capture git diff (${fromRef}..${toRef}): ${error instanceof Error ? error.message : String(error)}`,
         { workingDirectory, fromRef, toRef },
@@ -263,7 +263,7 @@ export async function captureGitDiff(
  * @param workingDirectory - Absolute path to the working directory
  * @returns Result containing the 40-char hex SHA, or error on failure
  */
-export async function getCurrentCommitSha(workingDirectory: string): Promise<Result<string, BackbeatError>> {
+export async function getCurrentCommitSha(workingDirectory: string): Promise<Result<string, AutobeatError>> {
   try {
     const result = await execFileAsync('git', ['rev-parse', 'HEAD'], {
       cwd: workingDirectory,
@@ -272,7 +272,7 @@ export async function getCurrentCommitSha(workingDirectory: string): Promise<Res
     return ok(result.stdout.trim());
   } catch (error) {
     return err(
-      new BackbeatError(
+      new AutobeatError(
         ErrorCode.SYSTEM_ERROR,
         `Failed to get current commit SHA: ${error instanceof Error ? error.message : String(error)}`,
         { workingDirectory },
@@ -301,7 +301,7 @@ export interface LoopGitContext {
 export async function captureLoopGitContext(
   workingDirectory: string,
   gitBranch?: string,
-): Promise<Result<LoopGitContext, BackbeatError>> {
+): Promise<Result<LoopGitContext, AutobeatError>> {
   const gitStateResult = await captureGitState(workingDirectory);
   if (!gitStateResult.ok) {
     return gitStateResult;
@@ -331,7 +331,7 @@ export async function captureLoopGitContext(
 export async function commitAllChanges(
   workingDirectory: string,
   message: string,
-): Promise<Result<string | null, BackbeatError>> {
+): Promise<Result<string | null, AutobeatError>> {
   try {
     const execOpts = { cwd: workingDirectory, timeout: GIT_TIMEOUT_MS };
 
@@ -355,7 +355,7 @@ export async function commitAllChanges(
     return ok(shaResult.stdout.trim());
   } catch (error) {
     return err(
-      new BackbeatError(
+      new AutobeatError(
         ErrorCode.SYSTEM_ERROR,
         `Failed to commit changes: ${error instanceof Error ? error.message : String(error)}`,
         { workingDirectory },
@@ -389,10 +389,10 @@ function isValidCommitSha(sha: string): boolean {
  * @param commitSha - Hex SHA (7-40 chars) to reset to
  * @returns Result<void> on success, error on failure or invalid SHA
  */
-export async function resetToCommit(workingDirectory: string, commitSha: string): Promise<Result<void, BackbeatError>> {
+export async function resetToCommit(workingDirectory: string, commitSha: string): Promise<Result<void, AutobeatError>> {
   if (!isValidCommitSha(commitSha)) {
     return err(
-      new BackbeatError(
+      new AutobeatError(
         ErrorCode.INVALID_INPUT,
         `Invalid commit SHA format: "${commitSha}" — must be 7-40 hex characters, no leading '-', no '..'`,
         { workingDirectory, commitSha },
@@ -412,7 +412,7 @@ export async function resetToCommit(workingDirectory: string, commitSha: string)
     return ok(undefined);
   } catch (error) {
     return err(
-      new BackbeatError(
+      new AutobeatError(
         ErrorCode.SYSTEM_ERROR,
         `Failed to reset to commit ${commitSha}: ${error instanceof Error ? error.message : String(error)}`,
         { workingDirectory, commitSha },

@@ -1,4 +1,4 @@
-# 🚀 Backbeat v0.4.0 - Latest Release
+# 🚀 Autobeat v0.4.0 - Latest Release
 
 See [RELEASE_NOTES_v0.4.0.md](./RELEASE_NOTES_v0.4.0.md) for the latest release notes.
 
@@ -9,11 +9,11 @@ See [RELEASE_NOTES_v0.4.0.md](./RELEASE_NOTES_v0.4.0.md) for the latest release 
 
 ---
 
-# 🚀 Backbeat v0.1.0 - Initial Release
+# 🚀 Autobeat v0.1.0 - Initial Release
 
-## Introducing Backbeat: Your MCP Sidekick for Claude Code
+## Introducing Autobeat: Your MCP Sidekick for Claude Code
 
-Backbeat is an MCP (Model Context Protocol) server that enables Claude Code to delegate tasks to background Claude Code instances, allowing for true parallel task execution without context switching.
+Autobeat is an MCP (Model Context Protocol) server that enables Claude Code to delegate tasks to background Claude Code instances, allowing for true parallel task execution without context switching.
 
 ## ✨ Features
 
@@ -32,8 +32,8 @@ Backbeat is an MCP (Model Context Protocol) server that enables Claude Code to d
 
 ```bash
 # Clone the repository
-git clone https://github.com/dean0x/backbeat.git
-cd backbeat
+git clone https://github.com/dean0x/autobeat.git
+cd autobeat
 
 # Install and build
 npm install
@@ -73,9 +73,9 @@ Add to `~/.config/claude/mcp_servers.json`:
 ```json
 {
   "mcpServers": {
-    "backbeat": {
+    "autobeat": {
       "command": "node",
-      "args": ["/path/to/backbeat/dist/index.js"],
+      "args": ["/path/to/autobeat/dist/index.js"],
       "env": {}
     }
   }
@@ -126,13 +126,13 @@ MIT License - see [LICENSE](./LICENSE) file for details
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/dean0x/backbeat/issues)
+- **Issues**: [GitHub Issues](https://github.com/dean0x/autobeat/issues)
 - **Documentation**: [Full Docs](./docs/)
 - **Examples**: [Use Cases](./examples/use-cases.md)
 
 ## 🎉 Get Started
 
-1. Install Backbeat
+1. Install Autobeat
 2. Configure MCP
 3. Start delegating tasks!
 
@@ -140,6 +140,6 @@ Ready to parallelize your development workflow? Let's go! 🚀
 
 ---
 
-**Repository**: https://github.com/dean0x/backbeat  
+**Repository**: https://github.com/dean0x/autobeat  
 **Version**: 0.1.0  
 **Release Date**: August 16, 2024

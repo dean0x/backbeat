@@ -308,7 +308,7 @@ export class MCPAdapter {
   ) {
     this.server = new Server(
       {
-        name: 'backbeat',
+        name: 'autobeat',
         version: pkg.version,
       },
       {

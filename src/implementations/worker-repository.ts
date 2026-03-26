@@ -10,7 +10,7 @@
 import SQLite from 'better-sqlite3';
 import { z } from 'zod';
 import { TaskId, WorkerId, WorkerRegistration } from '../core/domain.js';
-import { BackbeatError, ErrorCode, operationErrorHandler } from '../core/errors.js';
+import { AutobeatError, ErrorCode, operationErrorHandler } from '../core/errors.js';
 import { WorkerRepository } from '../core/interfaces.js';
 import { Result, tryCatch } from '../core/result.js';
 import { Database } from './database.js';
@@ -95,13 +95,13 @@ export class SQLiteWorkerRepository implements WorkerRepository {
         const message = error instanceof Error ? error.message : String(error);
         // Detect UNIQUE constraint violation for task_id
         if (message.includes('UNIQUE constraint failed')) {
-          return new BackbeatError(
+          return new AutobeatError(
             ErrorCode.WORKER_SPAWN_FAILED,
             `Another process already has a worker for this task: ${registration.taskId}`,
             { taskId: registration.taskId, ownerPid: registration.ownerPid },
           );
         }
-        return new BackbeatError(ErrorCode.SYSTEM_ERROR, `Failed to register worker: ${message}`, {
+        return new AutobeatError(ErrorCode.SYSTEM_ERROR, `Failed to register worker: ${message}`, {
           workerId: registration.workerId,
         });
       },

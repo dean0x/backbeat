@@ -17,7 +17,7 @@ import {
   LoopStrategy,
   updateLoop,
 } from '../core/domain.js';
-import { BackbeatError, ErrorCode } from '../core/errors.js';
+import { AutobeatError, ErrorCode } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
 import { Logger, LoopRepository, LoopService } from '../core/interfaces.js';
 import { err, ok, Result } from '../core/result.js';
@@ -46,7 +46,7 @@ export class LoopManagerService implements LoopService {
     if (!isPipelineMode) {
       if (!request.prompt || request.prompt.trim().length === 0) {
         return err(
-          new BackbeatError(ErrorCode.INVALID_INPUT, 'prompt is required for non-pipeline loops', {
+          new AutobeatError(ErrorCode.INVALID_INPUT, 'prompt is required for non-pipeline loops', {
             field: 'prompt',
           }),
         );
@@ -54,7 +54,7 @@ export class LoopManagerService implements LoopService {
     }
     if (request.prompt && request.prompt.length > 4000) {
       return err(
-        new BackbeatError(ErrorCode.INVALID_INPUT, 'prompt must not exceed 4000 characters', {
+        new AutobeatError(ErrorCode.INVALID_INPUT, 'prompt must not exceed 4000 characters', {
           field: 'prompt',
           length: request.prompt.length,
         }),
@@ -64,7 +64,7 @@ export class LoopManagerService implements LoopService {
     // Validate exitCondition: required, non-empty
     if (!request.exitCondition || request.exitCondition.trim().length === 0) {
       return err(
-        new BackbeatError(ErrorCode.INVALID_INPUT, 'exitCondition is required', {
+        new AutobeatError(ErrorCode.INVALID_INPUT, 'exitCondition is required', {
           field: 'exitCondition',
         }),
       );
@@ -75,7 +75,7 @@ export class LoopManagerService implements LoopService {
       const pathValidation = validatePath(request.workingDirectory);
       if (!pathValidation.ok) {
         return err(
-          new BackbeatError(ErrorCode.INVALID_DIRECTORY, `Invalid working directory: ${pathValidation.error.message}`, {
+          new AutobeatError(ErrorCode.INVALID_DIRECTORY, `Invalid working directory: ${pathValidation.error.message}`, {
             workingDirectory: request.workingDirectory,
           }),
         );
@@ -85,7 +85,7 @@ export class LoopManagerService implements LoopService {
     // Validate maxIterations: >= 0 (0 = unlimited)
     if (request.maxIterations !== undefined && request.maxIterations < 0) {
       return err(
-        new BackbeatError(ErrorCode.INVALID_INPUT, 'maxIterations must be >= 0 (0 = unlimited)', {
+        new AutobeatError(ErrorCode.INVALID_INPUT, 'maxIterations must be >= 0 (0 = unlimited)', {
           field: 'maxIterations',
           value: request.maxIterations,
         }),
@@ -95,7 +95,7 @@ export class LoopManagerService implements LoopService {
     // Validate maxConsecutiveFailures: >= 0
     if (request.maxConsecutiveFailures !== undefined && request.maxConsecutiveFailures < 0) {
       return err(
-        new BackbeatError(ErrorCode.INVALID_INPUT, 'maxConsecutiveFailures must be >= 0', {
+        new AutobeatError(ErrorCode.INVALID_INPUT, 'maxConsecutiveFailures must be >= 0', {
           field: 'maxConsecutiveFailures',
           value: request.maxConsecutiveFailures,
         }),
@@ -105,7 +105,7 @@ export class LoopManagerService implements LoopService {
     // Validate cooldownMs: >= 0
     if (request.cooldownMs !== undefined && request.cooldownMs < 0) {
       return err(
-        new BackbeatError(ErrorCode.INVALID_INPUT, 'cooldownMs must be >= 0', {
+        new AutobeatError(ErrorCode.INVALID_INPUT, 'cooldownMs must be >= 0', {
           field: 'cooldownMs',
           value: request.cooldownMs,
         }),
@@ -116,7 +116,7 @@ export class LoopManagerService implements LoopService {
     if (request.evalTimeout !== undefined) {
       if (request.evalTimeout < 1000) {
         return err(
-          new BackbeatError(ErrorCode.INVALID_INPUT, 'evalTimeout must be >= 1000ms (1 second minimum)', {
+          new AutobeatError(ErrorCode.INVALID_INPUT, 'evalTimeout must be >= 1000ms (1 second minimum)', {
             field: 'evalTimeout',
             value: request.evalTimeout,
           }),
@@ -124,7 +124,7 @@ export class LoopManagerService implements LoopService {
       }
       if (request.evalTimeout > 300000) {
         return err(
-          new BackbeatError(ErrorCode.INVALID_INPUT, 'evalTimeout must be <= 300000ms (5 minute maximum)', {
+          new AutobeatError(ErrorCode.INVALID_INPUT, 'evalTimeout must be <= 300000ms (5 minute maximum)', {
             field: 'evalTimeout',
             value: request.evalTimeout,
           }),
@@ -135,7 +135,7 @@ export class LoopManagerService implements LoopService {
     // Validate evalDirection: required if optimize, forbidden if retry
     if (request.strategy === LoopStrategy.OPTIMIZE && !request.evalDirection) {
       return err(
-        new BackbeatError(ErrorCode.INVALID_INPUT, 'evalDirection is required for optimize strategy', {
+        new AutobeatError(ErrorCode.INVALID_INPUT, 'evalDirection is required for optimize strategy', {
           field: 'evalDirection',
           strategy: request.strategy,
         }),
@@ -143,7 +143,7 @@ export class LoopManagerService implements LoopService {
     }
     if (request.strategy === LoopStrategy.RETRY && request.evalDirection) {
       return err(
-        new BackbeatError(ErrorCode.INVALID_INPUT, 'evalDirection is not allowed for retry strategy', {
+        new AutobeatError(ErrorCode.INVALID_INPUT, 'evalDirection is not allowed for retry strategy', {
           field: 'evalDirection',
           strategy: request.strategy,
         }),
@@ -154,7 +154,7 @@ export class LoopManagerService implements LoopService {
     if (request.pipelineSteps) {
       if (request.pipelineSteps.length < 2) {
         return err(
-          new BackbeatError(ErrorCode.INVALID_INPUT, 'Pipeline requires at least 2 steps', {
+          new AutobeatError(ErrorCode.INVALID_INPUT, 'Pipeline requires at least 2 steps', {
             field: 'pipelineSteps',
             stepCount: request.pipelineSteps.length,
           }),
@@ -162,7 +162,7 @@ export class LoopManagerService implements LoopService {
       }
       if (request.pipelineSteps.length > 20) {
         return err(
-          new BackbeatError(ErrorCode.INVALID_INPUT, 'Pipeline cannot exceed 20 steps', {
+          new AutobeatError(ErrorCode.INVALID_INPUT, 'Pipeline cannot exceed 20 steps', {
             field: 'pipelineSteps',
             stepCount: request.pipelineSteps.length,
           }),
@@ -180,7 +180,7 @@ export class LoopManagerService implements LoopService {
       const gitStateResult = await captureGitState(validatedDir);
       if (!gitStateResult.ok) {
         return err(
-          new BackbeatError(
+          new AutobeatError(
             ErrorCode.INVALID_INPUT,
             `gitBranch requires a git repository: ${gitStateResult.error.message}`,
             { workingDirectory: validatedDir, gitBranch: request.gitBranch },
@@ -189,7 +189,7 @@ export class LoopManagerService implements LoopService {
       }
       if (!gitStateResult.value) {
         return err(
-          new BackbeatError(
+          new AutobeatError(
             ErrorCode.INVALID_INPUT,
             'gitBranch requires a git repository, but working directory is not a git repo',
             { workingDirectory: validatedDir, gitBranch: request.gitBranch },
@@ -329,7 +329,7 @@ export class LoopManagerService implements LoopService {
     const loop = lookupResult.value;
     if (loop.status !== LoopStatus.RUNNING && loop.status !== LoopStatus.PAUSED) {
       return err(
-        new BackbeatError(
+        new AutobeatError(
           ErrorCode.INVALID_OPERATION,
           `Loop ${loopId} is not running or paused (status: ${loop.status})`,
           {
@@ -400,7 +400,7 @@ export class LoopManagerService implements LoopService {
     const loop = lookupResult.value;
     if (loop.status !== LoopStatus.RUNNING) {
       return err(
-        new BackbeatError(ErrorCode.INVALID_OPERATION, `Loop ${loopId} is not running (status: ${loop.status})`, {
+        new AutobeatError(ErrorCode.INVALID_OPERATION, `Loop ${loopId} is not running (status: ${loop.status})`, {
           loopId,
           status: loop.status,
         }),
@@ -430,7 +430,7 @@ export class LoopManagerService implements LoopService {
     const loop = lookupResult.value;
     if (loop.status !== LoopStatus.PAUSED) {
       return err(
-        new BackbeatError(ErrorCode.INVALID_OPERATION, `Loop ${loopId} is not paused (status: ${loop.status})`, {
+        new AutobeatError(ErrorCode.INVALID_OPERATION, `Loop ${loopId} is not paused (status: ${loop.status})`, {
           loopId,
           status: loop.status,
         }),
@@ -455,11 +455,11 @@ export class LoopManagerService implements LoopService {
   private async fetchLoopOrError(loopId: LoopId): Promise<Result<Loop>> {
     const result = await this.loopRepository.findById(loopId);
     if (!result.ok) {
-      return err(new BackbeatError(ErrorCode.SYSTEM_ERROR, `Failed to get loop: ${result.error.message}`, { loopId }));
+      return err(new AutobeatError(ErrorCode.SYSTEM_ERROR, `Failed to get loop: ${result.error.message}`, { loopId }));
     }
 
     if (!result.value) {
-      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Loop ${loopId} not found`, { loopId }));
+      return err(new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Loop ${loopId} not found`, { loopId }));
     }
 
     return ok(result.value);

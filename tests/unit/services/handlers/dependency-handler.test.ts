@@ -506,8 +506,8 @@ describe('DependencyHandler - Behavioral Tests', () => {
         // Only fail during the cascade check (after isBlocked returns false)
         if (taskId === child.id) {
           const { err: mkErr } = await import('../../../../src/core/result');
-          const { BackbeatError, ErrorCode } = await import('../../../../src/core/errors');
-          return mkErr(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Simulated getDependencies failure'));
+          const { AutobeatError, ErrorCode } = await import('../../../../src/core/errors');
+          return mkErr(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Simulated getDependencies failure'));
         }
         return originalGetDeps(taskId);
       });

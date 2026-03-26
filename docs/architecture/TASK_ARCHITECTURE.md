@@ -1,8 +1,8 @@
-# Backbeat Task Dependency Architecture - Comprehensive Analysis
+# Autobeat Task Dependency Architecture - Comprehensive Analysis
 
 ## Executive Summary
 
-Backbeat has **already implemented a sophisticated task dependency system** (Phase 4) with:
+Autobeat has **already implemented a sophisticated task dependency system** (Phase 4) with:
 - Directed Acyclic Graph (DAG) validation with cycle detection
 - Event-driven dependency resolution
 - Persistent task dependency relationships in SQLite
@@ -16,7 +16,7 @@ The system is **production-ready** but not yet fully integrated with CLI command
 ## 1. TASK DATA MODEL
 
 ### 1.1 Core Task Interface
-**File**: `/workspace/backbeat/src/core/domain.ts` (Lines 28-82)
+**File**: `/workspace/autobeat/src/core/domain.ts` (Lines 28-82)
 
 ```typescript
 export interface Task {
@@ -41,7 +41,7 @@ export interface Task {
 - Fields are **read-only** (immutable by design)
 
 ### 1.2 TaskRequest Interface
-**File**: `/workspace/backbeat/src/core/domain.ts` (Lines 108-138)
+**File**: `/workspace/autobeat/src/core/domain.ts` (Lines 108-138)
 
 ```typescript
 export interface TaskRequest {
@@ -71,7 +71,7 @@ export const createTask = (request: TaskRequest): Task => ({
 ## 2. TASK LIFECYCLE
 
 ### 2.1 Lifecycle States
-**File**: `/workspace/backbeat/src/core/domain.ts` (Lines 20-26)
+**File**: `/workspace/autobeat/src/core/domain.ts` (Lines 20-26)
 
 ```typescript
 enum TaskStatus {
@@ -144,7 +144,7 @@ User delegates task with dependsOn=[task-A, task-B]
 ## 3. EVENT SYSTEM FOR DEPENDENCIES
 
 ### 3.1 Dependency-Related Events
-**File**: `/workspace/backbeat/src/core/events/events.ts` (Lines 184-213)
+**File**: `/workspace/autobeat/src/core/events/events.ts` (Lines 184-213)
 
 ```typescript
 // Event: A dependency was added to the graph
@@ -174,7 +174,7 @@ export interface TaskDependencyFailedEvent extends BaseEvent {
   type: 'TaskDependencyFailed';
   taskId: TaskId;
   failedDependencyId: TaskId;
-  error: BackbeatError;
+  error: AutobeatError;
   requestedDependencies?: readonly TaskId[];  // All deps that were requested
 }
 
@@ -217,7 +217,7 @@ export interface TaskDependencyFailedEvent extends BaseEvent {
 ## 4. DATABASE SCHEMA
 
 ### 4.1 Task Dependencies Table
-**File**: `/workspace/backbeat/src/implementations/database.ts` (Lines 146-158)
+**File**: `/workspace/autobeat/src/implementations/database.ts` (Lines 146-158)
 
 ```sql
 CREATE TABLE IF NOT EXISTS task_dependencies (
@@ -276,7 +276,7 @@ tasks table:
 ## 5. QUEUE IMPLEMENTATION WITH DEPENDENCY AWARENESS
 
 ### 5.1 Priority Task Queue
-**File**: `/workspace/backbeat/src/implementations/task-queue.ts`
+**File**: `/workspace/autobeat/src/implementations/task-queue.ts`
 
 ```typescript
 export class PriorityTaskQueue implements TaskQueue {
@@ -301,7 +301,7 @@ export class PriorityTaskQueue implements TaskQueue {
 - `contains()`: O(1) with index
 
 ### 5.2 Dependency-Aware Queueing
-**File**: `/workspace/backbeat/src/services/handlers/queue-handler.ts`
+**File**: `/workspace/autobeat/src/services/handlers/queue-handler.ts`
 
 #### enqueueIfReady (called directly by PersistenceHandler)
 ```typescript
@@ -337,7 +337,7 @@ private async handleTaskUnblocked(event: TaskUnblockedEvent): Promise<void> {
 ## 6. DEPENDENCY RESOLUTION SYSTEM
 
 ### 6.1 Dependency Repository
-**File**: `/workspace/backbeat/src/implementations/dependency-repository.ts`
+**File**: `/workspace/autobeat/src/implementations/dependency-repository.ts`
 
 ```typescript
 export interface DependencyRepository {
@@ -362,7 +362,7 @@ export interface DependencyRepository {
 ```
 
 #### Key Implementation: Cycle Detection
-**File**: `/workspace/backbeat/src/implementations/dependency-repository.ts` (Lines 91-187)
+**File**: `/workspace/autobeat/src/implementations/dependency-repository.ts` (Lines 91-187)
 
 ```typescript
 async addDependency(taskId: TaskId, dependsOnTaskId: TaskId): Promise<Result<TaskDependency>> {
@@ -391,7 +391,7 @@ async addDependency(taskId: TaskId, dependsOnTaskId: TaskId): Promise<Result<Tas
 **Atomicity**: Uses `db.transaction()` (synchronous) for true ACID compliance.
 
 ### 6.2 Dependency Handler - Resolution Flow
-**File**: `/workspace/backbeat/src/services/handlers/dependency-handler.ts`
+**File**: `/workspace/autobeat/src/services/handlers/dependency-handler.ts`
 
 **DoS Prevention**: Handler enforces `MAX_DEPENDENCY_CHAIN_DEPTH = 100` to prevent deep dependency chains that could cause performance degradation or stack overflow during graph traversal.
 
@@ -473,7 +473,7 @@ private async resolveDependencies(
 ## 7. DEPENDENCY GRAPH - CYCLE DETECTION
 
 ### 7.1 Dependency Graph Class
-**File**: `/workspace/backbeat/src/core/dependency-graph.ts`
+**File**: `/workspace/autobeat/src/core/dependency-graph.ts`
 
 ```typescript
 export class DependencyGraph {
@@ -486,7 +486,7 @@ export class DependencyGraph {
 ```
 
 ### 7.2 Cycle Detection Algorithm
-**File**: `/workspace/backbeat/src/core/dependency-graph.ts` (Lines 339-433)
+**File**: `/workspace/autobeat/src/core/dependency-graph.ts` (Lines 339-433)
 
 ```typescript
 wouldCreateCycle(taskId: TaskId, dependsOnTaskId: TaskId): Result<boolean> {
@@ -578,7 +578,7 @@ topologicalSort(): Result<readonly TaskId[]>
 ## 8. KEY ARCHITECTURAL PATTERNS
 
 ### 8.1 Result Type Pattern
-**File**: `/workspace/backbeat/src/core/result.ts`
+**File**: `/workspace/autobeat/src/core/result.ts`
 
 Never throws errors. All functions return `Result<T>`:
 
@@ -698,20 +698,20 @@ Commands (state changes) flow through events; queries use direct repository acce
 
 | Component | File Path | Key Lines |
 |-----------|-----------|-----------|
-| Task Domain Model | `/workspace/backbeat/src/core/domain.ts` | 28-82, 108-138, 162-199 |
-| TaskRequest | `/workspace/backbeat/src/core/domain.ts` | 108-138 |
-| TaskStatus Enum | `/workspace/backbeat/src/core/domain.ts` | 20-26 |
-| Task Interfaces | `/workspace/backbeat/src/core/interfaces.ts` | 94-144 |
-| Events | `/workspace/backbeat/src/core/events/events.ts` | 184-213, 237-276 |
-| DependencyGraph | `/workspace/backbeat/src/core/dependency-graph.ts` | Full file |
-| Cycle Detection | `/workspace/backbeat/src/core/dependency-graph.ts` | 73-162 |
-| DependencyRepository | `/workspace/backbeat/src/implementations/dependency-repository.ts` | Full file |
-| Database Schema | `/workspace/backbeat/src/implementations/database.ts` | 146-158 |
-| DependencyHandler | `/workspace/backbeat/src/services/handlers/dependency-handler.ts` | Full file |
-| QueueHandler | `/workspace/backbeat/src/services/handlers/queue-handler.ts` | 62-355 |
-| PriorityTaskQueue | `/workspace/backbeat/src/implementations/task-queue.ts` | Full file |
-| Result Type | `/workspace/backbeat/src/core/result.ts` | Full file |
-| Errors | `/workspace/backbeat/src/core/errors.ts` | Full file |
+| Task Domain Model | `/workspace/autobeat/src/core/domain.ts` | 28-82, 108-138, 162-199 |
+| TaskRequest | `/workspace/autobeat/src/core/domain.ts` | 108-138 |
+| TaskStatus Enum | `/workspace/autobeat/src/core/domain.ts` | 20-26 |
+| Task Interfaces | `/workspace/autobeat/src/core/interfaces.ts` | 94-144 |
+| Events | `/workspace/autobeat/src/core/events/events.ts` | 184-213, 237-276 |
+| DependencyGraph | `/workspace/autobeat/src/core/dependency-graph.ts` | Full file |
+| Cycle Detection | `/workspace/autobeat/src/core/dependency-graph.ts` | 73-162 |
+| DependencyRepository | `/workspace/autobeat/src/implementations/dependency-repository.ts` | Full file |
+| Database Schema | `/workspace/autobeat/src/implementations/database.ts` | 146-158 |
+| DependencyHandler | `/workspace/autobeat/src/services/handlers/dependency-handler.ts` | Full file |
+| QueueHandler | `/workspace/autobeat/src/services/handlers/queue-handler.ts` | 62-355 |
+| PriorityTaskQueue | `/workspace/autobeat/src/implementations/task-queue.ts` | Full file |
+| Result Type | `/workspace/autobeat/src/core/result.ts` | Full file |
+| Errors | `/workspace/autobeat/src/core/errors.ts` | Full file |
 
 ---
 
@@ -768,7 +768,7 @@ Always use Result type, never throw:
 ```typescript
 async addDependency(taskId, dependsOnTaskId): Promise<Result<TaskDependency>> {
   // ✅ GOOD
-  if (!exists) return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, ...));
+  if (!exists) return err(new AutobeatError(ErrorCode.TASK_NOT_FOUND, ...));
   
   // ❌ BAD
   if (!exists) throw new Error("Not found");

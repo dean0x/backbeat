@@ -11,7 +11,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Configuration } from '../../../../src/core/configuration';
 import type { Task, Worker } from '../../../../src/core/domain';
-import { BackbeatError, ErrorCode } from '../../../../src/core/errors';
+import { AutobeatError, ErrorCode } from '../../../../src/core/errors';
 import type { ResourceMonitor, TaskQueue, TaskRepository, WorkerPool } from '../../../../src/core/interfaces';
 import { err, ok, Result } from '../../../../src/core/result';
 import { WorkerHandler } from '../../../../src/services/handlers/worker-handler';
@@ -554,7 +554,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
     it('should decrement resource monitor worker count on timeout', async () => {
       resourceMonitor.incrementWorkerCount();
       const task = new TaskFactory().build();
-      const error = new BackbeatError(ErrorCode.TASK_TIMEOUT, 'Task timed out', { taskId: task.id });
+      const error = new AutobeatError(ErrorCode.TASK_TIMEOUT, 'Task timed out', { taskId: task.id });
 
       await workerHandler.onWorkerTimeout(task.id, error);
 
@@ -563,7 +563,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
 
     it('should emit TaskTimeout event when worker times out', async () => {
       const task = new TaskFactory().build();
-      const error = new BackbeatError(ErrorCode.TASK_TIMEOUT, 'Task timed out', { taskId: task.id });
+      const error = new AutobeatError(ErrorCode.TASK_TIMEOUT, 'Task timed out', { taskId: task.id });
 
       await workerHandler.onWorkerTimeout(task.id, error);
 
@@ -572,7 +572,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
 
     it('should include error in TaskTimeout event', async () => {
       const task = new TaskFactory().build();
-      const error = new BackbeatError(ErrorCode.TASK_TIMEOUT, 'Task exceeded 5 minute limit', {
+      const error = new AutobeatError(ErrorCode.TASK_TIMEOUT, 'Task exceeded 5 minute limit', {
         taskId: task.id,
         timeoutMs: 300000,
       });
@@ -582,8 +582,8 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
       const events = eventBus.getEmittedEvents('TaskTimeout');
       expect(events.length).toBeGreaterThan(0);
       if (events.length > 0) {
-        expect((events[0] as { error: BackbeatError }).error).toBeDefined();
-        expect((events[0] as { error: BackbeatError }).error.code).toBe(ErrorCode.TASK_TIMEOUT);
+        expect((events[0] as { error: AutobeatError }).error).toBeDefined();
+        expect((events[0] as { error: AutobeatError }).error.code).toBe(ErrorCode.TASK_TIMEOUT);
       }
     });
   });
@@ -632,7 +632,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
       // Make spawn fail
       workerPool.spawn = vi
         .fn()
-        .mockResolvedValue(err(new BackbeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
+        .mockResolvedValue(err(new AutobeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
 
       resourceMonitor.setCanSpawn(true);
       taskQueue.setDequeueResult(ok(task));
@@ -648,7 +648,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
 
       workerPool.spawn = vi
         .fn()
-        .mockResolvedValue(err(new BackbeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
+        .mockResolvedValue(err(new AutobeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
 
       resourceMonitor.setCanSpawn(true);
       taskQueue.setDequeueResult(ok(task));
@@ -663,7 +663,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
       const task = new TaskFactory().withPrompt('test task').build();
 
       // Simulate error in queue dequeue
-      taskQueue.setDequeueResult(err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Queue failed', {})));
+      taskQueue.setDequeueResult(err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Queue failed', {})));
 
       resourceMonitor.setCanSpawn(true);
 
@@ -747,7 +747,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
 
         workerPool.spawn = vi
           .fn()
-          .mockResolvedValue(err(new BackbeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
+          .mockResolvedValue(err(new AutobeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
 
         resourceMonitor.setCanSpawn(true);
         taskQueue.setDequeueResult(ok(task));
@@ -808,7 +808,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
 
         workerPool.spawn = vi
           .fn()
-          .mockResolvedValue(err(new BackbeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
+          .mockResolvedValue(err(new AutobeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
 
         resourceMonitor.setCanSpawn(true);
         taskQueue.setDequeueResult(ok(task));
@@ -857,7 +857,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
 
         workerPool.spawn = vi
           .fn()
-          .mockResolvedValue(err(new BackbeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
+          .mockResolvedValue(err(new AutobeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {})));
 
         resourceMonitor.setCanSpawn(true);
         taskQueue.setDequeueResult(ok(task));
@@ -953,7 +953,7 @@ describe('WorkerHandler - Event-Driven Worker Lifecycle', () => {
         workerPool.spawn = vi.fn().mockImplementation(async () => {
           callCount++;
           if (callCount === 1) {
-            return err(new BackbeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {}));
+            return err(new AutobeatError(ErrorCode.PROCESS_SPAWN_FAILED, 'Spawn failed', {}));
           }
           return ok(new WorkerFactory().build());
         });

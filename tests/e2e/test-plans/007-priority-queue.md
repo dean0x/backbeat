@@ -23,8 +23,8 @@ preconditions:
 ### Step 1: Clean State
 **Action:** Ensure clean starting state
 ```bash
-rm -rf .backbeat/
-pkill -f "backbeat" || true
+rm -rf .autobeat/
+pkill -f "autobeat" || true
 ```
 **Expected:** Clean state achieved
 **Verify:**
@@ -117,7 +117,7 @@ node dist/cli.js logs $(node dist/cli.js status --json 2>/dev/null | grep -o '"i
 # Get current queue state
 node dist/cli.js status > /tmp/queue_before.txt
 # Kill process
-pkill -f "backbeat" || true
+pkill -f "autobeat" || true
 sleep 2
 ```
 **Expected:** Process killed with tasks pending
@@ -161,7 +161,7 @@ timeout 30 bash -c 'while [ $(node dist/cli.js status | grep -c "completed") -lt
 ### Step 13: Verify Final Execution Order
 **Action:** Check completion timestamps
 ```bash
-sqlite3 .backbeat/backbeat.db "SELECT priority, status, completedAt FROM tasks ORDER BY completedAt;" 2>/dev/null | head -10
+sqlite3 .autobeat/autobeat.db "SELECT priority, status, completedAt FROM tasks ORDER BY completedAt;" 2>/dev/null | head -10
 ```
 **Expected:** Completion follows priority
 **Verify:**
@@ -172,8 +172,8 @@ sqlite3 .backbeat/backbeat.db "SELECT priority, status, completedAt FROM tasks O
 ### Step 14: Cleanup
 **Action:** Clean up test artifacts
 ```bash
-pkill -f "backbeat" || true
-rm -rf .backbeat/ /tmp/queue_*.txt
+pkill -f "autobeat" || true
+rm -rf .autobeat/ /tmp/queue_*.txt
 ```
 **Expected:** Cleanup successful
 **Verify:**
@@ -192,8 +192,8 @@ rm -rf .backbeat/ /tmp/queue_*.txt
 
 ## Rollback Plan
 If test fails:
-1. Kill all processes: `pkill -9 -f backbeat`
-2. Clear database: `rm -rf .backbeat/`
+1. Kill all processes: `pkill -9 -f autobeat`
+2. Clear database: `rm -rf .autobeat/`
 3. Check queue implementation in code
 4. Verify priority enum values (P0=0, P1=1, P2=2)
 

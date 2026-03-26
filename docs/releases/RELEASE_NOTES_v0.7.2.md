@@ -1,4 +1,4 @@
-# Backbeat v0.7.2 — Dependency Update
+# Autobeat v0.7.2 — Dependency Update
 
 Updates `better-sqlite3` to the latest version (12.6.2 → 12.8.0).
 
@@ -14,13 +14,13 @@ Updates `better-sqlite3` to the latest version (12.6.2 → 12.8.0).
 ## Installation
 
 ```bash
-npm install -g backbeat@0.7.2
+npm install -g autobeat@0.7.2
 ```
 
 ---
 
 ## Links
 
-- NPM Package: https://www.npmjs.com/package/backbeat
-- Documentation: https://github.com/dean0x/backbeat/blob/main/docs/FEATURES.md
-- Issues: https://github.com/dean0x/backbeat/issues
+- NPM Package: https://www.npmjs.com/package/autobeat
+- Documentation: https://github.com/dean0x/autobeat/blob/main/docs/FEATURES.md
+- Issues: https://github.com/dean0x/autobeat/issues

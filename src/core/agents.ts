@@ -9,7 +9,7 @@
  */
 
 import { ChildProcess, spawnSync } from 'child_process';
-import { BackbeatError, ErrorCode } from './errors.js';
+import { AutobeatError, ErrorCode } from './errors.js';
 import { err, ok, Result } from './result.js';
 
 /**
@@ -44,7 +44,7 @@ export function resolveDefaultAgent(
   if (taskAgent) return ok(taskAgent);
   if (configDefault) return ok(configDefault);
   return err(
-    new BackbeatError(
+    new AutobeatError(
       ErrorCode.INVALID_INPUT,
       [
         'No agent specified and no default agent configured.',

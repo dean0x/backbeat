@@ -29,7 +29,7 @@ import {
   TaskId,
   TaskStatus,
 } from '../../../../src/core/domain';
-import { BackbeatError, ErrorCode } from '../../../../src/core/errors';
+import { AutobeatError, ErrorCode } from '../../../../src/core/errors';
 import { InMemoryEventBus } from '../../../../src/core/events/event-bus';
 import { Database } from '../../../../src/implementations/database';
 import { SQLiteLoopRepository } from '../../../../src/implementations/loop-repository';
@@ -789,7 +789,7 @@ describe('ScheduleHandler - Behavioral Tests', () => {
         saveCallCount++;
         if (saveCallCount === 3) {
           // Sync methods throw on error (caught by transaction wrapper)
-          throw new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Simulated DB failure on step 3');
+          throw new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Simulated DB failure on step 3');
         }
         return originalSaveSync(task);
       });
@@ -824,8 +824,8 @@ describe('ScheduleHandler - Behavioral Tests', () => {
         if (event === 'TaskDelegated') {
           // Fail on the FIRST TaskDelegated (step 0)
           const { err: mkErr } = await import('../../../../src/core/result');
-          const { BackbeatError, ErrorCode } = await import('../../../../src/core/errors');
-          return mkErr(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Simulated emit failure'));
+          const { AutobeatError, ErrorCode } = await import('../../../../src/core/errors');
+          return mkErr(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Simulated emit failure'));
         }
         return originalEmit(event, payload);
       });
@@ -890,7 +890,7 @@ describe('ScheduleHandler - Behavioral Tests', () => {
       const saveSpy = vi.spyOn(taskRepo, 'saveSync').mockImplementation((task) => {
         saveCallCount++;
         if (saveCallCount === 2) {
-          throw new BackbeatError(ErrorCode.SYSTEM_ERROR, 'DB write error');
+          throw new AutobeatError(ErrorCode.SYSTEM_ERROR, 'DB write error');
         }
         return originalSaveSync(task);
       });
@@ -919,7 +919,7 @@ describe('ScheduleHandler - Behavioral Tests', () => {
       await scheduleRepo.update(schedule.id, { nextRunAt: Date.now() - 60000 });
 
       const saveSpy = vi.spyOn(taskRepo, 'saveSync').mockImplementation(() => {
-        throw new BackbeatError(ErrorCode.SYSTEM_ERROR, 'DB write error');
+        throw new AutobeatError(ErrorCode.SYSTEM_ERROR, 'DB write error');
       });
 
       // Act
@@ -945,7 +945,7 @@ describe('ScheduleHandler - Behavioral Tests', () => {
       await scheduleRepo.update(schedule.id, { nextRunAt: Date.now() - 60000 });
 
       const spy = vi.spyOn(scheduleRepo, 'recordExecutionSync').mockImplementation(() => {
-        throw new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Execution record failed');
+        throw new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Execution record failed');
       });
 
       // Act

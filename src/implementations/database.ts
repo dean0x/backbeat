@@ -7,7 +7,7 @@ import SQLite from 'better-sqlite3';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { BackbeatError, ErrorCode } from '../core/errors.js';
+import { AutobeatError, ErrorCode } from '../core/errors.js';
 import { Logger, TransactionRunner } from '../core/interfaces.js';
 import { Result, tryCatch } from '../core/result.js';
 
@@ -24,24 +24,24 @@ const noOpLogger: Logger = {
 };
 
 /**
- * SQLite database wrapper for Backbeat task persistence.
+ * SQLite database wrapper for Autobeat task persistence.
  *
  * @remarks
  * Database location can be configured via environment variables:
- * - `BACKBEAT_DATABASE_PATH`: Full absolute path to database file (e.g., `/tmp/test.db`)
- * - `BACKBEAT_DATA_DIR`: Directory to store `backbeat.db` (e.g., `~/.backbeat`)
- * - Default: `~/.backbeat/backbeat.db`
+ * - `AUTOBEAT_DATABASE_PATH`: Full absolute path to database file (e.g., `/tmp/test.db`)
+ * - `AUTOBEAT_DATA_DIR`: Directory to store `autobeat.db` (e.g., `~/.autobeat`)
+ * - Default: `~/.autobeat/autobeat.db`
  *
  * Security: Both environment variables are validated to prevent path traversal attacks.
  * Paths must be absolute and cannot contain `..` sequences.
  *
  * @example
  * ```typescript
- * // Use default path (~/.backbeat/backbeat.db)
+ * // Use default path (~/.autobeat/autobeat.db)
  * const db = new Database();
  *
  * // Use custom path (for testing)
- * process.env.BACKBEAT_DATABASE_PATH = '/tmp/test.db';
+ * process.env.AUTOBEAT_DATABASE_PATH = '/tmp/test.db';
  * const testDb = new Database();
  * ```
  */
@@ -91,50 +91,50 @@ export class Database implements TransactionRunner {
     // Allow override via environment variables
     // SECURITY: Validate environment variables to prevent path traversal
 
-    // BACKBEAT_DATABASE_PATH: Full path to database file (used by tests)
-    if (process.env.BACKBEAT_DATABASE_PATH) {
-      const dbPath = process.env.BACKBEAT_DATABASE_PATH;
+    // AUTOBEAT_DATABASE_PATH: Full path to database file (used by tests)
+    if (process.env.AUTOBEAT_DATABASE_PATH) {
+      const dbPath = process.env.AUTOBEAT_DATABASE_PATH;
 
       // Validate path is absolute and doesn't contain traversal
       if (!path.isAbsolute(dbPath)) {
-        throw new Error('BACKBEAT_DATABASE_PATH must be an absolute path');
+        throw new Error('AUTOBEAT_DATABASE_PATH must be an absolute path');
       }
 
       const normalized = path.normalize(dbPath);
       if (normalized.includes('..')) {
-        throw new Error('BACKBEAT_DATABASE_PATH must not contain path traversal sequences (..)');
+        throw new Error('AUTOBEAT_DATABASE_PATH must not contain path traversal sequences (..)');
       }
 
       return normalized;
     }
 
-    // BACKBEAT_DATA_DIR: Directory containing backbeat.db
-    if (process.env.BACKBEAT_DATA_DIR) {
-      const dataDir = process.env.BACKBEAT_DATA_DIR;
+    // AUTOBEAT_DATA_DIR: Directory containing autobeat.db
+    if (process.env.AUTOBEAT_DATA_DIR) {
+      const dataDir = process.env.AUTOBEAT_DATA_DIR;
 
       // Validate path is absolute and doesn't contain traversal
       if (!path.isAbsolute(dataDir)) {
-        throw new Error('BACKBEAT_DATA_DIR must be an absolute path');
+        throw new Error('AUTOBEAT_DATA_DIR must be an absolute path');
       }
 
       const normalized = path.normalize(dataDir);
       if (normalized.includes('..')) {
-        throw new Error('BACKBEAT_DATA_DIR must not contain path traversal sequences (..)');
+        throw new Error('AUTOBEAT_DATA_DIR must not contain path traversal sequences (..)');
       }
 
-      return path.join(normalized, 'backbeat.db');
+      return path.join(normalized, 'autobeat.db');
     }
 
     // Platform-specific defaults
     const homeDir = os.homedir();
 
     if (process.platform === 'win32') {
-      // Windows: %APPDATA%/backbeat
+      // Windows: %APPDATA%/autobeat
       const appData = process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming');
-      return path.join(appData, 'backbeat', 'backbeat.db');
+      return path.join(appData, 'autobeat', 'autobeat.db');
     } else {
-      // Linux/Mac: ~/.backbeat
-      return path.join(homeDir, '.backbeat', 'backbeat.db');
+      // Linux/Mac: ~/.autobeat
+      return path.join(homeDir, '.autobeat', 'autobeat.db');
     }
   }
 
@@ -728,15 +728,15 @@ export class Database implements TransactionRunner {
    *
    * ARCHITECTURE: Uses better-sqlite3's synchronous transaction API.
    * All operations inside fn must be synchronous (use *Sync repo methods).
-   * BackbeatErrors thrown inside fn are preserved; other errors are wrapped.
+   * AutobeatErrors thrown inside fn are preserved; other errors are wrapped.
    */
   runInTransaction<T>(fn: () => T): Result<T> {
     return tryCatch(
       () => this.db.transaction(fn)(),
       (error) =>
-        error instanceof BackbeatError
+        error instanceof AutobeatError
           ? error
-          : new BackbeatError(
+          : new AutobeatError(
               ErrorCode.SYSTEM_ERROR,
               `Transaction failed: ${error instanceof Error ? error.message : String(error)}`,
             ),

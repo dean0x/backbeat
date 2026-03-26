@@ -5,7 +5,7 @@
 
 import { Configuration } from '../../core/configuration.js';
 import { Task, TaskId, TaskStatus, Worker } from '../../core/domain.js';
-import { BackbeatError, ErrorCode, taskNotFound } from '../../core/errors.js';
+import { AutobeatError, ErrorCode, taskNotFound } from '../../core/errors.js';
 import { EventBus } from '../../core/events/event-bus.js';
 import { TaskCancellationRequestedEvent, TaskCancelledEvent, TaskQueuedEvent } from '../../core/events/events.js';
 import { BaseEventHandler } from '../../core/events/handlers.js';
@@ -148,7 +148,7 @@ export class WorkerHandler extends BaseEventHandler {
           reason,
         });
         return err(
-          new BackbeatError(
+          new AutobeatError(
             ErrorCode.TASK_CANNOT_CANCEL,
             `Task ${taskId} cannot be cancelled in state ${task.status}`,
             { taskId, status: task.status, reason },
@@ -463,7 +463,7 @@ export class WorkerHandler extends BaseEventHandler {
   /**
    * Handle worker timeout (called by WorkerPool)
    */
-  async onWorkerTimeout(taskId: TaskId, error: BackbeatError): Promise<void> {
+  async onWorkerTimeout(taskId: TaskId, error: AutobeatError): Promise<void> {
     try {
       // Update resource monitor
       this.resourceMonitor.decrementWorkerCount();

@@ -23,8 +23,8 @@ preconditions:
 ### Step 1: Clean State
 **Action:** Ensure clean starting state
 ```bash
-rm -rf .backbeat/
-pkill -f "backbeat" || true
+rm -rf .autobeat/
+pkill -f "autobeat" || true
 ```
 **Expected:** Clean state achieved
 **Verify:**
@@ -93,7 +93,7 @@ ps aux | grep "node dist" | grep -v grep | awk '{sum+=$6} END {print "Node proce
 ### Step 7: Check Database Size
 **Action:** Verify database isn't growing unbounded
 ```bash
-ls -lh .backbeat/backbeat.db 2>/dev/null | awk '{print "Database size: " $5}'
+ls -lh .autobeat/autobeat.db 2>/dev/null | awk '{print "Database size: " $5}'
 ```
 **Expected:** Database size reasonable
 **Verify:**
@@ -189,7 +189,7 @@ wait
 total=$(node dist/cli.js status | grep -c "task-")
 echo "Total tasks after stress test: $total"
 # Check for any error messages about queue full
-grep -i "queue.*full\|limit\|maximum" .backbeat/logs/*.log 2>/dev/null | head -5 || echo "No queue limit messages found"
+grep -i "queue.*full\|limit\|maximum" .autobeat/logs/*.log 2>/dev/null | head -5 || echo "No queue limit messages found"
 ```
 **Expected:** Graceful handling
 **Verify:**
@@ -212,8 +212,8 @@ echo "Tasks completed: $completed"
 ### Step 16: Cleanup
 **Action:** Clean up test artifacts
 ```bash
-pkill -f "backbeat" || true
-rm -rf .backbeat/
+pkill -f "autobeat" || true
+rm -rf .autobeat/
 ```
 **Expected:** Cleanup successful
 **Verify:**
@@ -233,7 +233,7 @@ rm -rf .backbeat/
 ## Rollback Plan
 If test fails:
 1. Force kill all processes: `pkill -9 -f node`
-2. Clear database: `rm -rf .backbeat/`
+2. Clear database: `rm -rf .autobeat/`
 3. Check system resources: `free -h && df -h`
 4. Review queue implementation for memory leaks
 5. Check max queue size configuration

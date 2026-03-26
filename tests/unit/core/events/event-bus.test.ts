@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryEventBus } from '../../../../src/core/events/event-bus';
-import type { BackbeatEvent } from '../../../../src/core/events/events';
+import type { AutobeatEvent } from '../../../../src/core/events/events';
 import type { Logger } from '../../../../src/core/interfaces';
 import { TEST_COUNTS, TIMEOUTS } from '../../../constants';
 import { createTestConfiguration } from '../../../fixtures/factories';
@@ -173,14 +173,14 @@ describe('InMemoryEventBus - REAL Pub/Sub Behavior', () => {
         value: 'test',
         eventId: expect.any(String),
         timestamp: expect.any(Number),
-        source: 'backbeat',
+        source: 'autobeat',
       });
       expect(allData).toMatchObject({
         type: 'SpecificEvent',
         value: 'test',
         eventId: expect.any(String),
         timestamp: expect.any(Number),
-        source: 'backbeat',
+        source: 'autobeat',
       });
     });
   });

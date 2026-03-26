@@ -14,7 +14,7 @@ import {
   maskApiKey,
   resolveDefaultAgent,
 } from '../../../src/core/agents';
-import { BackbeatError, ErrorCode } from '../../../src/core/errors';
+import { AutobeatError, ErrorCode } from '../../../src/core/errors';
 
 describe('Agent Types (v0.5.0)', () => {
   describe('AGENT_PROVIDERS constant', () => {
@@ -48,8 +48,8 @@ describe('Agent Types (v0.5.0)', () => {
       const result = resolveDefaultAgent(undefined, undefined);
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error).toBeInstanceOf(BackbeatError);
-        expect((result.error as BackbeatError).code).toBe(ErrorCode.INVALID_INPUT);
+        expect(result.error).toBeInstanceOf(AutobeatError);
+        expect((result.error as AutobeatError).code).toBe(ErrorCode.INVALID_INPUT);
         expect(result.error.message).toContain('No agent specified');
         expect(result.error.message).toContain('beat init');
         expect(result.error.message).toContain('beat config set defaultAgent');

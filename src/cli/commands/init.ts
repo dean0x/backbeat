@@ -197,7 +197,7 @@ export async function initCommand(args: readonly string[]): Promise<void> {
   const isInteractive = deps.isTTY && !options.agent;
 
   if (isInteractive) {
-    ui.intro('Backbeat Setup');
+    ui.intro('Autobeat Setup');
   }
 
   const result = await runInit(options, deps);

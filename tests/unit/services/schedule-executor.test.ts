@@ -256,7 +256,7 @@ describe('ScheduleExecutor - Unit Tests', () => {
 
       await eventBus.emit('TaskFailed', {
         taskId,
-        error: { code: 'SYSTEM_ERROR', message: 'test error', name: 'BackbeatError' },
+        error: { code: 'SYSTEM_ERROR', message: 'test error', name: 'AutobeatError' },
         exitCode: 1,
       });
       await flushEventLoop();

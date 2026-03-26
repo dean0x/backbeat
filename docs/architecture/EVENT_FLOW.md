@@ -1,6 +1,6 @@
 # Event Flow Architecture
 
-Backbeat uses a **hybrid event-driven architecture** where commands (state changes) flow through a central EventBus and queries use direct repository access. This document explains the event flows for common operations.
+Autobeat uses a **hybrid event-driven architecture** where commands (state changes) flow through a central EventBus and queries use direct repository access. This document explains the event flows for common operations.
 
 ## Architecture Overview
 

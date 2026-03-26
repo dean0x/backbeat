@@ -99,7 +99,7 @@ export class ConsoleLogger implements Logger {
   private readonly level: LogLevel;
 
   constructor(
-    private readonly prefix = '[Backbeat]',
+    private readonly prefix = '[Autobeat]',
     private readonly useColors = true,
     level: LogLevel = LogLevel.INFO,
   ) {

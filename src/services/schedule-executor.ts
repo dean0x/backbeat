@@ -7,7 +7,7 @@
 
 import type { Schedule } from '../core/domain.js';
 import { MissedRunPolicy, ScheduleStatus, ScheduleType } from '../core/domain.js';
-import { BackbeatError, ErrorCode } from '../core/errors.js';
+import { AutobeatError, ErrorCode } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
 import type {
   LoopCancelledEvent,
@@ -94,7 +94,7 @@ export class ScheduleExecutor {
     database: TransactionRunner,
     logger: Logger,
     options?: ScheduleExecutorOptions,
-  ): Result<ScheduleExecutor, BackbeatError> {
+  ): Result<ScheduleExecutor, AutobeatError> {
     const executor = new ScheduleExecutor(scheduleRepo, eventBus, database, logger, options);
 
     const subscribeResult = executor.subscribeToTaskEvents();
@@ -110,7 +110,7 @@ export class ScheduleExecutor {
    * ARCHITECTURE: Returns Result so factory can detect subscription failures.
    * Stores subscription IDs for cleanup in stop().
    */
-  private subscribeToTaskEvents(): Result<void, BackbeatError> {
+  private subscribeToTaskEvents(): Result<void, AutobeatError> {
     const subscriptions = [
       // When a schedule execution creates a task or loop, track it
       this.eventBus.subscribe<ScheduleExecutedEvent>('ScheduleExecuted', async (event) => {
@@ -156,7 +156,7 @@ export class ScheduleExecutor {
     for (const result of subscriptions) {
       if (!result.ok) {
         return err(
-          new BackbeatError(ErrorCode.SYSTEM_ERROR, `Failed to subscribe to events: ${result.error.message}`, {
+          new AutobeatError(ErrorCode.SYSTEM_ERROR, `Failed to subscribe to events: ${result.error.message}`, {
             error: result.error,
           }),
         );
@@ -206,9 +206,9 @@ export class ScheduleExecutor {
    *
    * @returns Result<void> - Error if already running
    */
-  start(): Result<void, BackbeatError> {
+  start(): Result<void, AutobeatError> {
     if (this.isRunning) {
-      return err(new BackbeatError(ErrorCode.INVALID_OPERATION, 'ScheduleExecutor is already running'));
+      return err(new AutobeatError(ErrorCode.INVALID_OPERATION, 'ScheduleExecutor is already running'));
     }
 
     this.isRunning = true;
@@ -233,7 +233,7 @@ export class ScheduleExecutor {
    *
    * @returns Result<void> - Always succeeds
    */
-  stop(): Result<void, BackbeatError> {
+  stop(): Result<void, AutobeatError> {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;

@@ -42,7 +42,7 @@ import {
   ScheduleType,
   TaskId,
 } from '../../src/core/domain';
-import { BackbeatError, ErrorCode, taskNotFound } from '../../src/core/errors';
+import { AutobeatError, ErrorCode, taskNotFound } from '../../src/core/errors';
 import { InMemoryEventBus } from '../../src/core/events/event-bus';
 import type {
   OutputCapturedEvent,
@@ -147,7 +147,7 @@ class MockTaskManager implements TaskManager {
     }
     if (oldTask.status !== 'completed' && oldTask.status !== 'failed' && oldTask.status !== 'cancelled') {
       return err(
-        new BackbeatError(
+        new AutobeatError(
           ErrorCode.INVALID_OPERATION,
           `Task ${request.taskId} cannot be resumed in state ${oldTask.status}`,
         ),
@@ -258,7 +258,7 @@ class MockScheduleService implements ScheduleService {
     this.getCalls.push({ scheduleId, includeHistory, historyLimit });
     const schedule = this.scheduleStorage.get(scheduleId);
     if (!schedule) {
-      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
+      return err(new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
     }
     const history: ScheduleExecution[] | undefined = includeHistory ? [] : undefined;
     return ok({ schedule, history });
@@ -268,7 +268,7 @@ class MockScheduleService implements ScheduleService {
     this.cancelCalls.push({ scheduleId, reason, cancelTasks });
     const schedule = this.scheduleStorage.get(scheduleId);
     if (!schedule) {
-      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
+      return err(new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
     }
     return ok(undefined);
   }
@@ -277,7 +277,7 @@ class MockScheduleService implements ScheduleService {
     this.pauseCalls.push({ scheduleId });
     const schedule = this.scheduleStorage.get(scheduleId);
     if (!schedule) {
-      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
+      return err(new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
     }
     return ok(undefined);
   }
@@ -286,7 +286,7 @@ class MockScheduleService implements ScheduleService {
     this.resumeCalls.push({ scheduleId });
     const schedule = this.scheduleStorage.get(scheduleId);
     if (!schedule) {
-      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
+      return err(new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`));
     }
     return ok(undefined);
   }
@@ -328,7 +328,7 @@ class MockLoopService implements LoopService {
     this.getCalls.push({ loopId, includeHistory, historyLimit });
     const loop = this.loopStorage.get(loopId);
     if (!loop) {
-      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Loop ${loopId} not found`));
+      return err(new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Loop ${loopId} not found`));
     }
     const iterations: LoopIteration[] | undefined = includeHistory ? [] : undefined;
     return ok({ loop, iterations });
@@ -347,7 +347,7 @@ class MockLoopService implements LoopService {
     this.cancelCalls.push({ loopId, reason, cancelTasks });
     const loop = this.loopStorage.get(loopId);
     if (!loop) {
-      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Loop ${loopId} not found`));
+      return err(new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Loop ${loopId} not found`));
     }
     return ok(undefined);
   }
@@ -356,10 +356,10 @@ class MockLoopService implements LoopService {
     this.pauseCalls.push({ loopId, options });
     const loop = this.loopStorage.get(loopId);
     if (!loop) {
-      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Loop ${loopId} not found`));
+      return err(new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Loop ${loopId} not found`));
     }
     if (loop.status !== LoopStatus.RUNNING) {
-      return err(new BackbeatError(ErrorCode.INVALID_OPERATION, `Loop ${loopId} is not running`));
+      return err(new AutobeatError(ErrorCode.INVALID_OPERATION, `Loop ${loopId} is not running`));
     }
     return ok(undefined);
   }
@@ -368,7 +368,7 @@ class MockLoopService implements LoopService {
     this.resumeCalls.push({ loopId });
     const loop = this.loopStorage.get(loopId);
     if (!loop) {
-      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Loop ${loopId} not found`));
+      return err(new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Loop ${loopId} not found`));
     }
     return ok(undefined);
   }
@@ -402,7 +402,7 @@ class MockContainer implements Container {
   get<T>(key: string) {
     const value = this.services.get(key);
     if (!value) {
-      return err(new BackbeatError(ErrorCode.DEPENDENCY_INJECTION_FAILED, `Service not found: ${key}`, { key }));
+      return err(new AutobeatError(ErrorCode.DEPENDENCY_INJECTION_FAILED, `Service not found: ${key}`, { key }));
     }
 
     // Handle singleton factories
@@ -559,7 +559,7 @@ describe('CLI - Command Parsing and Validation', () => {
 
       const helpText = getHelpText();
 
-      expect(helpText).toContain('Backbeat');
+      expect(helpText).toContain('Autobeat');
       expect(helpText).toContain('mcp start');
       expect(helpText).toContain('run');
       expect(helpText).toContain('status');
@@ -590,7 +590,7 @@ describe('CLI - Command Parsing and Validation', () => {
       const configText = getConfigText();
 
       expect(configText).toContain('mcpServers');
-      expect(configText).toContain('backbeat');
+      expect(configText).toContain('autobeat');
       expect(configText).toContain('npx');
       expect(configText).toContain('mcp');
       expect(configText).toContain('start');
@@ -609,7 +609,7 @@ describe('CLI - Command Parsing and Validation', () => {
 
       expect(configText).toContain('global installation');
       expect(configText).toContain('local development');
-      expect(configText).toContain('/path/to/backbeat');
+      expect(configText).toContain('/path/to/autobeat');
     });
   });
 
@@ -1848,7 +1848,7 @@ describe('CLI - Task Completion Lifecycle', () => {
 
       await eventBus.emit<TaskFailedEvent>('TaskFailed', {
         taskId,
-        error: new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Process crashed'),
+        error: new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Process crashed'),
         exitCode: 137,
       });
 
@@ -1862,7 +1862,7 @@ describe('CLI - Task Completion Lifecycle', () => {
 
       await eventBus.emit<TaskFailedEvent>('TaskFailed', {
         taskId,
-        error: new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Unknown failure'),
+        error: new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Unknown failure'),
       });
 
       const exitCode = await promise;
@@ -1888,7 +1888,7 @@ describe('CLI - Task Completion Lifecycle', () => {
 
       await eventBus.emit<TaskTimeoutEvent>('TaskTimeout', {
         taskId,
-        error: new BackbeatError(ErrorCode.TASK_TIMEOUT, 'Task exceeded timeout'),
+        error: new AutobeatError(ErrorCode.TASK_TIMEOUT, 'Task exceeded timeout'),
       });
 
       const exitCode = await promise;
@@ -1978,7 +1978,7 @@ describe('CLI - Task Completion Lifecycle', () => {
       });
       await eventBus.emit<TaskFailedEvent>('TaskFailed', {
         taskId,
-        error: new BackbeatError(ErrorCode.SYSTEM_ERROR, 'late failure'),
+        error: new AutobeatError(ErrorCode.SYSTEM_ERROR, 'late failure'),
         exitCode: 1,
       });
 
@@ -2044,7 +2044,7 @@ describe('CLI - Task Completion Lifecycle', () => {
   describe('Detach mode - task ID extraction', () => {
     it('should extract task ID from typical log output', () => {
       const logContent = [
-        '🚀 Bootstrapping Backbeat...',
+        '🚀 Bootstrapping Autobeat...',
         '📝 Delegating task: analyze codebase',
         '✅ Task delegated successfully!',
         '📋 Task ID: task-abc123def456',
@@ -2064,7 +2064,7 @@ describe('CLI - Task Completion Lifecycle', () => {
     });
 
     it('should not match task ID in non-matching output', () => {
-      const logContent = '🚀 Bootstrapping Backbeat...\nStill loading...';
+      const logContent = '🚀 Bootstrapping Autobeat...\nStill loading...';
       const taskIdPattern = /Task ID:\s+(task-\S+)/;
       expect(logContent.match(taskIdPattern)).toBeNull();
     });
@@ -2221,7 +2221,7 @@ describe('CLI - Task Completion Lifecycle', () => {
 function getHelpText(): string {
   // Simulate help text extraction - must match actual showHelp() output
   return `
-🤖 Backbeat - MCP Server for Task Delegation
+🤖 Autobeat - MCP Server for Task Delegation
 
 Usage:
   beat <command> [options...]
@@ -2276,15 +2276,15 @@ Examples:
 
 function getConfigText(): string {
   return `
-📋 MCP Configuration for Backbeat
+📋 MCP Configuration for Autobeat
 
 Add this to your MCP configuration file:
 
 {
   "mcpServers": {
-    "backbeat": {
+    "autobeat": {
       "command": "npx",
-      "args": ["-y", "backbeat", "mcp", "start"]
+      "args": ["-y", "autobeat", "mcp", "start"]
     }
   }
 }
@@ -2297,14 +2297,14 @@ Configuration file locations:
 For global installation, use:
 {
   "mcpServers": {
-    "backbeat": {
+    "autobeat": {
       "command": "beat",
       "args": ["mcp", "start"]
     }
   }
 }
 
-For local development, use /path/to/backbeat/dist/index.js
+For local development, use /path/to/autobeat/dist/index.js
 `;
 }
 
@@ -2320,12 +2320,12 @@ interface RunOptions {
 
 function validateRunInput(prompt: string, options: RunOptions) {
   if (!prompt || prompt.trim().length === 0) {
-    return err(new BackbeatError(ErrorCode.INVALID_INPUT, 'Prompt is required', { field: 'prompt' }));
+    return err(new AutobeatError(ErrorCode.INVALID_INPUT, 'Prompt is required', { field: 'prompt' }));
   }
 
   if (options.priority && !['P0', 'P1', 'P2'].includes(options.priority)) {
     return err(
-      new BackbeatError(ErrorCode.INVALID_INPUT, 'Priority must be P0, P1, or P2', {
+      new AutobeatError(ErrorCode.INVALID_INPUT, 'Priority must be P0, P1, or P2', {
         field: 'priority',
         value: options.priority,
       }),
@@ -2335,17 +2335,17 @@ function validateRunInput(prompt: string, options: RunOptions) {
   if (options.workingDirectory) {
     const path = options.workingDirectory;
     if (!path.startsWith('/')) {
-      return err(new BackbeatError(ErrorCode.INVALID_DIRECTORY, 'Working directory must be absolute path', { path }));
+      return err(new AutobeatError(ErrorCode.INVALID_DIRECTORY, 'Working directory must be absolute path', { path }));
     }
     if (path.includes('..')) {
-      return err(new BackbeatError(ErrorCode.INVALID_DIRECTORY, 'Path traversal not allowed', { path }));
+      return err(new AutobeatError(ErrorCode.INVALID_DIRECTORY, 'Path traversal not allowed', { path }));
     }
   }
 
   if (options.timeout !== undefined) {
     if (typeof options.timeout !== 'number' || options.timeout <= 0 || !isFinite(options.timeout)) {
       return err(
-        new BackbeatError(ErrorCode.INVALID_INPUT, 'Timeout must be positive number', {
+        new AutobeatError(ErrorCode.INVALID_INPUT, 'Timeout must be positive number', {
           field: 'timeout',
           value: options.timeout,
         }),
@@ -2357,7 +2357,7 @@ function validateRunInput(prompt: string, options: RunOptions) {
     const maxAllowed = 1024 * 1024 * 100; // 100MB
     if (options.maxOutputBuffer > maxAllowed) {
       return err(
-        new BackbeatError(ErrorCode.INVALID_INPUT, `maxOutputBuffer exceeds limit of ${maxAllowed} bytes`, {
+        new AutobeatError(ErrorCode.INVALID_INPUT, `maxOutputBuffer exceeds limit of ${maxAllowed} bytes`, {
           field: 'maxOutputBuffer',
           value: options.maxOutputBuffer,
         }),
@@ -2526,9 +2526,9 @@ async function simulateScheduleCreate(
 ) {
   const { parseScheduleCreateArgs } = await import('../../src/cli/commands/schedule');
   const parsed = parseScheduleCreateArgs(buildScheduleCreateArgs(options));
-  if (!parsed.ok) return err(new BackbeatError(ErrorCode.INVALID_INPUT, parsed.error));
+  if (!parsed.ok) return err(new AutobeatError(ErrorCode.INVALID_INPUT, parsed.error));
   const args = parsed.value;
-  if (args.isPipeline) return err(new BackbeatError(ErrorCode.INVALID_INPUT, 'Expected non-pipeline'));
+  if (args.isPipeline) return err(new AutobeatError(ErrorCode.INVALID_INPUT, 'Expected non-pipeline'));
 
   return service.createSchedule({
     prompt: args.prompt,
@@ -2547,7 +2547,7 @@ async function simulateScheduleCreate(
 
 function validatePipelineInput(steps: string[]) {
   if (steps.length === 0) {
-    return err(new BackbeatError(ErrorCode.INVALID_INPUT, 'No pipeline steps found', { field: 'steps' }));
+    return err(new AutobeatError(ErrorCode.INVALID_INPUT, 'No pipeline steps found', { field: 'steps' }));
   }
   return ok(undefined);
 }
@@ -2589,9 +2589,9 @@ async function simulateScheduleCreatePipeline(
   if (options.agent) args.push('--agent', options.agent);
 
   const parsed = parseScheduleCreateArgs(args);
-  if (!parsed.ok) return err(new BackbeatError(ErrorCode.INVALID_INPUT, parsed.error));
+  if (!parsed.ok) return err(new AutobeatError(ErrorCode.INVALID_INPUT, parsed.error));
   const p = parsed.value;
-  if (!p.isPipeline) return err(new BackbeatError(ErrorCode.INVALID_INPUT, 'Expected pipeline'));
+  if (!p.isPipeline) return err(new AutobeatError(ErrorCode.INVALID_INPUT, 'Expected pipeline'));
 
   return service.createScheduledPipeline({
     steps: p.pipelineSteps.map((prompt) => ({ prompt })),
@@ -2661,7 +2661,7 @@ async function simulateResumeCommand(taskManager: MockTaskManager, taskId: strin
 async function simulateLoopCreate(service: MockLoopService, args: string[]) {
   const { parseLoopCreateArgs } = await import('../../src/cli/commands/loop');
   const parsed = parseLoopCreateArgs(args);
-  if (!parsed.ok) return err(new BackbeatError(ErrorCode.INVALID_INPUT, parsed.error));
+  if (!parsed.ok) return err(new AutobeatError(ErrorCode.INVALID_INPUT, parsed.error));
   const p = parsed.value;
   return service.createLoop({
     prompt: p.isPipeline ? undefined : p.prompt,

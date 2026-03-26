@@ -36,7 +36,7 @@ import {
   ScheduleStatus,
   ScheduleType,
 } from '../../../src/core/domain';
-import { BackbeatError, ErrorCode, taskNotFound } from '../../../src/core/errors';
+import { AutobeatError, ErrorCode, taskNotFound } from '../../../src/core/errors';
 import type { Logger, LoopService, ScheduleService, TaskManager } from '../../../src/core/interfaces';
 import type { Result } from '../../../src/core/result';
 import { err, ok } from '../../../src/core/result';
@@ -65,7 +65,7 @@ class MockTaskManager implements TaskManager {
     this.delegateCalls.push(request);
 
     if (this.shouldFailDelegate) {
-      return err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Failed to delegate task', {}));
+      return err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Failed to delegate task', {}));
     }
 
     const task = new TaskFactory()
@@ -80,7 +80,7 @@ class MockTaskManager implements TaskManager {
     this.statusCalls.push(taskId);
 
     if (this.shouldFailStatus) {
-      return err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Failed to get status', {}));
+      return err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Failed to get status', {}));
     }
 
     if (taskId) {
@@ -331,7 +331,7 @@ describe('MCPAdapter - Protocol Compliance', () => {
 
       expect(server).toBeTruthy();
       expect(typeof server).toBe('object');
-      // Server should be initialized with backbeat name and package version
+      // Server should be initialized with autobeat name and package version
     });
 
     it('should declare tools capability in MCP protocol', () => {
@@ -1148,7 +1148,7 @@ class MockScheduleService {
 
   async listSchedules(): Promise<Result<readonly Schedule[]>> {
     if (this.shouldFailListSchedules) {
-      return err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Failed to list schedules', {}));
+      return err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Failed to list schedules', {}));
     }
     return ok(this.listSchedulesResult);
   }
@@ -1170,18 +1170,18 @@ class MockScheduleService {
     }>
   > {
     if (this.shouldFailScheduleStatus) {
-      return err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Failed to get schedule', {}));
+      return err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Failed to get schedule', {}));
     }
     if (this.getScheduleResult) {
       return ok(this.getScheduleResult);
     }
-    return err(new BackbeatError(ErrorCode.SYSTEM_ERROR, `Schedule ${scheduleId} not found`, {}));
+    return err(new AutobeatError(ErrorCode.SYSTEM_ERROR, `Schedule ${scheduleId} not found`, {}));
   }
 
   async cancelSchedule(scheduleId: ScheduleId, reason?: string, cancelTasks?: boolean): Promise<Result<void>> {
     this.cancelScheduleCalls.push({ scheduleId: scheduleId as string, reason, cancelTasks });
     if (this.shouldFailCancelSchedule) {
-      return err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Failed to cancel schedule', {}));
+      return err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Failed to cancel schedule', {}));
     }
     return ok(undefined);
   }
@@ -1197,7 +1197,7 @@ class MockScheduleService {
     this.createPipelineCalls.push(request);
 
     if (this.shouldFailPipeline) {
-      return err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Pipeline creation failed', {}));
+      return err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Pipeline creation failed', {}));
     }
 
     return ok({
@@ -1233,7 +1233,7 @@ class MockScheduleService {
     this.createScheduledPipelineCalls.push(request);
 
     if (this.shouldFailScheduledPipeline) {
-      return err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Scheduled pipeline creation failed', {}));
+      return err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Scheduled pipeline creation failed', {}));
     }
 
     const now = Date.now();
@@ -1983,7 +1983,7 @@ describe('MCPAdapter - Loop Tools', () => {
     });
 
     it('should propagate service errors', async () => {
-      mockLoopService.setCreateLoopResult(err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Failed to create loop', {})));
+      mockLoopService.setCreateLoopResult(err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Failed to create loop', {})));
 
       const result = await simulateCreateLoop(mockLoopService, {
         exitCondition: 'true',
@@ -2040,7 +2040,7 @@ describe('MCPAdapter - Loop Tools', () => {
     });
 
     it('should propagate service errors', async () => {
-      mockLoopService.setGetLoopResult(err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Loop not found', {})));
+      mockLoopService.setGetLoopResult(err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Loop not found', {})));
 
       const result = await simulateLoopStatus(mockLoopService, { loopId: 'non-existent' });
 
@@ -2106,7 +2106,7 @@ describe('MCPAdapter - Loop Tools', () => {
     });
 
     it('should propagate service errors', async () => {
-      mockLoopService.setCancelLoopResult(err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Loop not found', {})));
+      mockLoopService.setCancelLoopResult(err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Loop not found', {})));
 
       const result = await simulateCancelLoop(mockLoopService, { loopId: 'non-existent' });
 
@@ -2162,7 +2162,7 @@ describe('MCPAdapter - Loop Tools', () => {
     });
 
     it('should propagate service errors through callTool()', async () => {
-      mockLoopService.setPauseLoopResult(err(new BackbeatError(ErrorCode.INVALID_OPERATION, 'Loop not running', {})));
+      mockLoopService.setPauseLoopResult(err(new AutobeatError(ErrorCode.INVALID_OPERATION, 'Loop not running', {})));
 
       const adapter = new MCPAdapter(
         new MockTaskManager(),
@@ -2222,7 +2222,7 @@ describe('MCPAdapter - Loop Tools', () => {
     });
 
     it('should propagate service errors through callTool()', async () => {
-      mockLoopService.setResumeLoopResult(err(new BackbeatError(ErrorCode.INVALID_OPERATION, 'Loop not paused', {})));
+      mockLoopService.setResumeLoopResult(err(new AutobeatError(ErrorCode.INVALID_OPERATION, 'Loop not paused', {})));
 
       const adapter = new MCPAdapter(
         new MockTaskManager(),

@@ -1,4 +1,4 @@
-# Backbeat v0.8.0 — Loop Pause/Resume, Scheduled Loops & Git Integration
+# Autobeat v0.8.0 — Loop Pause/Resume, Scheduled Loops & Git Integration
 
 Enhanced loop lifecycle with pause/resume controls, cron-scheduled loop execution, git-aware loop iteration tracking, and CLI naming standardization.
 
@@ -90,16 +90,16 @@ Optional git-aware loop iteration tracking:
 ## Installation
 
 ```bash
-npm install -g backbeat@0.8.0
+npm install -g autobeat@0.8.0
 ```
 
 Or use npx:
 ```json
 {
   "mcpServers": {
-    "backbeat": {
+    "autobeat": {
       "command": "npx",
-      "args": ["-y", "backbeat", "mcp", "start"]
+      "args": ["-y", "autobeat", "mcp", "start"]
     }
   }
 }
@@ -109,6 +109,6 @@ Or use npx:
 
 ## Links
 
-- NPM Package: https://www.npmjs.com/package/backbeat
-- Documentation: https://github.com/dean0x/backbeat/blob/main/docs/FEATURES.md
-- Issues: https://github.com/dean0x/backbeat/issues
+- NPM Package: https://www.npmjs.com/package/autobeat
+- Documentation: https://github.com/dean0x/autobeat/blob/main/docs/FEATURES.md
+- Issues: https://github.com/dean0x/autobeat/issues

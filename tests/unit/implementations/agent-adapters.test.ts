@@ -114,7 +114,7 @@ describe('ClaudeAdapter', () => {
       const spawnOptions = mockSpawn.mock.calls[0][2] as { env: Record<string, string> };
       expect(spawnOptions.env.CLAUDECODE).toBeUndefined();
       expect(spawnOptions.env.CLAUDE_CODE_SESSION).toBeUndefined();
-      expect(spawnOptions.env.BACKBEAT_WORKER).toBe('true');
+      expect(spawnOptions.env.AUTOBEAT_WORKER).toBe('true');
     } finally {
       // Restore env
       delete process.env.CLAUDECODE;
@@ -122,14 +122,14 @@ describe('ClaudeAdapter', () => {
     }
   });
 
-  it('should set BACKBEAT_TASK_ID when taskId provided', () => {
+  it('should set AUTOBEAT_TASK_ID when taskId provided', () => {
     const mockChild = createMockChildProcess(1234);
     mockSpawn.mockReturnValue(mockChild);
 
     adapter.spawn('test prompt', '/workspace', 'task-123');
 
     const spawnOptions = mockSpawn.mock.calls[0][2] as { env: Record<string, string> };
-    expect(spawnOptions.env.BACKBEAT_TASK_ID).toBe('task-123');
+    expect(spawnOptions.env.AUTOBEAT_TASK_ID).toBe('task-123');
   });
 
   it('should return error when process has no PID', () => {
@@ -200,7 +200,7 @@ describe('CodexAdapter', () => {
 
       const spawnOptions = mockSpawn.mock.calls[0][2] as { env: Record<string, string> };
       expect(spawnOptions.env.CODEX_SESSION).toBe('test');
-      expect(spawnOptions.env.BACKBEAT_WORKER).toBe('true');
+      expect(spawnOptions.env.AUTOBEAT_WORKER).toBe('true');
     } finally {
       delete process.env.CODEX_SESSION;
     }
@@ -248,7 +248,7 @@ describe('GeminiAdapter', () => {
 
       const spawnOptions = mockSpawn.mock.calls[0][2] as { env: Record<string, string> };
       expect(spawnOptions.env.GEMINI_API_KEY).toBe('secret');
-      expect(spawnOptions.env.BACKBEAT_WORKER).toBe('true');
+      expect(spawnOptions.env.AUTOBEAT_WORKER).toBe('true');
     } finally {
       delete process.env.GEMINI_API_KEY;
     }
@@ -389,7 +389,7 @@ describe('Pre-spawn auth validation', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    testDir = path.join(tmpdir(), `backbeat-adapter-auth-test-${Date.now()}`);
+    testDir = path.join(tmpdir(), `autobeat-adapter-auth-test-${Date.now()}`);
     mkdirSync(testDir, { recursive: true });
     restoreConfig = _testSetConfigDir(testDir);
   });

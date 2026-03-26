@@ -88,7 +88,7 @@ describe('ClaudeProcessSpawner - Behavioral Tests', () => {
         expect(result.error).toBeInstanceOf(Error);
         expect(result.error.message).toContain('Command not found');
         expect(typeof result.error.message).toBe('string');
-        expect(result.error.name).toBe('BackbeatError');
+        expect(result.error.name).toBe('AutobeatError');
         expect(result.error.stack).toBeDefined();
       }
       if (!result.ok) {
@@ -254,7 +254,7 @@ describe('ClaudeProcessSpawner - Behavioral Tests', () => {
         expect(result.error.code).toBe('PROCESS_KILL_FAILED');
         expect(result.error.message).toContain('99999');
         expect(result.error.message).toContain('No such process');
-        expect(result.error.name).toBe('BackbeatError');
+        expect(result.error.name).toBe('AutobeatError');
         expect(result.error.context).toBeDefined();
         expect(result.error.context?.pid).toBe(invalidPid);
         expect(typeof result.error.message).toBe('string');
@@ -319,19 +319,19 @@ describe('ClaudeProcessSpawner - Behavioral Tests', () => {
       const spawnCall = spawnSpy.mock.calls[0];
       expect(spawnCall[2].env.CUSTOM_VAR).toBe('test-value');
       expect(spawnCall[2].env.PATH).toBe('/usr/bin:/bin');
-      expect(spawnCall[2].env.BACKBEAT_WORKER).toBe('true');
+      expect(spawnCall[2].env.AUTOBEAT_WORKER).toBe('true');
 
       process.env = originalEnv;
     });
 
-    it('should add BACKBEAT_TASK_ID when task ID provided', () => {
+    it('should add AUTOBEAT_TASK_ID when task ID provided', () => {
       const taskId = 'task-abc-123';
       const result = spawner.spawn('test', '/tmp', taskId);
 
       expect(result.ok).toBe(true);
       const spawnCall = spawnSpy.mock.calls[0];
-      expect(spawnCall[2].env.BACKBEAT_TASK_ID).toBe(taskId);
-      expect(spawnCall[2].env.BACKBEAT_WORKER).toBe('true');
+      expect(spawnCall[2].env.AUTOBEAT_TASK_ID).toBe(taskId);
+      expect(spawnCall[2].env.AUTOBEAT_WORKER).toBe('true');
     });
   });
 
@@ -458,9 +458,9 @@ describe('ClaudeProcessSpawner - Behavioral Tests', () => {
           expect(env.CLAUDE_CODE_ENTRYPOINT).toBeUndefined();
           expect(env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).toBeUndefined();
 
-          // Backbeat vars must be present
-          expect(env.BACKBEAT_WORKER).toBe('true');
-          expect(env.BACKBEAT_TASK_ID).toBe('task-123');
+          // Autobeat vars must be present
+          expect(env.AUTOBEAT_WORKER).toBe('true');
+          expect(env.AUTOBEAT_TASK_ID).toBe('task-123');
         }
       } finally {
         for (const [key, original] of Object.entries(saved)) {

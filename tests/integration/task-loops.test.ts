@@ -55,7 +55,7 @@ describe('Integration: Task Loops - End-to-End Flow', () => {
     logger = new TestLogger();
     const config = createTestConfiguration();
     eventBus = new InMemoryEventBus(config, logger);
-    tempDir = await mkdtemp(join(tmpdir(), 'backbeat-loop-test-'));
+    tempDir = await mkdtemp(join(tmpdir(), 'autobeat-loop-test-'));
 
     database = new Database(':memory:');
 

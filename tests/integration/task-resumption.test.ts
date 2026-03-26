@@ -19,7 +19,7 @@ import { bootstrap } from '../../src/bootstrap.js';
 import { Container } from '../../src/core/container.js';
 import type { Task, TaskCheckpoint } from '../../src/core/domain.js';
 import { Priority, TaskId, TaskStatus } from '../../src/core/domain.js';
-import { BackbeatError, ErrorCode } from '../../src/core/errors.js';
+import { AutobeatError, ErrorCode } from '../../src/core/errors.js';
 import { EventBus } from '../../src/core/events/event-bus.js';
 import type { CheckpointCreatedEvent } from '../../src/core/events/events.js';
 import { CheckpointRepository, TaskManager, TaskRepository } from '../../src/core/interfaces.js';
@@ -38,9 +38,9 @@ describe('Integration: Task Resumption - End-to-End Flow', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'backbeat-resume-test-'));
-    process.env.BACKBEAT_DATABASE_PATH = join(tempDir, 'test.db');
-    process.env.BACKBEAT_DEFAULT_AGENT = 'claude';
+    tempDir = await mkdtemp(join(tmpdir(), 'autobeat-resume-test-'));
+    process.env.AUTOBEAT_DATABASE_PATH = join(tempDir, 'test.db');
+    process.env.AUTOBEAT_DEFAULT_AGENT = 'claude';
     process.env.WORKER_MIN_SPAWN_DELAY_MS = '10'; // Fast spawn for tests
 
     const result = await bootstrap({
@@ -83,8 +83,8 @@ describe('Integration: Task Resumption - End-to-End Flow', () => {
     if (container) {
       await container.dispose();
     }
-    delete process.env.BACKBEAT_DATABASE_PATH;
-    delete process.env.BACKBEAT_DEFAULT_AGENT;
+    delete process.env.AUTOBEAT_DATABASE_PATH;
+    delete process.env.AUTOBEAT_DEFAULT_AGENT;
     delete process.env.WORKER_MIN_SPAWN_DELAY_MS;
     if (tempDir) {
       await rm(tempDir, { recursive: true, force: true });
@@ -171,7 +171,7 @@ describe('Integration: Task Resumption - End-to-End Flow', () => {
       // Manually emit TaskFailed event (since NoOpProcessSpawner always exits 0)
       await eventBus.emit('TaskFailed', {
         taskId: failTask.value.id,
-        error: new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Simulated test failure'),
+        error: new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Simulated test failure'),
       });
       await failCheckpointPromise;
       await flushEventLoop();

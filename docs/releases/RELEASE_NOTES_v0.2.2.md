@@ -1,4 +1,4 @@
-# 🚀 Backbeat v0.2.2 - Enhanced Reliability & Developer Experience
+# 🚀 Autobeat v0.2.2 - Enhanced Reliability & Developer Experience
 
 ## Major Features
 
@@ -13,7 +13,7 @@
   - Added `--tail` parameter to logs command
   - Added `reason` parameter to cancel command
 - **Error Handling**: Fixed deprecated `listTasks()` method usage in CLI status command
-- **Process Management**: Workers now include `BACKBEAT_WORKER` environment variable with task ID
+- **Process Management**: Workers now include `AUTOBEAT_WORKER` environment variable with task ID
 - **Documentation**: Comprehensive updates to README, ROADMAP, CLAUDE.md, and FEATURES.md
 
 ## Bug Fixes
@@ -35,7 +35,7 @@
 ## Installation
 
 ```bash
-npm install -g backbeat@0.2.2
+npm install -g autobeat@0.2.2
 ```
 
 ## What's Next
@@ -52,4 +52,4 @@ This release includes contributions from Claude Code 🤖
 
 ---
 
-For more information, visit the [GitHub repository](https://github.com/dean0x/backbeat)
+For more information, visit the [GitHub repository](https://github.com/dean0x/autobeat)

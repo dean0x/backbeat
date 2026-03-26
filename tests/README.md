@@ -1,9 +1,9 @@
-# Backbeat Test Suite
+# Autobeat Test Suite
 
 **Quality Score**: 75/100 (Target: 85/100)
 **Standards**: [TEST_STANDARDS.md](./TEST_STANDARDS.md) - **MUST READ BEFORE WRITING TESTS**
 
-This directory contains comprehensive tests for Backbeat's task delegation system following strict quality standards.
+This directory contains comprehensive tests for Autobeat's task delegation system following strict quality standards.
 
 ## Test Structure
 
@@ -124,7 +124,7 @@ Reusable test data and mocks:
 
 ### Temporary Files
 Tests create temporary artifacts in:
-- `.backbeat/` - Temporary databases
+- `.autobeat/` - Temporary databases
 
 **Cleanup**: Tests automatically clean up after execution
 
@@ -239,9 +239,9 @@ E2E tests are written in markdown with:
 - **Mock leakage**: Reset mocks in afterEach hooks
 
 ### E2E Test Issues
-- **Database locks**: Clean `.backbeat/` directory
+- **Database locks**: Clean `.autobeat/` directory
 - **Orphaned processes**: Run `pkill -f beat`
-- **Orphaned processes**: Run `pkill -f "claude.*backbeat"`
+- **Orphaned processes**: Run `pkill -f "claude.*autobeat"`
 
 ## CI/CD Integration
 

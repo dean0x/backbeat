@@ -96,7 +96,7 @@ export const DB_CONFIG = {
 
 // File Paths
 export const TEST_PATHS = {
-  TEMP_DIR: '/tmp/backbeat-test',
+  TEMP_DIR: '/tmp/autobeat-test',
   FIXTURES_DIR: './tests/fixtures',
   OUTPUT_DIR: './test-output',
   DB_FILE: ':memory:', // Use in-memory DB for tests

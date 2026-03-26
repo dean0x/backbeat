@@ -22,7 +22,7 @@ import { TestLogger } from '../fixtures/test-doubles.js';
 
 describe('Integration: Task persistence', () => {
   it('should persist tasks across restarts', async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), 'backbeat-test-'));
+    const tempDir = await mkdtemp(join(tmpdir(), 'autobeat-test-'));
     const dbPath = join(tempDir, 'test.db');
     const logger = new TestLogger();
 
@@ -135,7 +135,7 @@ describe('Integration: Task persistence', () => {
   });
 
   it('should handle database transaction rollback', async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), 'backbeat-test-'));
+    const tempDir = await mkdtemp(join(tmpdir(), 'autobeat-test-'));
     const dbPath = join(tempDir, 'test.db');
 
     try {
@@ -173,7 +173,7 @@ describe('Integration: Task persistence', () => {
   });
 
   it('should maintain queue persistence and priority ordering', async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), 'backbeat-test-'));
+    const tempDir = await mkdtemp(join(tmpdir(), 'autobeat-test-'));
     const dbPath = join(tempDir, 'test.db');
     const logger = new TestLogger();
 
@@ -254,7 +254,7 @@ describe('Integration: Task persistence', () => {
   });
 
   it('should handle concurrent database operations', async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), 'backbeat-test-'));
+    const tempDir = await mkdtemp(join(tmpdir(), 'autobeat-test-'));
     const dbPath = join(tempDir, 'test.db');
 
     try {
@@ -303,7 +303,7 @@ describe('Integration: Task persistence', () => {
   });
 
   it('should recover with partial data', async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), 'backbeat-test-'));
+    const tempDir = await mkdtemp(join(tmpdir(), 'autobeat-test-'));
     const dbPath = join(tempDir, 'test.db');
     const logger = new TestLogger();
 
@@ -381,7 +381,7 @@ describe('Integration: Task persistence', () => {
   });
 
   it('should skip re-queuing QUEUED tasks blocked by unresolved dependencies', async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), 'backbeat-test-'));
+    const tempDir = await mkdtemp(join(tmpdir(), 'autobeat-test-'));
     const dbPath = join(tempDir, 'test.db');
     const logger = new TestLogger();
 

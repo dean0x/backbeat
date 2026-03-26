@@ -19,14 +19,14 @@ logs/
 Thumbs.db
 
 # Config files with local paths
-config/backbeat-config.json
+config/autobeat-config.json
 config/mcp-config-snippet.json
 config/mcp-config-ready.json
 
 # Runtime directories
 task-outputs/
 data/
-.backbeat-patches/
+.autobeat-patches/
 
 # Package files
 *.tgz
@@ -60,7 +60,7 @@ launch/
 .claude/
 .mcp.json
 output/
-.backbeat/
+.autobeat/
 
 # Local memory/session files
 .memory/

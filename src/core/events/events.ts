@@ -17,7 +17,7 @@ import {
   TaskId,
   WorkerId,
 } from '../domain.js';
-import { BackbeatError } from '../errors.js';
+import { AutobeatError } from '../errors.js';
 
 /**
  * Base event interface - all events extend this
@@ -62,7 +62,7 @@ export interface TaskCompletedEvent extends BaseEvent {
 export interface TaskFailedEvent extends BaseEvent {
   type: 'TaskFailed';
   taskId: TaskId;
-  error: BackbeatError;
+  error: AutobeatError;
   exitCode?: number;
 }
 
@@ -75,7 +75,7 @@ export interface TaskCancelledEvent extends BaseEvent {
 export interface TaskTimeoutEvent extends BaseEvent {
   type: 'TaskTimeout';
   taskId: TaskId;
-  error: BackbeatError;
+  error: AutobeatError;
 }
 
 export interface TaskCancellationRequestedEvent extends BaseEvent {
@@ -127,7 +127,7 @@ export interface TaskDependencyFailedEvent extends BaseEvent {
   type: 'TaskDependencyFailed';
   taskId: TaskId;
   failedDependencyId: TaskId;
-  error: BackbeatError;
+  error: AutobeatError;
 }
 
 /**
@@ -241,7 +241,7 @@ export interface LoopResumedEvent extends BaseEvent {
 /**
  * Union type of all events
  */
-export type BackbeatEvent =
+export type AutobeatEvent =
   // Task lifecycle events
   | TaskDelegatedEvent
   | TaskQueuedEvent
@@ -284,15 +284,15 @@ export type BackbeatEvent =
 /**
  * Event handler function type
  */
-export type EventHandler<T extends BackbeatEvent = BackbeatEvent> = (event: T) => Promise<void>;
+export type EventHandler<T extends AutobeatEvent = AutobeatEvent> = (event: T) => Promise<void>;
 
 /**
  * Helper to create events with consistent metadata
  */
-export function createEvent<T extends BackbeatEvent>(
+export function createEvent<T extends AutobeatEvent>(
   type: T['type'],
   payload: Omit<T, keyof BaseEvent | 'type'>,
-  source = 'backbeat',
+  source = 'autobeat',
 ): T {
   return {
     type,

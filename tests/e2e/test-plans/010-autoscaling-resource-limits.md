@@ -34,8 +34,8 @@ which stress || echo "stress tool not found - install with: apt install stress"
 ### Step 2: Clean State
 **Action:** Ensure clean starting state
 ```bash
-rm -rf .backbeat/
-pkill -f "backbeat" || true
+rm -rf .autobeat/
+pkill -f "autobeat" || true
 pkill -f "stress" || true
 ```
 **Expected:** Clean state achieved
@@ -230,8 +230,8 @@ echo "Workers under combined load: $workers_combined"
 **Action:** Clean up all test artifacts
 ```bash
 pkill -f "stress" || true
-pkill -f "backbeat" || true
-rm -rf .backbeat/
+pkill -f "autobeat" || true
+rm -rf .autobeat/
 ```
 **Expected:** Cleanup successful
 **Verify:**

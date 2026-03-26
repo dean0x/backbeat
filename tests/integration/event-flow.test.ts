@@ -26,7 +26,7 @@ import { flushEventLoop } from '../utils/event-helpers.js';
 describe('Integration: Event-driven task delegation flow', () => {
   it('should coordinate task delegation through events', async () => {
     // Setup test database
-    const tempDir = await mkdtemp(join(tmpdir(), 'backbeat-test-'));
+    const tempDir = await mkdtemp(join(tmpdir(), 'autobeat-test-'));
     const dbPath = join(tempDir, 'test.db');
 
     // Initialize components

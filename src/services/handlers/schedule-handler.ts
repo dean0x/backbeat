@@ -18,7 +18,7 @@ import {
   updateLoop,
   updateSchedule,
 } from '../../core/domain.js';
-import { BackbeatError, ErrorCode } from '../../core/errors.js';
+import { AutobeatError, ErrorCode } from '../../core/errors.js';
 import { EventBus } from '../../core/events/event-bus.js';
 import {
   ScheduleCancelledEvent,
@@ -85,7 +85,7 @@ export class ScheduleHandler extends BaseEventHandler {
     logger: Logger,
     options?: ScheduleHandlerOptions,
     loopService?: LoopService,
-  ): Promise<Result<ScheduleHandler, BackbeatError>> {
+  ): Promise<Result<ScheduleHandler, AutobeatError>> {
     const handlerLogger = logger.child ? logger.child({ module: 'ScheduleHandler' }) : logger;
 
     // Create handler
@@ -117,7 +117,7 @@ export class ScheduleHandler extends BaseEventHandler {
    * Subscribe to all relevant events
    * ARCHITECTURE: Called by factory after initialization
    */
-  private subscribeToEvents(): Result<void, BackbeatError> {
+  private subscribeToEvents(): Result<void, AutobeatError> {
     const subscriptions = [
       // Schedule lifecycle events
       this.eventBus.subscribe('ScheduleCreated', this.handleScheduleCreated.bind(this)),
@@ -132,7 +132,7 @@ export class ScheduleHandler extends BaseEventHandler {
     for (const result of subscriptions) {
       if (!result.ok) {
         return err(
-          new BackbeatError(ErrorCode.SYSTEM_ERROR, `Failed to subscribe to events: ${result.error.message}`, {
+          new AutobeatError(ErrorCode.SYSTEM_ERROR, `Failed to subscribe to events: ${result.error.message}`, {
             error: result.error,
           }),
         );
@@ -166,7 +166,7 @@ export class ScheduleHandler extends BaseEventHandler {
           timezone: schedule.timezone,
         });
         return err(
-          new BackbeatError(ErrorCode.INVALID_INPUT, `Invalid timezone: ${schedule.timezone}`, {
+          new AutobeatError(ErrorCode.INVALID_INPUT, `Invalid timezone: ${schedule.timezone}`, {
             scheduleId: schedule.id,
             timezone: schedule.timezone,
           }),
@@ -180,7 +180,7 @@ export class ScheduleHandler extends BaseEventHandler {
         // Validate cron expression
         if (!schedule.cronExpression) {
           return err(
-            new BackbeatError(ErrorCode.INVALID_INPUT, 'CRON schedule requires cronExpression', {
+            new AutobeatError(ErrorCode.INVALID_INPUT, 'CRON schedule requires cronExpression', {
               scheduleId: schedule.id,
             }),
           );
@@ -205,7 +205,7 @@ export class ScheduleHandler extends BaseEventHandler {
         // ONE_TIME uses scheduledAt directly
         if (!schedule.scheduledAt) {
           return err(
-            new BackbeatError(ErrorCode.INVALID_INPUT, 'ONE_TIME schedule requires scheduledAt timestamp', {
+            new AutobeatError(ErrorCode.INVALID_INPUT, 'ONE_TIME schedule requires scheduledAt timestamp', {
               scheduleId: schedule.id,
             }),
           );
@@ -214,7 +214,7 @@ export class ScheduleHandler extends BaseEventHandler {
       } else {
         const _exhaustive: never = schedule.scheduleType;
         return err(
-          new BackbeatError(ErrorCode.INVALID_INPUT, `Unknown schedule type: ${schedule.scheduleType}`, {
+          new AutobeatError(ErrorCode.INVALID_INPUT, `Unknown schedule type: ${schedule.scheduleType}`, {
             scheduleId: schedule.id,
           }),
         );
@@ -261,7 +261,7 @@ export class ScheduleHandler extends BaseEventHandler {
 
       const schedule = scheduleResult.value;
       if (!schedule) {
-        return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`, { scheduleId }));
+        return err(new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`, { scheduleId }));
       }
 
       // Check if schedule is still active
@@ -308,7 +308,7 @@ export class ScheduleHandler extends BaseEventHandler {
       try {
         this.taskRepo.saveSync(task);
       } catch (error) {
-        throw new BackbeatError(
+        throw new AutobeatError(
           ErrorCode.SYSTEM_ERROR,
           `Schedule trigger failed: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -418,7 +418,7 @@ export class ScheduleHandler extends BaseEventHandler {
         try {
           this.taskRepo.saveSync(tasks[i]);
         } catch (error) {
-          throw new BackbeatError(
+          throw new AutobeatError(
             ErrorCode.SYSTEM_ERROR,
             `Pipeline failed at step ${i + 1}: ${error instanceof Error ? error.message : String(error)}`,
           );
@@ -550,7 +550,7 @@ export class ScheduleHandler extends BaseEventHandler {
           triggeredAt,
           validationResult.error.message,
         );
-        return err(new BackbeatError(ErrorCode.INVALID_INPUT, validationResult.error.message, { scheduleId }));
+        return err(new AutobeatError(ErrorCode.INVALID_INPUT, validationResult.error.message, { scheduleId }));
       }
     }
 
@@ -860,7 +860,7 @@ export class ScheduleHandler extends BaseEventHandler {
 
       const schedule = scheduleResult.value;
       if (!schedule) {
-        return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`, { scheduleId }));
+        return err(new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${scheduleId} not found`, { scheduleId }));
       }
 
       // Recalculate nextRunAt for CRON schedules

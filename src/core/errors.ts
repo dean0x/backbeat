@@ -95,24 +95,24 @@ export enum ErrorCode {
 }
 
 /**
- * Custom error class for Backbeat
+ * Custom error class for Autobeat
  * Includes error code and optional context for debugging
  *
  * @example
- * return err(new BackbeatError(
+ * return err(new AutobeatError(
  *   ErrorCode.INVALID_INPUT,
  *   'Path traversal detected',
  *   { path: inputPath, base: baseDir }
  * ));
  */
-export class BackbeatError extends Error {
+export class AutobeatError extends Error {
   constructor(
     public readonly code: ErrorCode,
     message: string,
     public readonly context?: Record<string, unknown>,
   ) {
     super(message);
-    this.name = 'BackbeatError';
+    this.name = 'AutobeatError';
   }
 
   toJSON() {
@@ -128,66 +128,66 @@ export class BackbeatError extends Error {
 /**
  * Error factory functions
  */
-export const taskNotFound = (taskId: string): BackbeatError =>
-  new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Task ${taskId} not found`, { taskId });
+export const taskNotFound = (taskId: string): AutobeatError =>
+  new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Task ${taskId} not found`, { taskId });
 
-export const taskAlreadyRunning = (taskId: string): BackbeatError =>
-  new BackbeatError(ErrorCode.TASK_ALREADY_RUNNING, `Task ${taskId} is already running`, { taskId });
+export const taskAlreadyRunning = (taskId: string): AutobeatError =>
+  new AutobeatError(ErrorCode.TASK_ALREADY_RUNNING, `Task ${taskId} is already running`, { taskId });
 
-export const taskTimeout = (taskId: string, timeoutMs: number): BackbeatError =>
-  new BackbeatError(ErrorCode.TASK_TIMEOUT, `Task ${taskId} timed out after ${timeoutMs}ms`, { taskId, timeoutMs });
+export const taskTimeout = (taskId: string, timeoutMs: number): AutobeatError =>
+  new AutobeatError(ErrorCode.TASK_TIMEOUT, `Task ${taskId} timed out after ${timeoutMs}ms`, { taskId, timeoutMs });
 
-export const insufficientResources = (cpuUsage: number, availableMemory: number): BackbeatError =>
-  new BackbeatError(
+export const insufficientResources = (cpuUsage: number, availableMemory: number): AutobeatError =>
+  new AutobeatError(
     ErrorCode.INSUFFICIENT_RESOURCES,
     `Insufficient resources: CPU ${cpuUsage}%, Memory ${availableMemory} bytes`,
     { cpuUsage, availableMemory },
   );
 
-export const processSpawnFailed = (reason: string): BackbeatError =>
-  new BackbeatError(ErrorCode.PROCESS_SPAWN_FAILED, `Failed to spawn process: ${reason}`, { reason });
+export const processSpawnFailed = (reason: string): AutobeatError =>
+  new AutobeatError(ErrorCode.PROCESS_SPAWN_FAILED, `Failed to spawn process: ${reason}`, { reason });
 
-export const invalidInput = (field: string, value: unknown): BackbeatError =>
-  new BackbeatError(ErrorCode.INVALID_INPUT, `Invalid input for field ${field}`, { field, value });
+export const invalidInput = (field: string, value: unknown): AutobeatError =>
+  new AutobeatError(ErrorCode.INVALID_INPUT, `Invalid input for field ${field}`, { field, value });
 
-export const invalidDirectory = (path: string): BackbeatError =>
-  new BackbeatError(ErrorCode.INVALID_DIRECTORY, `Invalid directory: ${path}`, { path });
+export const invalidDirectory = (path: string): AutobeatError =>
+  new AutobeatError(ErrorCode.INVALID_DIRECTORY, `Invalid directory: ${path}`, { path });
 
-export const systemError = (message: string, originalError?: Error): BackbeatError =>
-  new BackbeatError(ErrorCode.SYSTEM_ERROR, message, { originalError: originalError?.message });
+export const systemError = (message: string, originalError?: Error): AutobeatError =>
+  new AutobeatError(ErrorCode.SYSTEM_ERROR, message, { originalError: originalError?.message });
 
-export const resourceLimitExceeded = (resourceType: string, limit: number, current: number): BackbeatError =>
-  new BackbeatError(
+export const resourceLimitExceeded = (resourceType: string, limit: number, current: number): AutobeatError =>
+  new AutobeatError(
     ErrorCode.RESOURCE_LIMIT_EXCEEDED,
     `Resource limit exceeded for ${resourceType}: limit=${limit}, current=${current}`,
     { resourceType, limit, current },
   );
 
-export const agentNotFound = (provider: string, available: readonly string[]): BackbeatError =>
-  new BackbeatError(
+export const agentNotFound = (provider: string, available: readonly string[]): AutobeatError =>
+  new AutobeatError(
     ErrorCode.AGENT_NOT_FOUND,
     `Agent '${provider}' not found. Available agents: ${available.join(', ')}`,
     { provider, available },
   );
 
-export const agentMisconfigured = (provider: string, reason: string): BackbeatError =>
-  new BackbeatError(ErrorCode.AGENT_MISCONFIGURED, `Agent '${provider}' is misconfigured: ${reason}`, {
+export const agentMisconfigured = (provider: string, reason: string): AutobeatError =>
+  new AutobeatError(ErrorCode.AGENT_MISCONFIGURED, `Agent '${provider}' is misconfigured: ${reason}`, {
     provider,
     reason,
   });
 
 /**
- * Type guard for BackbeatError
+ * Type guard for AutobeatError
  */
-export const isBackbeatError = (error: unknown): error is BackbeatError => {
-  return error instanceof BackbeatError;
+export const isAutobeatError = (error: unknown): error is AutobeatError => {
+  return error instanceof AutobeatError;
 };
 
 /**
- * Convert unknown errors to BackbeatError
+ * Convert unknown errors to AutobeatError
  */
-export const toBackbeatError = (error: unknown): BackbeatError => {
-  if (isBackbeatError(error)) {
+export const toAutobeatError = (error: unknown): AutobeatError => {
+  if (isAutobeatError(error)) {
     return error;
   }
 
@@ -227,9 +227,9 @@ export const toBackbeatError = (error: unknown): BackbeatError => {
 export const operationErrorHandler = (
   operation: string,
   context?: Record<string, unknown>,
-): ((error: unknown) => BackbeatError) => {
-  return (error: unknown): BackbeatError => {
+): ((error: unknown) => AutobeatError) => {
+  return (error: unknown): AutobeatError => {
     const message = error instanceof Error ? error.message : String(error);
-    return new BackbeatError(ErrorCode.SYSTEM_ERROR, `Failed to ${operation}: ${message}`, context);
+    return new AutobeatError(ErrorCode.SYSTEM_ERROR, `Failed to ${operation}: ${message}`, context);
   };
 };

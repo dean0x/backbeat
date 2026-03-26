@@ -34,9 +34,9 @@ describe('Integration: Task Scheduling - End-to-End Flow', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'backbeat-schedule-test-'));
-    process.env.BACKBEAT_DATABASE_PATH = join(tempDir, 'test.db');
-    process.env.BACKBEAT_DEFAULT_AGENT = 'claude';
+    tempDir = await mkdtemp(join(tmpdir(), 'autobeat-schedule-test-'));
+    process.env.AUTOBEAT_DATABASE_PATH = join(tempDir, 'test.db');
+    process.env.AUTOBEAT_DEFAULT_AGENT = 'claude';
     process.env.WORKER_MIN_SPAWN_DELAY_MS = '10'; // Fast spawn for tests
 
     const result = await bootstrap({
@@ -75,8 +75,8 @@ describe('Integration: Task Scheduling - End-to-End Flow', () => {
     if (container) {
       await container.dispose();
     }
-    delete process.env.BACKBEAT_DATABASE_PATH;
-    delete process.env.BACKBEAT_DEFAULT_AGENT;
+    delete process.env.AUTOBEAT_DATABASE_PATH;
+    delete process.env.AUTOBEAT_DEFAULT_AGENT;
     delete process.env.WORKER_MIN_SPAWN_DELAY_MS;
     if (tempDir) {
       await rm(tempDir, { recursive: true, force: true });

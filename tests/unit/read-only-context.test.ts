@@ -10,16 +10,16 @@ describe('ReadOnlyContext', () => {
   let originalDbPath: string | undefined;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'backbeat-ro-test-'));
-    originalDbPath = process.env.BACKBEAT_DATABASE_PATH;
-    process.env.BACKBEAT_DATABASE_PATH = join(tempDir, 'test.db');
+    tempDir = await mkdtemp(join(tmpdir(), 'autobeat-ro-test-'));
+    originalDbPath = process.env.AUTOBEAT_DATABASE_PATH;
+    process.env.AUTOBEAT_DATABASE_PATH = join(tempDir, 'test.db');
   });
 
   afterEach(async () => {
     if (originalDbPath !== undefined) {
-      process.env.BACKBEAT_DATABASE_PATH = originalDbPath;
+      process.env.AUTOBEAT_DATABASE_PATH = originalDbPath;
     } else {
-      delete process.env.BACKBEAT_DATABASE_PATH;
+      delete process.env.AUTOBEAT_DATABASE_PATH;
     }
     await rm(tempDir, { recursive: true, force: true });
   });
@@ -73,7 +73,7 @@ describe('ReadOnlyContext', () => {
   });
 
   it('returns error for invalid database path', () => {
-    process.env.BACKBEAT_DATABASE_PATH = '/nonexistent/deeply/nested/path/test.db';
+    process.env.AUTOBEAT_DATABASE_PATH = '/nonexistent/deeply/nested/path/test.db';
     const result = createReadOnlyContext();
     expect(result.ok).toBe(false);
   });

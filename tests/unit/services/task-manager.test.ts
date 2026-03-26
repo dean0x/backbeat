@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Configuration } from '../../../src/core/configuration';
 import type { Task, TaskCheckpoint, TaskRequest } from '../../../src/core/domain';
 import { Priority, TaskId, TaskStatus } from '../../../src/core/domain';
-import { BackbeatError, ErrorCode } from '../../../src/core/errors';
+import { AutobeatError, ErrorCode } from '../../../src/core/errors';
 import type { EventBus } from '../../../src/core/events/event-bus';
 import type {
   CheckpointRepository,
@@ -204,7 +204,7 @@ describe('TaskManagerService', () => {
     });
 
     it('should return error when event emission fails', async () => {
-      const emitError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'bus failure');
+      const emitError = new AutobeatError(ErrorCode.SYSTEM_ERROR, 'bus failure');
       eventBus.emit.mockResolvedValue(err(emitError));
 
       const result = await service.delegate(baseRequest);
@@ -230,8 +230,8 @@ describe('TaskManagerService', () => {
 
         expect(result.ok).toBe(false);
         if (result.ok) return;
-        expect(result.error).toBeInstanceOf(BackbeatError);
-        expect((result.error as BackbeatError).code).toBe(ErrorCode.INVALID_INPUT);
+        expect(result.error).toBeInstanceOf(AutobeatError);
+        expect((result.error as AutobeatError).code).toBe(ErrorCode.INVALID_INPUT);
         expect(result.error.message).toContain('No agent specified');
       });
 
@@ -297,13 +297,13 @@ describe('TaskManagerService', () => {
 
         expect(result.ok).toBe(false);
         if (result.ok) return;
-        expect(result.error).toBeInstanceOf(BackbeatError);
-        expect((result.error as BackbeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
+        expect(result.error).toBeInstanceOf(AutobeatError);
+        expect((result.error as AutobeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
       });
 
       it('should return error when continueFrom lookup fails', async () => {
         (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
-          err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'query failed')),
+          err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'query failed')),
         );
 
         const result = await service.delegate({
@@ -403,12 +403,12 @@ describe('TaskManagerService', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.error).toBeInstanceOf(BackbeatError);
-      expect((result.error as BackbeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
+      expect(result.error).toBeInstanceOf(AutobeatError);
+      expect((result.error as AutobeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
     });
 
     it('should propagate repository errors', async () => {
-      const repoError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'query failed');
+      const repoError = new AutobeatError(ErrorCode.SYSTEM_ERROR, 'query failed');
       (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(err(repoError));
 
       const result = await service.getStatus(TaskId('any'));
@@ -460,11 +460,11 @@ describe('TaskManagerService', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect((result.error as BackbeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
+      expect((result.error as AutobeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
     });
 
     it('should propagate repository errors', async () => {
-      const repoError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'logs failed');
+      const repoError = new AutobeatError(ErrorCode.SYSTEM_ERROR, 'logs failed');
       (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(err(repoError));
 
       const result = await service.getLogs(TaskId('any'));
@@ -612,7 +612,7 @@ describe('TaskManagerService', () => {
     it('should return error when event emission fails', async () => {
       const task = buildRunningTask({ id: TaskId('cancel-1') });
       (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(task));
-      const emitError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'emit failed');
+      const emitError = new AutobeatError(ErrorCode.SYSTEM_ERROR, 'emit failed');
       eventBus.emit.mockResolvedValue(err(emitError));
 
       const result = await service.cancel(TaskId('cancel-1'));
@@ -628,7 +628,7 @@ describe('TaskManagerService', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect((result.error as BackbeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
+      expect((result.error as AutobeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
       expect(eventBus.emit).not.toHaveBeenCalled();
     });
 
@@ -640,7 +640,7 @@ describe('TaskManagerService', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect((result.error as BackbeatError).code).toBe(ErrorCode.TASK_CANNOT_CANCEL);
+      expect((result.error as AutobeatError).code).toBe(ErrorCode.TASK_CANNOT_CANCEL);
       expect(eventBus.emit).not.toHaveBeenCalled();
     });
 
@@ -652,11 +652,11 @@ describe('TaskManagerService', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect((result.error as BackbeatError).code).toBe(ErrorCode.TASK_CANNOT_CANCEL);
+      expect((result.error as AutobeatError).code).toBe(ErrorCode.TASK_CANNOT_CANCEL);
     });
 
     it('should propagate repository errors on cancel', async () => {
-      const repoError = new BackbeatError(ErrorCode.SYSTEM_ERROR, 'db down');
+      const repoError = new AutobeatError(ErrorCode.SYSTEM_ERROR, 'db down');
       (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(err(repoError));
 
       const result = await service.cancel(TaskId('any'));
@@ -733,8 +733,8 @@ describe('TaskManagerService', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.error).toBeInstanceOf(BackbeatError);
-      expect((result.error as BackbeatError).code).toBe(ErrorCode.INVALID_OPERATION);
+      expect(result.error).toBeInstanceOf(AutobeatError);
+      expect((result.error as AutobeatError).code).toBe(ErrorCode.INVALID_OPERATION);
     });
 
     it('should reject retry for a queued task', async () => {
@@ -748,7 +748,7 @@ describe('TaskManagerService', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect((result.error as BackbeatError).code).toBe(ErrorCode.INVALID_OPERATION);
+      expect((result.error as AutobeatError).code).toBe(ErrorCode.INVALID_OPERATION);
     });
 
     it('should return error when task not found', async () => {
@@ -757,12 +757,12 @@ describe('TaskManagerService', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect((result.error as BackbeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
+      expect((result.error as AutobeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
     });
 
     it('should propagate repository errors', async () => {
       (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
-        err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'bus down')),
+        err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'bus down')),
       );
 
       const result = await service.retry(TaskId('any'));
@@ -773,7 +773,7 @@ describe('TaskManagerService', () => {
     it('should return error when TaskDelegated emission fails', async () => {
       const failedTask = buildFailedTask({ id: TaskId('fail-emit') });
       (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(failedTask));
-      eventBus.emit.mockResolvedValue(err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'emit failed')));
+      eventBus.emit.mockResolvedValue(err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'emit failed')));
 
       const result = await service.retry(TaskId('fail-emit'));
 
@@ -877,7 +877,7 @@ describe('TaskManagerService', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect((result.error as BackbeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
+      expect((result.error as AutobeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
     });
 
     it('should reject resume for a running task', async () => {
@@ -890,7 +890,7 @@ describe('TaskManagerService', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect((result.error as BackbeatError).code).toBe(ErrorCode.INVALID_OPERATION);
+      expect((result.error as AutobeatError).code).toBe(ErrorCode.INVALID_OPERATION);
     });
 
     it('should reject resume for a queued task', async () => {
@@ -903,7 +903,7 @@ describe('TaskManagerService', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect((result.error as BackbeatError).code).toBe(ErrorCode.INVALID_OPERATION);
+      expect((result.error as AutobeatError).code).toBe(ErrorCode.INVALID_OPERATION);
     });
 
     it('should create enriched task without checkpoint when repo has none', async () => {
@@ -1009,7 +1009,7 @@ describe('TaskManagerService', () => {
     it('should return error when TaskDelegated emission fails', async () => {
       const failed = buildFailedTask({ id: TaskId('fail-emit') });
       (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(failed));
-      eventBus.emit.mockResolvedValue(err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'emit failed')));
+      eventBus.emit.mockResolvedValue(err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'emit failed')));
 
       const result = await svcWithCheckpoint.resume({
         taskId: TaskId('fail-emit'),
@@ -1025,7 +1025,7 @@ describe('TaskManagerService', () => {
       });
       (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(failed));
       (checkpointRepo.findLatest as ReturnType<typeof vi.fn>).mockResolvedValue(
-        err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'db error')),
+        err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'db error')),
       );
 
       const result = await svcWithCheckpoint.resume({
@@ -1055,7 +1055,7 @@ describe('TaskManagerService', () => {
 
     it('should propagate repository errors', async () => {
       (taskRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
-        err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'query failed')),
+        err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'query failed')),
       );
 
       const result = await svcWithCheckpoint.resume({

@@ -4,10 +4,10 @@
  */
 
 import { Configuration } from '../configuration.js';
-import { BackbeatError, ErrorCode } from '../errors.js';
+import { AutobeatError, ErrorCode } from '../errors.js';
 import { Logger } from '../interfaces.js';
 import { err, ok, Result } from '../result.js';
-import { BackbeatEvent, BaseEvent, createEvent, EventHandler } from './events.js';
+import { AutobeatEvent, BaseEvent, createEvent, EventHandler } from './events.js';
 
 /**
  * Event bus interface for dependency injection
@@ -16,8 +16,8 @@ import { BackbeatEvent, BaseEvent, createEvent, EventHandler } from './events.js
  * Commands flow through events (fire-and-forget emit); queries use direct repository access.
  */
 export interface EventBus {
-  emit<T extends BackbeatEvent>(type: T['type'], payload: Omit<T, keyof BaseEvent | 'type'>): Promise<Result<void>>;
-  subscribe<T extends BackbeatEvent>(eventType: T['type'], handler: EventHandler<T>): Result<string>;
+  emit<T extends AutobeatEvent>(type: T['type'], payload: Omit<T, keyof BaseEvent | 'type'>): Promise<Result<void>>;
+  subscribe<T extends AutobeatEvent>(eventType: T['type'], handler: EventHandler<T>): Result<string>;
   unsubscribe(subscriptionId: string): Result<void>;
   subscribeAll(handler: EventHandler): Result<string>;
   unsubscribeAll(): void;
@@ -69,7 +69,7 @@ export class InMemoryEventBus implements EventBus {
     });
   }
 
-  async emit<T extends BackbeatEvent>(
+  async emit<T extends AutobeatEvent>(
     type: T['type'],
     payload: Omit<T, keyof BaseEvent | 'type'>,
   ): Promise<Result<void>> {
@@ -143,7 +143,7 @@ export class InMemoryEventBus implements EventBus {
 
         // Return error if any handler failed
         return err(
-          new BackbeatError(
+          new AutobeatError(
             ErrorCode.SYSTEM_ERROR,
             `Event handler failures for ${type}: ${failures.map((f) => f.reason).join(', ')}`,
             { eventId: event.eventId, failures: failures.length },
@@ -159,14 +159,14 @@ export class InMemoryEventBus implements EventBus {
       });
 
       return err(
-        new BackbeatError(ErrorCode.SYSTEM_ERROR, `Event emission failed for ${type}: ${error}`, {
+        new AutobeatError(ErrorCode.SYSTEM_ERROR, `Event emission failed for ${type}: ${error}`, {
           eventId: event.eventId,
         }),
       );
     }
   }
 
-  subscribe<T extends BackbeatEvent>(eventType: T['type'], handler: EventHandler<T>): Result<string> {
+  subscribe<T extends AutobeatEvent>(eventType: T['type'], handler: EventHandler<T>): Result<string> {
     // Check global subscription limit
     if (this.subscriptions.size >= this.maxTotalSubscriptions) {
       this.logger.error('Maximum total subscriptions reached', undefined, {
@@ -174,7 +174,7 @@ export class InMemoryEventBus implements EventBus {
         current: this.subscriptions.size,
       });
       return err(
-        new BackbeatError(
+        new AutobeatError(
           ErrorCode.RESOURCE_LIMIT_EXCEEDED,
           `Maximum subscription limit (${this.maxTotalSubscriptions}) reached`,
         ),
@@ -219,7 +219,7 @@ export class InMemoryEventBus implements EventBus {
     const subscription = this.subscriptions.get(subscriptionId);
 
     if (!subscription) {
-      return err(new BackbeatError(ErrorCode.CONFIGURATION_ERROR, `Subscription not found: ${subscriptionId}`));
+      return err(new AutobeatError(ErrorCode.CONFIGURATION_ERROR, `Subscription not found: ${subscriptionId}`));
     }
 
     // Remove from subscriptions map
@@ -298,7 +298,7 @@ export class InMemoryEventBus implements EventBus {
     const wrappedHandler: EventHandler = async (evt) => {
       handler(evt);
     };
-    // biome-ignore lint/suspicious/noExplicitAny: string event name can't be narrowed to BackbeatEvent union at this call site
+    // biome-ignore lint/suspicious/noExplicitAny: string event name can't be narrowed to AutobeatEvent union at this call site
     const result = this.subscribe(event as any, wrappedHandler);
     return result.ok ? result.value : '';
   }
@@ -328,11 +328,11 @@ export class InMemoryEventBus implements EventBus {
 export class NullEventBus implements EventBus {
   private subscriptionCounter = 0;
 
-  async emit<T extends BackbeatEvent>(): Promise<Result<void>> {
+  async emit<T extends AutobeatEvent>(): Promise<Result<void>> {
     return ok(undefined);
   }
 
-  subscribe<T extends BackbeatEvent>(): Result<string> {
+  subscribe<T extends AutobeatEvent>(): Result<string> {
     return ok(`null-sub-${++this.subscriptionCounter}`);
   }
 

@@ -1,18 +1,18 @@
-# Backbeat v0.4.0 - First Release as Backbeat
+# Autobeat v0.4.0 - First Release as Autobeat
 
-## Project Rename: claudine → backbeat
+## Project Rename: claudine → autobeat
 
-This release renames the project from `claudine` to `backbeat` to avoid trademark concerns with Anthropic's "Claude" branding. This is a **clean break** — no data migration from `~/.claudine/`.
+This release renames the project from `claudine` to `autobeat` to avoid trademark concerns with Anthropic's "Claude" branding. This is a **clean break** — no data migration from `~/.claudine/`.
 
 | Before | After |
 |--------|-------|
-| `npm install -g claudine` | `npm install -g backbeat` |
+| `npm install -g claudine` | `npm install -g autobeat` |
 | `claudine mcp start` | `beat mcp start` |
-| `CLAUDINE_DATABASE_PATH` | `BACKBEAT_DATABASE_PATH` |
-| `CLAUDINE_DATA_DIR` | `BACKBEAT_DATA_DIR` |
-| `~/.claudine/claudine.db` | `~/.backbeat/backbeat.db` |
-| `.claudine-patches/` | `.backbeat-patches/` |
-| `ClaudineError` / `isClaudineError` | `BackbeatError` / `isBackbeatError` |
+| `CLAUDINE_DATABASE_PATH` | `AUTOBEAT_DATABASE_PATH` |
+| `CLAUDINE_DATA_DIR` | `AUTOBEAT_DATA_DIR` |
+| `~/.claudine/claudine.db` | `~/.autobeat/autobeat.db` |
+| `.claudine-patches/` | `.autobeat-patches/` |
+| `ClaudineError` / `isClaudineError` | `AutobeatError` / `isAutobeatError` |
 
 See the **Breaking Changes** section below for full migration guide.
 
@@ -127,7 +127,7 @@ Removed all git and worktree operations from the full stack — a major architec
 - 4 configuration fields and 10+ CLI flags
 - Deleted files: `worktree-manager.ts`, `github-integration.ts`, `worktree-handler.ts`, 3 test files, 1 dead fixture
 
-**Rationale:** Worktree management added complexity without value — Claude Code instances manage their own git state. Backbeat focuses on orchestration, not source control.
+**Rationale:** Worktree management added complexity without value — Claude Code instances manage their own git state. Autobeat focuses on orchestration, not source control.
 
 ### CLI Detach Mode
 
@@ -159,11 +159,11 @@ Complete CLI output redesign using `@clack/prompts`:
 - New `findAllUnbounded()` — explicit unbounded retrieval for graph initialization
 - New `count()` methods — support pagination UI with total record counts
 
-### Project Rename: claudine → delegate → backbeat
+### Project Rename: claudine → delegate → autobeat
 
 Two-phase rename across the full stack (PRs #60, #66):
 1. `claudine` → `delegate` (PR #60): Package name, CLI binary, config paths, error types
-2. `delegate` → `backbeat` (PR #66): Final naming — "the background rhythm driving everything forward"
+2. `delegate` → `autobeat` (PR #66): Final naming — "the background rhythm driving everything forward"
 
 ---
 
@@ -240,23 +240,23 @@ Adopted Biome for linting and formatting as part of launch readiness. Replaced E
 ## Breaking Changes
 
 ### Package Rename
-- **npm package**: `claudine` → `backbeat`
+- **npm package**: `claudine` → `autobeat`
 - **CLI command**: `claudine` → `beat`
-- **MCP server name**: `claudine` → `backbeat`
+- **MCP server name**: `claudine` → `autobeat`
 - **Update your MCP config** to use the new package and server name
 
 ### Environment Variables
-- `CLAUDINE_DATABASE_PATH` → `BACKBEAT_DATABASE_PATH`
-- `CLAUDINE_DATA_DIR` → `BACKBEAT_DATA_DIR`
+- `CLAUDINE_DATABASE_PATH` → `AUTOBEAT_DATABASE_PATH`
+- `CLAUDINE_DATA_DIR` → `AUTOBEAT_DATA_DIR`
 
 ### Data Paths
-- `~/.claudine/claudine.db` → `~/.backbeat/backbeat.db`
+- `~/.claudine/claudine.db` → `~/.autobeat/autobeat.db`
 - Existing data at `~/.claudine/` is **not migrated** — start fresh
 
 ### Library API
-- `ClaudineError` → `BackbeatError`
-- `isClaudineError()` → `isBackbeatError()`
-- `toClaudineError()` → `toBackbeatError()`
+- `ClaudineError` → `AutobeatError`
+- `isClaudineError()` → `isAutobeatError()`
+- `toClaudineError()` → `toAutobeatError()`
 
 ### Pagination Default
 - `findAll()` now returns max 100 results by default
@@ -273,16 +273,16 @@ Scheduling and resumption features are additive — existing databases auto-migr
 ## Installation
 
 ```bash
-npm install -g backbeat@0.4.0
+npm install -g autobeat@0.4.0
 ```
 
 Or add to your `.mcp.json`:
 ```json
 {
   "mcpServers": {
-    "backbeat": {
+    "autobeat": {
       "command": "npx",
-      "args": ["-y", "backbeat", "mcp", "start"]
+      "args": ["-y", "autobeat", "mcp", "start"]
     }
   }
 }
@@ -301,7 +301,7 @@ See [ROADMAP.md](../ROADMAP.md) for complete roadmap.
 No special upgrade steps required. Simply update to 0.4.0:
 
 ```bash
-npm install -g backbeat@0.4.0
+npm install -g autobeat@0.4.0
 ```
 
 Existing databases will automatically migrate through v4-v6 schemas on first startup.
@@ -317,6 +317,6 @@ Existing databases will automatically migrate through v4-v6 schemas on first sta
 
 ## Links
 
-- NPM Package: https://www.npmjs.com/package/backbeat
-- Documentation: https://github.com/dean0x/backbeat/blob/main/docs/FEATURES.md
-- Issues: https://github.com/dean0x/backbeat/issues
+- NPM Package: https://www.npmjs.com/package/autobeat
+- Documentation: https://github.com/dean0x/autobeat/blob/main/docs/FEATURES.md
+- Issues: https://github.com/dean0x/autobeat/issues

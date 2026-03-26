@@ -34,7 +34,7 @@ v0.3.2 contained only 3 files (LICENSE, README.md, package.json) instead of the 
 
 **If you installed v0.3.2**, please upgrade immediately:
 ```bash
-npm install backbeat@0.3.3
+npm install autobeat@0.3.3
 ```
 
 ### Fixed clean script
@@ -47,9 +47,9 @@ Changed build cleanup from `.tsbuildinfo` to `tsconfig.tsbuildinfo` to match the
 
 If you have v0.3.2 installed:
 ```bash
-npm update backbeat
+npm update autobeat
 # or
-npm install backbeat@latest
+npm install autobeat@latest
 ```
 
 ---
@@ -58,6 +58,6 @@ npm install backbeat@latest
 
 After installation, verify the package is complete:
 ```bash
-ls node_modules/backbeat/dist/
+ls node_modules/autobeat/dist/
 # Should show: cli.js, index.js, and subdirectories
 ```

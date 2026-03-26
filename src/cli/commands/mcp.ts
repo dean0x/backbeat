@@ -6,9 +6,9 @@ import * as ui from '../ui.js';
 export function showConfig() {
   const config = {
     mcpServers: {
-      backbeat: {
+      autobeat: {
         command: 'npx',
-        args: ['-y', 'backbeat', 'mcp', 'start'],
+        args: ['-y', 'autobeat', 'mcp', 'start'],
       },
     },
   };
@@ -26,9 +26,9 @@ Configuration file locations:
 For local development:
 {
   "mcpServers": {
-    "backbeat": {
+    "autobeat": {
       "command": "node",
-      "args": ["/path/to/backbeat/dist/index.js"]
+      "args": ["/path/to/autobeat/dist/index.js"]
     }
   }
 }
@@ -36,14 +36,14 @@ For local development:
 For global installation:
 {
   "mcpServers": {
-    "backbeat": {
+    "autobeat": {
       "command": "beat",
       "args": ["mcp", "start"]
     }
   }
 }
 
-Learn more: https://github.com/dean0x/backbeat#configuration`,
+Learn more: https://github.com/dean0x/autobeat#configuration`,
     'MCP Configuration',
   );
 }
@@ -101,7 +101,7 @@ export function handleMcpTest(dirname: string) {
   });
 
   setTimeout(() => {
-    if (output.includes('Starting Backbeat MCP Server') && !hasError) {
+    if (output.includes('Starting Autobeat MCP Server') && !hasError) {
       s.stop('Server started successfully');
       ui.success('Bootstrap completed without errors');
       mcp.kill();

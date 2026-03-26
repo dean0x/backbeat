@@ -18,7 +18,7 @@ import {
   TaskStatus,
   updateLoop,
 } from '../../core/domain.js';
-import { BackbeatError, ErrorCode } from '../../core/errors.js';
+import { AutobeatError, ErrorCode } from '../../core/errors.js';
 import { EventBus } from '../../core/events/event-bus.js';
 import type {
   LoopCancelledEvent,
@@ -85,7 +85,7 @@ export class LoopHandler extends BaseEventHandler {
     database: TransactionRunner,
     exitConditionEvaluator: ExitConditionEvaluator,
     logger: Logger,
-  ): Promise<Result<LoopHandler, BackbeatError>> {
+  ): Promise<Result<LoopHandler, AutobeatError>> {
     const handlerLogger = logger.child ? logger.child({ module: 'LoopHandler' }) : logger;
 
     const handler = new LoopHandler(
@@ -120,7 +120,7 @@ export class LoopHandler extends BaseEventHandler {
    * Subscribe to all relevant events
    * ARCHITECTURE: Called by factory after initialization
    */
-  private subscribeToEvents(): Result<void, BackbeatError> {
+  private subscribeToEvents(): Result<void, AutobeatError> {
     const subscriptions = [
       this.eventBus.subscribe('LoopCreated', this.handleLoopCreated.bind(this)),
       this.eventBus.subscribe('TaskCompleted', this.handleTaskTerminal.bind(this)),
@@ -134,7 +134,7 @@ export class LoopHandler extends BaseEventHandler {
     for (const result of subscriptions) {
       if (!result.ok) {
         return err(
-          new BackbeatError(ErrorCode.SYSTEM_ERROR, `Failed to subscribe to events: ${result.error.message}`, {
+          new AutobeatError(ErrorCode.SYSTEM_ERROR, `Failed to subscribe to events: ${result.error.message}`, {
             error: result.error,
           }),
         );
@@ -485,10 +485,10 @@ export class LoopHandler extends BaseEventHandler {
     const txResult = this.database.runInTransaction(() => {
       const current = this.loopRepo.findByIdSync(loopId);
       if (!current) {
-        throw new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Loop ${loopId} not found in transaction`);
+        throw new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Loop ${loopId} not found in transaction`);
       }
       if (current.status !== LoopStatus.RUNNING) {
-        throw new BackbeatError(ErrorCode.INVALID_OPERATION, `Loop ${loopId} not running (status: ${current.status})`);
+        throw new AutobeatError(ErrorCode.INVALID_OPERATION, `Loop ${loopId} not running (status: ${current.status})`);
       }
 
       const newIteration = current.currentIteration + 1;
@@ -693,7 +693,7 @@ export class LoopHandler extends BaseEventHandler {
         try {
           this.taskRepo.saveSync(tasks[i]);
         } catch (error) {
-          throw new BackbeatError(
+          throw new AutobeatError(
             ErrorCode.SYSTEM_ERROR,
             `Pipeline iteration failed at step ${i + 1}: ${error instanceof Error ? error.message : String(error)}`,
           );

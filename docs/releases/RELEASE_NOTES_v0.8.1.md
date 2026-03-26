@@ -1,4 +1,4 @@
-# Backbeat v0.8.1 — Commit-per-Iteration Git Integration
+# Autobeat v0.8.1 — Commit-per-Iteration Git Integration
 
 Corrects the git integration design from branch-per-iteration to commit-per-iteration. One branch for the entire loop, one commit per successful iteration, with full revert on failure/discard.
 
@@ -58,16 +58,16 @@ The loop handler git integration logic was rewritten to use the commit-per-itera
 ## Installation
 
 ```bash
-npm install -g backbeat@0.8.1
+npm install -g autobeat@0.8.1
 ```
 
 Or use npx:
 ```json
 {
   "mcpServers": {
-    "backbeat": {
+    "autobeat": {
       "command": "npx",
-      "args": ["-y", "backbeat", "mcp", "start"]
+      "args": ["-y", "autobeat", "mcp", "start"]
     }
   }
 }
@@ -77,6 +77,6 @@ Or use npx:
 
 ## Links
 
-- NPM Package: https://www.npmjs.com/package/backbeat
-- Documentation: https://github.com/dean0x/backbeat/blob/main/docs/FEATURES.md
-- Issues: https://github.com/dean0x/backbeat/issues
+- NPM Package: https://www.npmjs.com/package/autobeat
+- Documentation: https://github.com/dean0x/autobeat/blob/main/docs/FEATURES.md
+- Issues: https://github.com/dean0x/autobeat/issues

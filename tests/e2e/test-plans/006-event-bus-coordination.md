@@ -15,7 +15,7 @@ Verify the event-driven architecture is working correctly: events are emitted, h
 preconditions:
   - Clean system state
   - Build completed successfully
-  - No running backbeat processes
+  - No running autobeat processes
 ```
 
 ## Test Steps
@@ -43,7 +43,7 @@ node dist/cli.js run "echo 'Event test task'" --priority P0
 ### Step 3: Verify TaskDelegated Event
 **Action:** Check logs for TaskDelegated event
 ```bash
-grep -r "TaskDelegated" .backbeat/logs/ 2>/dev/null | head -1 || echo "No TaskDelegated event found in logs"
+grep -r "TaskDelegated" .autobeat/logs/ 2>/dev/null | head -1 || echo "No TaskDelegated event found in logs"
 ```
 **Expected:** Event emission logged
 **Verify:**
@@ -165,12 +165,12 @@ node dist/cli.js run "echo 'Final disposal test'"
 **Action:** Clean up all test artifacts
 ```bash
 pkill -f "beat" || true
-rm -rf .backbeat/
+rm -rf .autobeat/
 ```
 **Expected:** Cleanup successful
 **Verify:**
 - No processes running
-- .backbeat directory removed
+- .autobeat directory removed
 
 ## Success Criteria
 - [ ] Events emitted and handled correctly
@@ -185,7 +185,7 @@ rm -rf .backbeat/
 ## Rollback Plan
 If test fails:
 1. Kill all processes: `pkill -9 -f node`
-2. Clear logs: `rm -rf .backbeat/logs/`
+2. Clear logs: `rm -rf .autobeat/logs/`
 3. Check system resources: `free -h`
 4. Review event bus implementation
 

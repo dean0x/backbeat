@@ -1,4 +1,4 @@
-# 🚀 Backbeat v0.2.1 - Event-Driven Architecture & CLI Interface
+# 🚀 Autobeat v0.2.1 - Event-Driven Architecture & CLI Interface
 
 ## Major Features
 
@@ -74,11 +74,11 @@ beat cancel <task-id> "reason" # Cancel with reason
 
 ```bash
 # Global installation (recommended)
-npm install -g backbeat@0.2.1
+npm install -g autobeat@0.2.1
 
 # Or from source
-git clone https://github.com/dean0x/backbeat.git
-cd backbeat
+git clone https://github.com/dean0x/autobeat.git
+cd autobeat
 npm install && npm run build
 ```
 
@@ -91,5 +91,5 @@ See [ROADMAP.md](./ROADMAP.md):
 ---
 
 **Full Details**: [CHANGELOG.md](./CHANGELOG.md)  
-**Repository**: https://github.com/dean0x/backbeat  
-**Issues**: [GitHub Issues](https://github.com/dean0x/backbeat/issues)
+**Repository**: https://github.com/dean0x/autobeat  
+**Issues**: [GitHub Issues](https://github.com/dean0x/autobeat/issues)

@@ -4,7 +4,7 @@
  */
 
 import { AgentProvider } from './agents.js';
-import { BackbeatError } from './errors.js';
+import { AutobeatError } from './errors.js';
 
 export type TaskId = string & { readonly __brand: 'TaskId' };
 export type WorkerId = string & { readonly __brand: 'WorkerId' };
@@ -110,7 +110,7 @@ export interface Task {
   readonly workerId?: WorkerId;
   readonly exitCode?: number;
   readonly duration?: number;
-  readonly error?: Error | BackbeatError;
+  readonly error?: Error | AutobeatError;
 }
 
 export interface Worker {
@@ -187,7 +187,7 @@ export interface TaskUpdate {
   readonly completedAt?: number;
   readonly exitCode?: number;
   readonly duration?: number;
-  readonly error?: Error | BackbeatError;
+  readonly error?: Error | AutobeatError;
 }
 
 /**

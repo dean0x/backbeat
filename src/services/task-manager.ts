@@ -23,7 +23,7 @@ import {
   TaskOutput,
   TaskRequest,
 } from '../core/domain.js';
-import { BackbeatError, ErrorCode, taskNotFound } from '../core/errors.js';
+import { AutobeatError, ErrorCode, taskNotFound } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
 import {
   CheckpointRepository,
@@ -67,7 +67,7 @@ export class TaskManagerService implements TaskManager {
       // Validate referenced task exists via direct repository call
       const lookupResult = await this.taskRepo.findById(continueFromId);
       if (!lookupResult.ok || lookupResult.value === null) {
-        return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `continueFrom task not found: ${continueFromId}`));
+        return err(new AutobeatError(ErrorCode.TASK_NOT_FOUND, `continueFrom task not found: ${continueFromId}`));
       }
 
       // Auto-add to dependsOn if missing
@@ -176,7 +176,7 @@ export class TaskManagerService implements TaskManager {
     const task = taskResult.value;
     if (task.status !== 'queued' && task.status !== 'running') {
       return err(
-        new BackbeatError(ErrorCode.TASK_CANNOT_CANCEL, `Task ${taskId} cannot be cancelled in state ${task.status}`),
+        new AutobeatError(ErrorCode.TASK_CANNOT_CANCEL, `Task ${taskId} cannot be cancelled in state ${task.status}`),
       );
     }
 
@@ -238,7 +238,7 @@ export class TaskManagerService implements TaskManager {
     // Only retry tasks that are in terminal states
     if (!isTerminalState(originalTask.status)) {
       return err(
-        new BackbeatError(
+        new AutobeatError(
           ErrorCode.INVALID_OPERATION,
           `Task ${taskId} cannot be retried in state ${originalTask.status}`,
         ),
@@ -325,7 +325,7 @@ export class TaskManagerService implements TaskManager {
     // Only resume tasks in terminal states
     if (!isTerminalState(originalTask.status)) {
       return err(
-        new BackbeatError(
+        new AutobeatError(
           ErrorCode.INVALID_OPERATION,
           `Task ${taskId} cannot be resumed in state ${originalTask.status}`,
         ),

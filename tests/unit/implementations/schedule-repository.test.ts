@@ -14,7 +14,7 @@ import {
   ScheduleType,
   TaskId,
 } from '../../../src/core/domain.js';
-import { BackbeatError, ErrorCode } from '../../../src/core/errors.js';
+import { AutobeatError, ErrorCode } from '../../../src/core/errors.js';
 import { Database } from '../../../src/implementations/database.js';
 import { SQLiteScheduleRepository } from '../../../src/implementations/schedule-repository.js';
 
@@ -678,10 +678,10 @@ describe('SQLiteScheduleRepository - Unit Tests', () => {
       expect(found!.runCount).toBe(3);
     });
 
-    it('updateSync should throw BackbeatError for non-existent schedule', () => {
+    it('updateSync should throw AutobeatError for non-existent schedule', () => {
       expect(() => {
         repo.updateSync(ScheduleId('no-such-schedule'), { status: ScheduleStatus.PAUSED });
-      }).toThrow(BackbeatError);
+      }).toThrow(AutobeatError);
     });
 
     it('recordExecutionSync should record and return execution with ID', async () => {

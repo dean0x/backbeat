@@ -316,7 +316,7 @@ describe('loadConfiguration - REAL Configuration Loading', () => {
 
   beforeEach(() => {
     originalEnv = { ...process.env };
-    tempDir = path.join(tmpdir(), `backbeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    tempDir = path.join(tmpdir(), `autobeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(tempDir, { recursive: true });
     restoreConfigDir = _testSetConfigDir(tempDir);
     // Clear relevant env vars
@@ -561,14 +561,14 @@ describe('ConfigurationSchema - defaultAgent', () => {
   });
 });
 
-describe('loadConfiguration - BACKBEAT_DEFAULT_AGENT env var', () => {
+describe('loadConfiguration - AUTOBEAT_DEFAULT_AGENT env var', () => {
   let originalEnv: NodeJS.ProcessEnv;
   let tempDir: string;
   let restoreConfigDir: () => void;
 
   beforeEach(() => {
     originalEnv = { ...process.env };
-    tempDir = path.join(tmpdir(), `backbeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    tempDir = path.join(tmpdir(), `autobeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(tempDir, { recursive: true });
     restoreConfigDir = _testSetConfigDir(tempDir);
   });
@@ -583,20 +583,20 @@ describe('loadConfiguration - BACKBEAT_DEFAULT_AGENT env var', () => {
     }
   });
 
-  it('should load defaultAgent from BACKBEAT_DEFAULT_AGENT env var', () => {
-    process.env.BACKBEAT_DEFAULT_AGENT = 'gemini';
+  it('should load defaultAgent from AUTOBEAT_DEFAULT_AGENT env var', () => {
+    process.env.AUTOBEAT_DEFAULT_AGENT = 'gemini';
     const config = loadConfiguration();
     expect(config.defaultAgent).toBe('gemini');
   });
 
-  it('should ignore invalid BACKBEAT_DEFAULT_AGENT value', () => {
-    process.env.BACKBEAT_DEFAULT_AGENT = 'invalid-agent';
+  it('should ignore invalid AUTOBEAT_DEFAULT_AGENT value', () => {
+    process.env.AUTOBEAT_DEFAULT_AGENT = 'invalid-agent';
     const config = loadConfiguration();
     expect(config.defaultAgent).toBeUndefined();
   });
 
   it('should not set defaultAgent when env var is empty', () => {
-    process.env.BACKBEAT_DEFAULT_AGENT = '';
+    process.env.AUTOBEAT_DEFAULT_AGENT = '';
     const config = loadConfiguration();
     expect(config.defaultAgent).toBeUndefined();
   });
@@ -657,7 +657,7 @@ describe('Real-world configuration scenarios', () => {
 
   beforeEach(() => {
     originalEnv = { ...process.env };
-    tempDir = path.join(tmpdir(), `backbeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    tempDir = path.join(tmpdir(), `autobeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(tempDir, { recursive: true });
     restoreConfigDir = _testSetConfigDir(tempDir);
   });
@@ -732,7 +732,7 @@ describe('Config File - loadConfigFile', () => {
   let restoreConfigDir: () => void;
 
   beforeEach(() => {
-    tempDir = path.join(tmpdir(), `backbeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    tempDir = path.join(tmpdir(), `autobeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(tempDir, { recursive: true });
     restoreConfigDir = _testSetConfigDir(tempDir);
   });
@@ -787,7 +787,7 @@ describe('Config File - saveConfigValue', () => {
   let restoreConfigDir: () => void;
 
   beforeEach(() => {
-    tempDir = path.join(tmpdir(), `backbeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    tempDir = path.join(tmpdir(), `autobeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(tempDir, { recursive: true });
     restoreConfigDir = _testSetConfigDir(tempDir);
   });
@@ -842,7 +842,7 @@ describe('Config File - resetConfigValue', () => {
   let restoreConfigDir: () => void;
 
   beforeEach(() => {
-    tempDir = path.join(tmpdir(), `backbeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    tempDir = path.join(tmpdir(), `autobeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(tempDir, { recursive: true });
     restoreConfigDir = _testSetConfigDir(tempDir);
   });
@@ -884,7 +884,7 @@ describe('Config File - loadConfiguration with file', () => {
 
   beforeEach(() => {
     originalEnv = { ...process.env };
-    tempDir = path.join(tmpdir(), `backbeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    tempDir = path.join(tmpdir(), `autobeat-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(tempDir, { recursive: true });
     restoreConfigDir = _testSetConfigDir(tempDir);
     // Clear env vars so we only see file + defaults

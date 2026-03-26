@@ -100,7 +100,7 @@ export function handleDetachMode(runArgs: string[]): void {
   }
 
   // Create log directory
-  const logDir = path.join(homedir(), '.backbeat', 'detach-logs');
+  const logDir = path.join(homedir(), '.autobeat', 'detach-logs');
   try {
     mkdirSync(logDir, { recursive: true });
   } catch (error) {

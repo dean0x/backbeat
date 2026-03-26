@@ -255,12 +255,12 @@ describe('handler-setup', () => {
       // Mock DependencyHandler.create() to return an error
       const { DependencyHandler } = await import('../../../src/services/handlers/dependency-handler');
       const { err } = await import('../../../src/core/result');
-      const { BackbeatError, ErrorCode } = await import('../../../src/core/errors');
+      const { AutobeatError, ErrorCode } = await import('../../../src/core/errors');
 
       const originalCreate = DependencyHandler.create;
       DependencyHandler.create = vi
         .fn()
-        .mockResolvedValue(err(new BackbeatError(ErrorCode.INTERNAL_ERROR, 'DependencyHandler creation failed')));
+        .mockResolvedValue(err(new AutobeatError(ErrorCode.INTERNAL_ERROR, 'DependencyHandler creation failed')));
 
       try {
         const result = await setupEventHandlers(depsResult.value);

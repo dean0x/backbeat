@@ -22,9 +22,9 @@ export class ShellExitConditionEvaluator implements ExitConditionEvaluator {
   async evaluate(loop: Loop, taskId: TaskId): Promise<EvalResult> {
     const env = {
       ...process.env,
-      BACKBEAT_LOOP_ID: loop.id,
-      BACKBEAT_ITERATION: String(loop.currentIteration),
-      BACKBEAT_TASK_ID: taskId,
+      AUTOBEAT_LOOP_ID: loop.id,
+      AUTOBEAT_ITERATION: String(loop.currentIteration),
+      AUTOBEAT_TASK_ID: taskId,
     };
 
     try {

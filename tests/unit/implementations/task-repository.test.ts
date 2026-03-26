@@ -7,7 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type Task, TaskId, TaskStatus } from '../../../src/core/domain.js';
-import { BackbeatError, ErrorCode } from '../../../src/core/errors.js';
+import { AutobeatError, ErrorCode } from '../../../src/core/errors.js';
 import { Database } from '../../../src/implementations/database.js';
 import { SQLiteTaskRepository } from '../../../src/implementations/task-repository.js';
 import { createTestTask } from '../../fixtures/test-data.js';
@@ -254,15 +254,15 @@ describe('SQLiteTaskRepository', () => {
       expect(found!.prompt).toBe(task.prompt); // Other fields preserved
     });
 
-    it('updateSync should throw BackbeatError for non-existent task', () => {
+    it('updateSync should throw AutobeatError for non-existent task', () => {
       expect(() => {
         repo.updateSync(TaskId('no-such-task'), { status: TaskStatus.CANCELLED });
-      }).toThrow(BackbeatError);
+      }).toThrow(AutobeatError);
 
       try {
         repo.updateSync(TaskId('no-such-task'), { status: TaskStatus.CANCELLED });
       } catch (e) {
-        expect((e as BackbeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
+        expect((e as AutobeatError).code).toBe(ErrorCode.TASK_NOT_FOUND);
       }
     });
 

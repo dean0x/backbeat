@@ -23,7 +23,7 @@ import {
   TaskId,
   TaskRequest,
 } from '../core/domain.js';
-import { BackbeatError, ErrorCode, operationErrorHandler } from '../core/errors.js';
+import { AutobeatError, ErrorCode, operationErrorHandler } from '../core/errors.js';
 import { ScheduleExecution, ScheduleRepository, SyncScheduleOperations } from '../core/interfaces.js';
 import { err, ok, Result, tryCatchAsync } from '../core/result.js';
 import { Database } from './database.js';
@@ -327,7 +327,7 @@ export class SQLiteScheduleRepository implements ScheduleRepository, SyncSchedul
     }
 
     if (!existingResult.value) {
-      return err(new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${id} not found`));
+      return err(new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${id} not found`));
     }
 
     const updatedSchedule: Schedule = {
@@ -358,7 +358,7 @@ export class SQLiteScheduleRepository implements ScheduleRepository, SyncSchedul
   updateSync(id: ScheduleId, update: Partial<Schedule>, existing?: Schedule): void {
     const base = existing ?? this.findByIdSync(id);
     if (!base) {
-      throw new BackbeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${id} not found`);
+      throw new AutobeatError(ErrorCode.TASK_NOT_FOUND, `Schedule ${id} not found`);
     }
     const updatedSchedule: Schedule = {
       ...base,
@@ -383,7 +383,7 @@ export class SQLiteScheduleRepository implements ScheduleRepository, SyncSchedul
 
     const row = this.getExecutionByIdStmt.get(result.lastInsertRowid) as ScheduleExecutionRow | undefined;
     if (!row) {
-      throw new BackbeatError(
+      throw new AutobeatError(
         ErrorCode.SYSTEM_ERROR,
         `Failed to retrieve execution record after insert (rowid: ${result.lastInsertRowid})`,
       );
@@ -519,7 +519,7 @@ export class SQLiteScheduleRepository implements ScheduleRepository, SyncSchedul
 
         const row = this.getExecutionByIdStmt.get(result.lastInsertRowid) as ScheduleExecutionRow | undefined;
         if (!row) {
-          throw new BackbeatError(
+          throw new AutobeatError(
             ErrorCode.SYSTEM_ERROR,
             `Failed to retrieve execution record after insert (rowid: ${result.lastInsertRowid})`,
           );

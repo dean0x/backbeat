@@ -22,11 +22,11 @@ import { flushEventLoop } from '../utils/event-helpers.js';
 
 describe('Integration: Service initialization', () => {
   it('should initialize service container correctly', async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), 'backbeat-test-'));
+    const tempDir = await mkdtemp(join(tmpdir(), 'autobeat-test-'));
 
     try {
       // Set test database path
-      process.env.BACKBEAT_DATABASE_PATH = join(tempDir, 'test.db');
+      process.env.AUTOBEAT_DATABASE_PATH = join(tempDir, 'test.db');
 
       // Bootstrap returns Result<Container>
       const result = await bootstrap({
@@ -99,13 +99,13 @@ describe('Integration: Service initialization', () => {
       // Cleanup - CRITICAL: Use dispose() to clear setInterval timers
       await container.dispose();
     } finally {
-      delete process.env.BACKBEAT_DATABASE_PATH;
+      delete process.env.AUTOBEAT_DATABASE_PATH;
       await rm(tempDir, { recursive: true, force: true });
     }
   });
 
   it('should load and validate configuration', async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), 'backbeat-test-'));
+    const tempDir = await mkdtemp(join(tmpdir(), 'autobeat-test-'));
 
     try {
       // Test 1: Load from environment variables
@@ -148,11 +148,11 @@ describe('Integration: Service initialization', () => {
   });
 
   it('should register event handlers during bootstrap', async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), 'backbeat-test-'));
+    const tempDir = await mkdtemp(join(tmpdir(), 'autobeat-test-'));
 
     try {
-      process.env.BACKBEAT_DATABASE_PATH = join(tempDir, 'test.db');
-      process.env.BACKBEAT_DEFAULT_AGENT = 'claude';
+      process.env.AUTOBEAT_DATABASE_PATH = join(tempDir, 'test.db');
+      process.env.AUTOBEAT_DEFAULT_AGENT = 'claude';
 
       // Bootstrap the system
       const result = await bootstrap({
@@ -210,17 +210,17 @@ describe('Integration: Service initialization', () => {
       // Cleanup - CRITICAL: Use dispose() to clear setInterval timers
       await container.dispose();
     } finally {
-      delete process.env.BACKBEAT_DATABASE_PATH;
-      delete process.env.BACKBEAT_DEFAULT_AGENT;
+      delete process.env.AUTOBEAT_DATABASE_PATH;
+      delete process.env.AUTOBEAT_DEFAULT_AGENT;
       await rm(tempDir, { recursive: true, force: true });
     }
   });
 
   it('should perform service health checks', async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), 'backbeat-test-'));
+    const tempDir = await mkdtemp(join(tmpdir(), 'autobeat-test-'));
 
     try {
-      process.env.BACKBEAT_DATABASE_PATH = join(tempDir, 'test.db');
+      process.env.AUTOBEAT_DATABASE_PATH = join(tempDir, 'test.db');
 
       const result = await bootstrap({
         processSpawner: new NoOpProcessSpawner(),
@@ -283,16 +283,16 @@ describe('Integration: Service initialization', () => {
       // Cleanup - CRITICAL: Use dispose() to clear setInterval timers
       await container.dispose();
     } finally {
-      delete process.env.BACKBEAT_DATABASE_PATH;
+      delete process.env.AUTOBEAT_DATABASE_PATH;
       await rm(tempDir, { recursive: true, force: true });
     }
   });
 
   it('should handle graceful shutdown', async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), 'backbeat-test-'));
+    const tempDir = await mkdtemp(join(tmpdir(), 'autobeat-test-'));
 
     try {
-      process.env.BACKBEAT_DATABASE_PATH = join(tempDir, 'test.db');
+      process.env.AUTOBEAT_DATABASE_PATH = join(tempDir, 'test.db');
 
       const result = await bootstrap({
         processSpawner: new NoOpProcessSpawner(),
@@ -379,7 +379,7 @@ describe('Integration: Service initialization', () => {
         }
       }
     } finally {
-      delete process.env.BACKBEAT_DATABASE_PATH;
+      delete process.env.AUTOBEAT_DATABASE_PATH;
       await rm(tempDir, { recursive: true, force: true });
     }
   });

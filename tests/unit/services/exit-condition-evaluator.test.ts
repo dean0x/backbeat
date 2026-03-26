@@ -138,7 +138,7 @@ describe('ShellExitConditionEvaluator', () => {
   });
 
   describe('Environment variable injection (R11)', () => {
-    it('should inject BACKBEAT_LOOP_ID, BACKBEAT_ITERATION, BACKBEAT_TASK_ID', async () => {
+    it('should inject AUTOBEAT_LOOP_ID, AUTOBEAT_ITERATION, AUTOBEAT_TASK_ID', async () => {
       mockExecSuccess('ok\n');
 
       const loop = createTestLoop({ strategy: LoopStrategy.RETRY });
@@ -149,9 +149,9 @@ describe('ShellExitConditionEvaluator', () => {
       const options = callArgs[1] as Record<string, unknown>;
       const env = options.env as Record<string, string>;
 
-      expect(env.BACKBEAT_LOOP_ID).toBe(loop.id);
-      expect(env.BACKBEAT_ITERATION).toBeDefined();
-      expect(env.BACKBEAT_TASK_ID).toBe(taskId);
+      expect(env.AUTOBEAT_LOOP_ID).toBe(loop.id);
+      expect(env.AUTOBEAT_ITERATION).toBeDefined();
+      expect(env.AUTOBEAT_TASK_ID).toBe(taskId);
     });
 
     it('should use loop workingDirectory as cwd', async () => {

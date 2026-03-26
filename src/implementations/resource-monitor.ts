@@ -6,7 +6,7 @@
 import * as os from 'os';
 import { Configuration } from '../core/configuration.js';
 import { SystemResources } from '../core/domain.js';
-import { BackbeatError, ErrorCode } from '../core/errors.js';
+import { AutobeatError, ErrorCode } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
 import { Logger, ResourceMonitor, WorkerRepository } from '../core/interfaces.js';
 import { err, ok, Result, tryCatchAsync } from '../core/result.js';
@@ -67,7 +67,7 @@ export class SystemResourceMonitor implements ResourceMonitor {
           workerCount: this.workerCount,
         };
       },
-      (error) => new BackbeatError(ErrorCode.RESOURCE_MONITORING_FAILED, `Failed to get system resources: ${error}`),
+      (error) => new AutobeatError(ErrorCode.RESOURCE_MONITORING_FAILED, `Failed to get system resources: ${error}`),
     );
   }
 

@@ -1,6 +1,6 @@
 # Task Dependencies
 
-Backbeat supports task dependencies through a DAG (Directed Acyclic Graph) based dependency system. Tasks can depend on other tasks, and Backbeat ensures that dependent tasks only execute after their dependencies have completed.
+Autobeat supports task dependencies through a DAG (Directed Acyclic Graph) based dependency system. Tasks can depend on other tasks, and Autobeat ensures that dependent tasks only execute after their dependencies have completed.
 
 ## Architecture
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Backbeat MCP Server - New Architecture
+ * Autobeat MCP Server - New Architecture
  * Main entry point
  */
 
@@ -52,7 +52,7 @@ async function main() {
     const mcpAdapter = mcpAdapterResult.value;
 
     // All logs go to stderr to keep stdout clean for MCP protocol
-    logger.info(`Starting Backbeat MCP Server v${pkg.version}`);
+    logger.info(`Starting Autobeat MCP Server v${pkg.version}`);
 
     // Create and start MCP server
     const transport = new StdioServerTransport();
@@ -89,7 +89,7 @@ async function main() {
     process.on('SIGTERM', () => shutdown('SIGTERM'));
 
     // Log ready state
-    logger.info('Backbeat is ready', {
+    logger.info('Autobeat is ready', {
       cpuThreshold: process.env.CPU_THRESHOLD || '80',
       memoryReserve: process.env.MEMORY_RESERVE || '1GB',
     });

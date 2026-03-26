@@ -6,7 +6,7 @@
 
 import type { CronExpression } from 'cron-parser';
 import cronParser from 'cron-parser';
-import { BackbeatError, ErrorCode } from '../core/errors.js';
+import { AutobeatError, ErrorCode } from '../core/errors.js';
 import { err, ok, Result } from '../core/result.js';
 
 const { parseExpression } = cronParser;
@@ -21,13 +21,13 @@ const { parseExpression } = cronParser;
  * validateCronExpression('0 9 * * 1-5'); // Ok - 9am weekdays
  * validateCronExpression('invalid'); // Err - Invalid cron expression
  */
-export function validateCronExpression(expression: string): Result<void, BackbeatError> {
+export function validateCronExpression(expression: string): Result<void, AutobeatError> {
   try {
     parseExpression(expression);
     return ok(undefined);
   } catch (error) {
     return err(
-      new BackbeatError(ErrorCode.INVALID_INPUT, `Invalid cron expression: ${expression}`, {
+      new AutobeatError(ErrorCode.INVALID_INPUT, `Invalid cron expression: ${expression}`, {
         expression,
         parseError: String(error),
       }),
@@ -47,7 +47,7 @@ export function validateCronExpression(expression: string): Result<void, Backbea
  * getNextRunTime('0 9 * * *', 'UTC'); // Next 9am UTC
  * getNextRunTime('0,15,30,45 * * * *', 'America/New_York', new Date('2025-01-01')); // Every 15 minutes
  */
-export function getNextRunTime(expression: string, timezone: string, afterTime?: Date): Result<number, BackbeatError> {
+export function getNextRunTime(expression: string, timezone: string, afterTime?: Date): Result<number, AutobeatError> {
   try {
     const interval = parseExpression(expression, {
       currentDate: afterTime ?? new Date(),
@@ -56,7 +56,7 @@ export function getNextRunTime(expression: string, timezone: string, afterTime?:
     return ok(interval.next().getTime());
   } catch (error) {
     return err(
-      new BackbeatError(ErrorCode.INVALID_INPUT, `Failed to calculate next run time`, {
+      new AutobeatError(ErrorCode.INVALID_INPUT, `Failed to calculate next run time`, {
         expression,
         timezone,
         error: String(error),
@@ -80,7 +80,7 @@ export function getNextRunTimes(
   timezone: string,
   count: number = 5,
   afterTime?: Date,
-): Result<readonly number[], BackbeatError> {
+): Result<readonly number[], AutobeatError> {
   try {
     const interval = parseExpression(expression, {
       currentDate: afterTime ?? new Date(),
@@ -95,7 +95,7 @@ export function getNextRunTimes(
     return ok(times);
   } catch (error) {
     return err(
-      new BackbeatError(ErrorCode.INVALID_INPUT, `Failed to calculate next run times`, {
+      new AutobeatError(ErrorCode.INVALID_INPUT, `Failed to calculate next run times`, {
         expression,
         timezone,
         count,
@@ -133,11 +133,11 @@ export function isValidTimezone(timezone: string): boolean {
  * @param timezone IANA timezone identifier
  * @returns Result<void> - ok if valid, err with details if invalid
  */
-export function validateTimezone(timezone: string): Result<void, BackbeatError> {
+export function validateTimezone(timezone: string): Result<void, AutobeatError> {
   if (isValidTimezone(timezone)) {
     return ok(undefined);
   }
-  return err(new BackbeatError(ErrorCode.INVALID_INPUT, `Invalid timezone: ${timezone}`, { timezone }));
+  return err(new AutobeatError(ErrorCode.INVALID_INPUT, `Invalid timezone: ${timezone}`, { timezone }));
 }
 
 /**
@@ -153,7 +153,7 @@ export function parseCronExpression(
   expression: string,
   timezone: string,
   currentDate?: Date,
-): Result<CronExpression, BackbeatError> {
+): Result<CronExpression, AutobeatError> {
   try {
     const interval = parseExpression(expression, {
       currentDate: currentDate ?? new Date(),
@@ -162,7 +162,7 @@ export function parseCronExpression(
     return ok(interval);
   } catch (error) {
     return err(
-      new BackbeatError(ErrorCode.INVALID_INPUT, `Failed to parse cron expression`, {
+      new AutobeatError(ErrorCode.INVALID_INPUT, `Failed to parse cron expression`, {
         expression,
         timezone,
         error: String(error),

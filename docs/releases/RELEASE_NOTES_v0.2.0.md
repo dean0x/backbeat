@@ -1,4 +1,4 @@
-# 🚀 Backbeat v0.2.0 - Task Persistence & Stability
+# 🚀 Autobeat v0.2.0 - Task Persistence & Stability
 
 ## Major Features
 
@@ -6,8 +6,8 @@
 - **SQLite-based persistence**: All tasks are now stored in a local SQLite database
 - **Automatic recovery**: Tasks queued before a crash are automatically re-queued on startup
 - **Platform-specific storage**: 
-  - Unix/Mac: `~/.backbeat/backbeat.db`
-  - Windows: `%APPDATA%/backbeat/backbeat.db`
+  - Unix/Mac: `~/.autobeat/autobeat.db`
+  - Windows: `%APPDATA%/autobeat/autobeat.db`
 - **Task history**: Complete history of all delegated tasks with status, logs, and metadata
 
 ### 🔧 MCP Connection Stability
@@ -58,10 +58,10 @@ No migration needed. The database will be created automatically on first run.
 
 ```bash
 # npm
-npm install -g backbeat
+npm install -g autobeat
 
 # or use npx
-npx backbeat mcp start
+npx autobeat mcp start
 ```
 
 ## Configuration
@@ -71,7 +71,7 @@ Add to your MCP configuration:
 ```json
 {
   "mcpServers": {
-    "backbeat": {
+    "autobeat": {
       "command": "beat",
       "args": ["mcp", "start"]
     }
@@ -86,4 +86,4 @@ Add to your MCP configuration:
 
 ---
 
-For detailed documentation, visit: https://github.com/dean0x/backbeat
+For detailed documentation, visit: https://github.com/dean0x/autobeat

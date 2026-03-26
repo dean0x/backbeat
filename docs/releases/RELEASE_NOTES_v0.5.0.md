@@ -1,6 +1,6 @@
-# Backbeat v0.5.0 — Multi-Agent Support
+# Autobeat v0.5.0 — Multi-Agent Support
 
-Backbeat is no longer Claude-only. v0.5.0 adds a pluggable agent registry with adapters for Claude, OpenAI Codex, and Google Gemini — with per-task agent selection across MCP, CLI, and interactive setup.
+Autobeat is no longer Claude-only. v0.5.0 adds a pluggable agent registry with adapters for Claude, OpenAI Codex, and Google Gemini — with per-task agent selection across MCP, CLI, and interactive setup.
 
 ---
 
@@ -8,7 +8,7 @@ Backbeat is no longer Claude-only. v0.5.0 adds a pluggable agent registry with a
 
 ### Multi-Agent Support (PR #72)
 
-Delegate tasks to different AI agents — Claude, Codex, or Gemini — from a single Backbeat instance.
+Delegate tasks to different AI agents — Claude, Codex, or Gemini — from a single Autobeat instance.
 
 **Key Capabilities:**
 - **Agent Registry**: Pluggable registry with adapter pattern for agent lifecycle management
@@ -32,14 +32,14 @@ beat run "implement the login page" --agent codex
 
 ### `beat init` — Interactive Setup (PR #75)
 
-First-time setup wizard for configuring Backbeat defaults.
+First-time setup wizard for configuring Autobeat defaults.
 
 ```bash
 beat init              # Interactive — prompts for default agent
 beat init --agent codex  # Non-interactive — set default agent directly
 ```
 
-- Creates `~/.backbeat/config.json` with default agent selection
+- Creates `~/.autobeat/config.json` with default agent selection
 - Validates agent availability before saving
 
 ### `beat agents list` — Agent Discovery (PR #72)
@@ -73,16 +73,16 @@ beat agents list
 ## Installation
 
 ```bash
-npm install -g backbeat@0.5.0
+npm install -g autobeat@0.5.0
 ```
 
 Or use npx:
 ```json
 {
   "mcpServers": {
-    "backbeat": {
+    "autobeat": {
       "command": "npx",
-      "args": ["-y", "backbeat", "mcp", "start"]
+      "args": ["-y", "autobeat", "mcp", "start"]
     }
   }
 }
@@ -92,6 +92,6 @@ Or use npx:
 
 ## Links
 
-- NPM Package: https://www.npmjs.com/package/backbeat
-- Documentation: https://github.com/dean0x/backbeat/blob/main/docs/FEATURES.md
-- Issues: https://github.com/dean0x/backbeat/issues
+- NPM Package: https://www.npmjs.com/package/autobeat
+- Documentation: https://github.com/dean0x/autobeat/blob/main/docs/FEATURES.md
+- Issues: https://github.com/dean0x/autobeat/issues

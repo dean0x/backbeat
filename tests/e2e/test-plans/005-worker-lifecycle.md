@@ -168,7 +168,7 @@ sleep 7 && node dist/cli.js status $(node dist/cli.js status --json 2>/dev/null 
 **Action:** Clean up all test artifacts
 ```bash
 pkill -f "claude" || true
-rm -rf .backbeat/backbeat.db*
+rm -rf .autobeat/autobeat.db*
 ```
 **Expected:** Cleanup successful
 **Verify:**

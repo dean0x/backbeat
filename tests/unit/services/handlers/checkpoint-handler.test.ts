@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Task } from '../../../../src/core/domain';
 import { createTask, TaskId } from '../../../../src/core/domain';
-import { BackbeatError, ErrorCode } from '../../../../src/core/errors';
+import { AutobeatError, ErrorCode } from '../../../../src/core/errors';
 import { InMemoryEventBus } from '../../../../src/core/events/event-bus';
 import { err, ok } from '../../../../src/core/result';
 import { SQLiteCheckpointRepository } from '../../../../src/implementations/checkpoint-repository';
@@ -181,7 +181,7 @@ describe('CheckpointHandler - Behavioral Tests', () => {
       // Act
       await eventBus.emit('TaskFailed', {
         taskId: task.id,
-        error: new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Process exited with code 1'),
+        error: new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Process exited with code 1'),
         exitCode: 1,
       });
       await flushEventLoop();
@@ -206,7 +206,7 @@ describe('CheckpointHandler - Behavioral Tests', () => {
       // Act
       await eventBus.emit('TaskFailed', {
         taskId: task.id,
-        error: new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Generic failure'),
+        error: new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Generic failure'),
         exitCode: 1,
       });
       await flushEventLoop();
@@ -338,7 +338,7 @@ describe('CheckpointHandler - Behavioral Tests', () => {
       // Act
       await eventBus.emit('TaskFailed', {
         taskId: task.id,
-        error: new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Short error message'),
+        error: new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Short error message'),
         exitCode: 1,
       });
       await flushEventLoop();
@@ -386,7 +386,7 @@ describe('CheckpointHandler - Behavioral Tests', () => {
 
     it('should handle git state capture failure gracefully', async () => {
       // Arrange
-      mockCaptureGitState.mockResolvedValue(err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'git not available')));
+      mockCaptureGitState.mockResolvedValue(err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'git not available')));
 
       const task = buildTask();
       await taskRepo.save(task);
@@ -447,7 +447,7 @@ describe('CheckpointHandler - Behavioral Tests', () => {
       // Arrange - spy on findById to simulate failure
       const findByIdSpy = vi
         .spyOn(taskRepo, 'findById')
-        .mockResolvedValue(err(new BackbeatError(ErrorCode.SYSTEM_ERROR, 'Database connection lost')));
+        .mockResolvedValue(err(new AutobeatError(ErrorCode.SYSTEM_ERROR, 'Database connection lost')));
 
       // Act
       const ghostId = TaskId('task-repo-err');

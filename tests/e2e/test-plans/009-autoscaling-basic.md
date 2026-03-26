@@ -24,8 +24,8 @@ preconditions:
 ### Step 1: Clean State
 **Action:** Ensure clean starting state
 ```bash
-rm -rf .backbeat/
-pkill -f "backbeat" || true
+rm -rf .autobeat/
+pkill -f "autobeat" || true
 ```
 **Expected:** Clean state achieved
 **Verify:**
@@ -155,7 +155,7 @@ done
 ### Step 11: Test Min Workers Config
 **Action:** Test with minimum worker setting
 ```bash
-export BACKBEAT_MIN_WORKERS=2
+export AUTOBEAT_MIN_WORKERS=2
 for i in {1..5}; do
   beat run "echo 'Min worker test $i' && sleep 2" --priority P1
 done
@@ -171,7 +171,7 @@ echo "Workers with MIN_WORKERS=2: $min_workers"
 ### Step 12: Test Max Workers Config
 **Action:** Test maximum worker limit
 ```bash
-export BACKBEAT_MAX_WORKERS=3
+export AUTOBEAT_MAX_WORKERS=3
 for i in {1..15}; do
   beat run "echo 'Max worker test $i' && sleep 5" --priority P1
 done
@@ -207,10 +207,10 @@ echo "Workers under high CPU load: $workers_under_load"
 ### Step 14: Cleanup
 **Action:** Clean up test artifacts
 ```bash
-unset BACKBEAT_MIN_WORKERS BACKBEAT_MAX_WORKERS
+unset AUTOBEAT_MIN_WORKERS AUTOBEAT_MAX_WORKERS
 pkill -f "stress" || true
-pkill -f "backbeat" || true
-rm -rf .backbeat/
+pkill -f "autobeat" || true
+rm -rf .autobeat/
 ```
 **Expected:** Cleanup successful
 **Verify:**
@@ -230,7 +230,7 @@ rm -rf .backbeat/
 ## Rollback Plan
 If test fails:
 1. Kill all workers: `pkill -9 -f claude`
-2. Clear environment: `unset BACKBEAT_MIN_WORKERS BACKBEAT_MAX_WORKERS`
+2. Clear environment: `unset AUTOBEAT_MIN_WORKERS AUTOBEAT_MAX_WORKERS`
 3. Check CPU: `top -bn1`
 4. Review autoscaling logic
 

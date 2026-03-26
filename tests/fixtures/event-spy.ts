@@ -2,12 +2,12 @@
  * Event spy utility for testing event flow
  */
 
-import { BackbeatEvent, EventHandler } from '../../src/core/events/events';
+import { AutobeatEvent, EventHandler } from '../../src/core/events/events';
 import { EventBus } from '../../src/core/interfaces';
 import { ok, Result } from '../../src/core/result';
 
 export interface EventRecord {
-  event: BackbeatEvent;
+  event: AutobeatEvent;
   timestamp: number;
 }
 
@@ -20,7 +20,7 @@ export class EventSpy {
    * Capture all events from an EventBus
    */
   captureAll(eventBus: EventBus): void {
-    this.globalHandler = (event: BackbeatEvent) => {
+    this.globalHandler = (event: AutobeatEvent) => {
       this.events.push({
         event,
         timestamp: Date.now(),
@@ -34,7 +34,7 @@ export class EventSpy {
    * Capture specific event types
    */
   capture(eventBus: EventBus, eventType: string): void {
-    const handler: EventHandler = (event: BackbeatEvent) => {
+    const handler: EventHandler = (event: AutobeatEvent) => {
       this.events.push({
         event,
         timestamp: Date.now(),
@@ -46,13 +46,13 @@ export class EventSpy {
     existing.push(handler);
     this.handlers.set(eventType, existing);
 
-    eventBus.subscribe(eventType as BackbeatEvent['type'], handler);
+    eventBus.subscribe(eventType as AutobeatEvent['type'], handler);
   }
 
   /**
    * Get all captured events
    */
-  getEvents(type?: string): BackbeatEvent[] {
+  getEvents(type?: string): AutobeatEvent[] {
     if (!type) {
       return this.events.map((r) => r.event);
     }
@@ -75,8 +75,8 @@ export class EventSpy {
   async waitForEvent(
     type: string,
     timeout: number = 5000,
-    predicate?: (event: BackbeatEvent) => boolean,
-  ): Promise<BackbeatEvent | null> {
+    predicate?: (event: AutobeatEvent) => boolean,
+  ): Promise<AutobeatEvent | null> {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {
@@ -96,7 +96,7 @@ export class EventSpy {
   /**
    * Wait for multiple events of a type
    */
-  async waitForEvents(type: string, count: number, timeout: number = 5000): Promise<BackbeatEvent[]> {
+  async waitForEvents(type: string, count: number, timeout: number = 5000): Promise<AutobeatEvent[]> {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {
@@ -201,7 +201,7 @@ export class EventSpy {
   /**
    * Get event payload
    */
-  getEventPayload<T extends BackbeatEvent>(type: string, index: number = 0): T | null {
+  getEventPayload<T extends AutobeatEvent>(type: string, index: number = 0): T | null {
     const events = this.getEvents(type);
     return (events[index] as T) || null;
   }

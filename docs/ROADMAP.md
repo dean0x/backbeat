@@ -1,19 +1,19 @@
-# Backbeat Development Roadmap
+# Autobeat Development Roadmap
 
 ## Current Status: v0.8.1 ✅
 
 **Status**: Released (2026-03-26)
 
-Backbeat v0.8.1 fixes the git integration design (branch-per-iteration → commit-per-iteration) and adds a performance optimization (O(1) reset target lookup). See [FEATURES.md](./FEATURES.md) for complete list of current capabilities.
+Autobeat v0.8.1 fixes the git integration design (branch-per-iteration → commit-per-iteration) and adds a performance optimization (O(1) reset target lookup). See [FEATURES.md](./FEATURES.md) for complete list of current capabilities.
 
 ---
 
 ## Released Versions
 
-### v0.4.0 - First Release as Backbeat ✅
+### v0.4.0 - First Release as Autobeat ✅
 **Status**: **RELEASED** to npm (2026-03-03)
 
-Major features: task scheduling (cron/one-time), task resumption (checkpoints), session continuation (`continueFrom`), CLI detach mode, CLI UX overhaul (@clack/prompts), git/worktree removal, pagination, project rename (claudine → backbeat).
+Major features: task scheduling (cron/one-time), task resumption (checkpoints), session continuation (`continueFrom`), CLI detach mode, CLI UX overhaul (@clack/prompts), git/worktree removal, pagination, project rename (claudine → autobeat).
 
 See [RELEASE_NOTES_v0.4.0.md](./releases/RELEASE_NOTES_v0.4.0.md) for full details.
 
@@ -59,7 +59,7 @@ Agent registry with pluggable adapters (Claude, Codex, Gemini), per-task agent s
 
 ### v0.6.0 - Architectural Simplification + Bug Fixes ✅
 **Status**: **RELEASED** (2026-03-20)
-**Issue**: [#105](https://github.com/dean0x/backbeat/issues/105)
+**Issue**: [#105](https://github.com/dean0x/autobeat/issues/105)
 
 Architectural simplification (hybrid event model, SQLite worker coordination, ReadOnlyContext CLI), scheduled pipelines, bug fixes, and tech debt cleanup.
 
@@ -87,7 +87,7 @@ See [RELEASE_NOTES_v0.6.0.md](./releases/RELEASE_NOTES_v0.6.0.md) for full detai
 
 ### v0.7.0 - Task/Pipeline Loops ✅
 **Status**: **RELEASED** (2026-03-21)
-**Issue**: [#79](https://github.com/dean0x/backbeat/issues/79)
+**Issue**: [#79](https://github.com/dean0x/autobeat/issues/79)
 
 Condition-driven iteration — repeat a task or pipeline until an exit condition is met. The [Ralph Wiggum Loop](https://ghuntley.com/loop/) pattern.
 
@@ -235,7 +235,7 @@ beat recipe create my-workflow  # interactive recipe builder
 **Priority**: Low — when there's actual demand
 
 #### Features
-- **Multi-Server Support**: Distribute tasks across Backbeat instances
+- **Multi-Server Support**: Distribute tasks across Autobeat instances
 - **Shared State**: Centralized task queue (Redis backend)
 - **Fault Tolerance**: Automatic failover on server failures
 - **Server Discovery**: Registration and health checks
@@ -267,7 +267,7 @@ beat recipe create my-workflow  # interactive recipe builder
 | v0.2.1 | ✅ Released | Event-driven Architecture |
 | v0.3.0 | ✅ Released | Task Dependencies (DAG) |
 | v0.3.1–3 | ✅ Released | Dependency optimizations + security |
-| v0.4.0 | ✅ Released | Scheduling, Resumption, Rename to Backbeat |
+| v0.4.0 | ✅ Released | Scheduling, Resumption, Rename to Autobeat |
 | v0.5.0 | ✅ Released | Multi-Agent Support |
 | v0.6.0 | ✅ Released | Architectural Simplification + Bug Fixes |
 | v0.7.0 | ✅ Released | Task/Pipeline Loops |
@@ -287,4 +287,4 @@ beat recipe create my-workflow  # interactive recipe builder
 2. **Community Discussion**: Discuss in GitHub Discussions
 3. **Use Cases**: Provide concrete examples of how you'd use the feature
 
-For questions about the roadmap, please open a [GitHub Discussion](https://github.com/dean0x/backbeat/discussions).
+For questions about the roadmap, please open a [GitHub Discussion](https://github.com/dean0x/autobeat/discussions).

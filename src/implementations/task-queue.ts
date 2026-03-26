@@ -7,7 +7,7 @@
  */
 
 import { comparePriority, Task, TaskId } from '../core/domain.js';
-import { BackbeatError, ErrorCode, taskNotFound } from '../core/errors.js';
+import { AutobeatError, ErrorCode, taskNotFound } from '../core/errors.js';
 import { TaskQueue } from '../core/interfaces.js';
 import { err, ok, Result } from '../core/result.js';
 
@@ -35,7 +35,7 @@ export class PriorityTaskQueue implements TaskQueue {
     // SECURITY: Prevent unbounded queue growth (DoS protection)
     if (this.heap.length >= this.maxQueueSize) {
       return err(
-        new BackbeatError(
+        new AutobeatError(
           ErrorCode.RESOURCE_EXHAUSTED,
           `Queue is full (max size: ${this.maxQueueSize}). Cannot enqueue more tasks.`,
           { taskId: task.id, queueSize: this.heap.length, maxQueueSize: this.maxQueueSize },
@@ -230,7 +230,7 @@ export class FIFOTaskQueue implements TaskQueue {
     // SECURITY: Prevent unbounded queue growth (DoS protection)
     if (this.tasks.length >= this.maxQueueSize) {
       return err(
-        new BackbeatError(
+        new AutobeatError(
           ErrorCode.RESOURCE_EXHAUSTED,
           `Queue is full (max size: ${this.maxQueueSize}). Cannot enqueue more tasks.`,
           { taskId: task.id, queueSize: this.tasks.length, maxQueueSize: this.maxQueueSize },

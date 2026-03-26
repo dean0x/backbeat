@@ -1,4 +1,4 @@
-# 🚀 Backbeat v0.2.3 - Performance & Architecture Improvements
+# 🚀 Autobeat v0.2.3 - Performance & Architecture Improvements
 
 ## Major Features
 
@@ -152,7 +152,7 @@ All components now strictly follow event-driven patterns:
 ## Installation
 
 ```bash
-npm install -g backbeat@0.2.3
+npm install -g autobeat@0.2.3
 ```
 
 ## What's Next

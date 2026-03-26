@@ -1,16 +1,16 @@
-# Backbeat: AI Coding Agent Orchestration at Scale
+# Autobeat: AI Coding Agent Orchestration at Scale
 
-[![npm version](https://img.shields.io/npm/v/backbeat.svg)](https://www.npmjs.com/package/backbeat)
+[![npm version](https://img.shields.io/npm/v/autobeat.svg)](https://www.npmjs.com/package/autobeat)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org/)
-[![CI](https://github.com/dean0x/backbeat/actions/workflows/ci.yml/badge.svg)](https://github.com/dean0x/backbeat/actions/workflows/ci.yml)
+[![CI](https://github.com/dean0x/autobeat/actions/workflows/ci.yml/badge.svg)](https://github.com/dean0x/autobeat/actions/workflows/ci.yml)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-purple)](https://modelcontextprotocol.io/)
 
-## Why Backbeat
+## Why Autobeat
 
 Every AI coding agent is a single-threaded workhorse. One task, one agent, one repo at a time. That is a massive waste of computing power.
 
-Backbeat turns your machine into an AI development powerhouse. Run dozens of agents in parallel. Chain them into pipelines. Score their output and iterate until optimal. Three models, unlimited parallelism, one orchestrator.
+Autobeat turns your machine into an AI development powerhouse. Run dozens of agents in parallel. Chain them into pipelines. Score their output and iterate until optimal. Three models, unlimited parallelism, one orchestrator.
 
 **Karpathy Optimization Loops.** The only production-grade framework that implements optimization loops with eval scoring for AI coding agents. Run a task, score the output with an eval script, iterate until optimal. Retry strategy (run until exit condition passes) or optimize strategy (minimize/maximize any metric). This is the Karpathy loop for coding agents, and nothing else out there does it.
 
@@ -64,15 +64,15 @@ Add to your project's `.mcp.json`:
 ```json
 {
   "mcpServers": {
-    "backbeat": {
+    "autobeat": {
       "command": "npx",
-      "args": ["-y", "backbeat", "mcp", "start"]
+      "args": ["-y", "autobeat", "mcp", "start"]
     }
   }
 }
 ```
 
-Restart your MCP client to connect to Backbeat.
+Restart your MCP client to connect to Autobeat.
 
 ## Usage
 
@@ -234,9 +234,9 @@ Checkpoints are captured automatically on task completion/failure, preserving th
 |------|------|-------------|
 | **[Skim](https://github.com/dean0x/skim)** | Context Optimization | Code-aware AST parsing across 12 languages, command rewriting, test/build/git output compression |
 | **[DevFlow](https://github.com/dean0x/devflow)** | Quality Orchestration | 18 parallel reviewers, working memory, self-learning, composable plugin system |
-| **Backbeat** | Agent Orchestration | Orchestration at scale. Karpathy optimization loops, multi-agent pipelines, DAG dependencies, autoscaling |
+| **Autobeat** | Agent Orchestration | Orchestration at scale. Karpathy optimization loops, multi-agent pipelines, DAG dependencies, autoscaling |
 
-Backbeat scales execution. DevFlow enforces quality. Skim optimizes context. No other stack covers all three.
+Autobeat scales execution. DevFlow enforces quality. Skim optimizes context. No other stack covers all three.
 
 ## Architecture
 
@@ -252,7 +252,7 @@ Configuration priority: **environment variables > config file > defaults**.
 
 ### Config File
 
-Persistent configuration stored at `~/.backbeat/config.json`:
+Persistent configuration stored at `~/.autobeat/config.json`:
 
 ```bash
 beat config show             # Show resolved configuration
@@ -325,7 +325,7 @@ npm run test:coverage       # With coverage
 ### Project Structure
 
 ```
-backbeat/
+autobeat/
 ├── src/
 │   ├── core/                # Core interfaces and types
 │   ├── implementations/     # Service implementations
@@ -389,7 +389,7 @@ MIT License - see LICENSE file for details
 
 ## Support
 
-- Report issues: [GitHub Issues](https://github.com/dean0x/backbeat/issues)
+- Report issues: [GitHub Issues](https://github.com/dean0x/autobeat/issues)
 
 ## Acknowledgments
 

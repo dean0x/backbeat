@@ -1,4 +1,4 @@
-# Backbeat v0.7.0 — Task/Pipeline Loops
+# Autobeat v0.7.0 — Task/Pipeline Loops
 
 Iterative task execution with retry and optimize strategies. Run a task (or full pipeline) in a loop until an exit condition is met, with configurable safety controls and score-based optimization.
 
@@ -71,16 +71,16 @@ None. This release is fully additive.
 ## Installation
 
 ```bash
-npm install -g backbeat@0.7.0
+npm install -g autobeat@0.7.0
 ```
 
 Or use npx:
 ```json
 {
   "mcpServers": {
-    "backbeat": {
+    "autobeat": {
       "command": "npx",
-      "args": ["-y", "backbeat", "mcp", "start"]
+      "args": ["-y", "autobeat", "mcp", "start"]
     }
   }
 }
@@ -90,6 +90,6 @@ Or use npx:
 
 ## Links
 
-- NPM Package: https://www.npmjs.com/package/backbeat
-- Documentation: https://github.com/dean0x/backbeat/blob/main/docs/FEATURES.md
-- Issues: https://github.com/dean0x/backbeat/issues
+- NPM Package: https://www.npmjs.com/package/autobeat
+- Documentation: https://github.com/dean0x/autobeat/blob/main/docs/FEATURES.md
+- Issues: https://github.com/dean0x/autobeat/issues
