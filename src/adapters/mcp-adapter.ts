@@ -21,6 +21,8 @@ import {
   LoopId,
   LoopStatus,
   LoopStrategy,
+  OrchestratorId,
+  OrchestratorStatus,
   PipelineCreateRequest,
   Priority,
   ResumeTaskRequest,
@@ -34,7 +36,7 @@ import {
   TaskId,
   TaskRequest,
 } from '../core/domain.js';
-import { Logger, LoopService, ScheduleService, TaskManager } from '../core/interfaces.js';
+import { Logger, LoopService, OrchestrationService, ScheduleService, TaskManager } from '../core/interfaces.js';
 import { match } from '../core/result.js';
 import { toMissedRunPolicy, toOptimizeDirection, truncatePrompt } from '../utils/format.js';
 import { validatePath } from '../utils/validation.js';
@@ -194,6 +196,31 @@ const SchedulePipelineSchema = z.object({
     .describe('Default agent for all steps (individual steps can override)'),
 });
 
+// Orchestrator-related Zod schemas (v0.9.0 Orchestrator Mode)
+const OrchestrateSchema = z.object({
+  goal: z.string().min(1).max(8000).describe('High-level goal for the orchestrator to achieve'),
+  workingDirectory: z.string().optional().describe('Working directory for workers (absolute path)'),
+  agent: z.enum(AGENT_PROVIDERS_TUPLE).optional().describe('AI agent for the orchestrator loop'),
+  maxDepth: z.number().min(1).max(10).optional().default(3).describe('Max delegation depth'),
+  maxWorkers: z.number().min(1).max(20).optional().default(5).describe('Max concurrent workers'),
+  maxIterations: z.number().min(1).max(200).optional().default(50).describe('Max orchestrator iterations'),
+});
+
+const OrchestratorStatusSchema = z.object({
+  orchestratorId: z.string().describe('Orchestrator ID'),
+});
+
+const ListOrchestratorsSchema = z.object({
+  status: z.enum(['planning', 'running', 'completed', 'failed', 'cancelled']).optional(),
+  limit: z.number().min(1).max(100).optional().default(50),
+  offset: z.number().min(0).optional().default(0),
+});
+
+const CancelOrchestratorSchema = z.object({
+  orchestratorId: z.string().describe('Orchestrator ID to cancel'),
+  reason: z.string().optional().describe('Reason for cancellation'),
+});
+
 const ConfigureAgentSchema = z.object({
   agent: z.enum(AGENT_PROVIDERS_TUPLE).describe('Agent provider to configure'),
   action: z
@@ -305,6 +332,7 @@ export class MCPAdapter {
     private readonly loopService: LoopService,
     private readonly agentRegistry: AgentRegistry | undefined,
     private readonly config: Configuration,
+    private readonly orchestrationService?: OrchestrationService,
   ) {
     this.server = new Server(
       {
@@ -381,6 +409,14 @@ export class MCPAdapter {
         return await this.handleScheduleLoop(args);
       case 'ListAgents':
         return this.handleListAgents();
+      case 'Orchestrate':
+        return await this.handleOrchestrate(args);
+      case 'OrchestratorStatus':
+        return await this.handleOrchestratorStatus(args);
+      case 'ListOrchestrators':
+        return await this.handleListOrchestrators(args);
+      case 'CancelOrchestrator':
+        return await this.handleCancelOrchestrator(args);
       case 'ConfigureAgent':
         return this.handleConfigureAgent(args);
       default:
@@ -1101,6 +1137,107 @@ export class MCPAdapter {
               inputSchema: {
                 type: 'object',
                 properties: {},
+              },
+            },
+            {
+              name: 'Orchestrate',
+              description:
+                'Start an autonomous orchestration session. The orchestrator decomposes a high-level goal into subtasks, delegates to worker agents, monitors progress, and iterates until the goal is achieved.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  goal: {
+                    type: 'string',
+                    description: 'High-level goal for the orchestrator to achieve',
+                    minLength: 1,
+                    maxLength: 8000,
+                  },
+                  workingDirectory: {
+                    type: 'string',
+                    description: 'Working directory for workers (absolute path)',
+                  },
+                  agent: {
+                    type: 'string',
+                    enum: [...AGENT_PROVIDERS],
+                    description: 'AI agent for the orchestrator loop',
+                  },
+                  maxDepth: {
+                    type: 'number',
+                    description: 'Max delegation depth (1-10, default: 3)',
+                    minimum: 1,
+                    maximum: 10,
+                  },
+                  maxWorkers: {
+                    type: 'number',
+                    description: 'Max concurrent workers (1-20, default: 5)',
+                    minimum: 1,
+                    maximum: 20,
+                  },
+                  maxIterations: {
+                    type: 'number',
+                    description: 'Max orchestrator iterations (1-200, default: 50)',
+                    minimum: 1,
+                    maximum: 200,
+                  },
+                },
+                required: ['goal'],
+              },
+            },
+            {
+              name: 'OrchestratorStatus',
+              description: 'Get the status and details of an orchestration session',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  orchestratorId: {
+                    type: 'string',
+                    description: 'Orchestrator ID',
+                  },
+                },
+                required: ['orchestratorId'],
+              },
+            },
+            {
+              name: 'ListOrchestrators',
+              description: 'List orchestration sessions with optional status filter',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  status: {
+                    type: 'string',
+                    enum: ['planning', 'running', 'completed', 'failed', 'cancelled'],
+                    description: 'Filter by orchestration status',
+                  },
+                  limit: {
+                    type: 'number',
+                    description: 'Maximum results (default: 50)',
+                    minimum: 1,
+                    maximum: 100,
+                  },
+                  offset: {
+                    type: 'number',
+                    description: 'Skip first N results (default: 0)',
+                    minimum: 0,
+                  },
+                },
+              },
+            },
+            {
+              name: 'CancelOrchestrator',
+              description: 'Cancel an active orchestration session and its underlying loop/workers',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  orchestratorId: {
+                    type: 'string',
+                    description: 'Orchestrator ID to cancel',
+                  },
+                  reason: {
+                    type: 'string',
+                    description: 'Reason for cancellation',
+                  },
+                },
+                required: ['orchestratorId'],
               },
             },
             {
@@ -2411,6 +2548,229 @@ export class MCPAdapter {
         },
       ],
     };
+  }
+
+  // ============================================================================
+  // Orchestrator tool handlers (v0.9.0)
+  // ============================================================================
+
+  private async handleOrchestrate(args: unknown): Promise<MCPToolResponse> {
+    if (!this.orchestrationService) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ error: 'Orchestration service not available' }, null, 2) }],
+        isError: true,
+      };
+    }
+
+    const parseResult = OrchestrateSchema.safeParse(args);
+    if (!parseResult.success) {
+      return {
+        content: [{ type: 'text', text: `Validation error: ${parseResult.error.message}` }],
+        isError: true,
+      };
+    }
+
+    const data = parseResult.data;
+
+    if (data.workingDirectory) {
+      const pathValidation = validatePath(data.workingDirectory);
+      if (!pathValidation.ok) {
+        return {
+          content: [{ type: 'text', text: `Invalid working directory: ${pathValidation.error.message}` }],
+          isError: true,
+        };
+      }
+    }
+
+    const result = await this.orchestrationService.createOrchestration({
+      goal: data.goal,
+      workingDirectory: data.workingDirectory,
+      agent: data.agent as AgentProvider | undefined,
+      maxDepth: data.maxDepth,
+      maxWorkers: data.maxWorkers,
+      maxIterations: data.maxIterations,
+    });
+
+    return match(result, {
+      ok: (orchestration) => ({
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: true,
+                orchestratorId: orchestration.id,
+                loopId: orchestration.loopId,
+                status: orchestration.status,
+                stateFilePath: orchestration.stateFilePath,
+                message: 'Orchestration started',
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      }),
+      err: (error) => ({
+        content: [{ type: 'text', text: JSON.stringify({ success: false, error: error.message }, null, 2) }],
+        isError: true,
+      }),
+    });
+  }
+
+  private async handleOrchestratorStatus(args: unknown): Promise<MCPToolResponse> {
+    if (!this.orchestrationService) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ error: 'Orchestration service not available' }, null, 2) }],
+        isError: true,
+      };
+    }
+
+    const parseResult = OrchestratorStatusSchema.safeParse(args);
+    if (!parseResult.success) {
+      return {
+        content: [{ type: 'text', text: `Validation error: ${parseResult.error.message}` }],
+        isError: true,
+      };
+    }
+
+    const result = await this.orchestrationService.getOrchestration(
+      OrchestratorId(parseResult.data.orchestratorId),
+    );
+
+    return match(result, {
+      ok: (orchestration) => ({
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: true,
+                orchestration: {
+                  id: orchestration.id,
+                  goal: orchestration.goal,
+                  status: orchestration.status,
+                  loopId: orchestration.loopId,
+                  stateFilePath: orchestration.stateFilePath,
+                  workingDirectory: orchestration.workingDirectory,
+                  agent: orchestration.agent,
+                  maxDepth: orchestration.maxDepth,
+                  maxWorkers: orchestration.maxWorkers,
+                  maxIterations: orchestration.maxIterations,
+                  createdAt: new Date(orchestration.createdAt).toISOString(),
+                  updatedAt: new Date(orchestration.updatedAt).toISOString(),
+                  completedAt: orchestration.completedAt
+                    ? new Date(orchestration.completedAt).toISOString()
+                    : null,
+                },
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      }),
+      err: (error) => ({
+        content: [{ type: 'text', text: JSON.stringify({ success: false, error: error.message }, null, 2) }],
+        isError: true,
+      }),
+    });
+  }
+
+  private async handleListOrchestrators(args: unknown): Promise<MCPToolResponse> {
+    if (!this.orchestrationService) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ error: 'Orchestration service not available' }, null, 2) }],
+        isError: true,
+      };
+    }
+
+    const parseResult = ListOrchestratorsSchema.safeParse(args);
+    if (!parseResult.success) {
+      return {
+        content: [{ type: 'text', text: `Validation error: ${parseResult.error.message}` }],
+        isError: true,
+      };
+    }
+
+    const { status, limit, offset } = parseResult.data;
+    const orchStatus = status ? (status as OrchestratorStatus) : undefined;
+    const result = await this.orchestrationService.listOrchestrations(orchStatus, limit, offset);
+
+    return match(result, {
+      ok: (orchestrations) => ({
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: true,
+                count: orchestrations.length,
+                orchestrations: orchestrations.map((o) => ({
+                  id: o.id,
+                  goal: truncatePrompt(o.goal, 100),
+                  status: o.status,
+                  loopId: o.loopId,
+                  createdAt: new Date(o.createdAt).toISOString(),
+                })),
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      }),
+      err: (error) => ({
+        content: [{ type: 'text', text: JSON.stringify({ success: false, error: error.message }, null, 2) }],
+        isError: true,
+      }),
+    });
+  }
+
+  private async handleCancelOrchestrator(args: unknown): Promise<MCPToolResponse> {
+    if (!this.orchestrationService) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ error: 'Orchestration service not available' }, null, 2) }],
+        isError: true,
+      };
+    }
+
+    const parseResult = CancelOrchestratorSchema.safeParse(args);
+    if (!parseResult.success) {
+      return {
+        content: [{ type: 'text', text: `Validation error: ${parseResult.error.message}` }],
+        isError: true,
+      };
+    }
+
+    const { orchestratorId, reason } = parseResult.data;
+    const result = await this.orchestrationService.cancelOrchestration(
+      OrchestratorId(orchestratorId),
+      reason,
+    );
+
+    return match(result, {
+      ok: () => ({
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: true,
+                orchestratorId,
+                message: 'Orchestration cancelled',
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      }),
+      err: (error) => ({
+        content: [{ type: 'text', text: JSON.stringify({ success: false, error: error.message }, null, 2) }],
+        isError: true,
+      }),
+    });
   }
 
   /**
