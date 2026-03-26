@@ -7,6 +7,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs';
 import os from 'os';
 import path from 'path';
+import { z } from 'zod';
 import { err, ok, type Result } from './result.js';
 
 /**
@@ -34,6 +35,36 @@ export interface OrchestratorPlanStep {
   readonly failureCount?: number;
   readonly lastError?: string;
 }
+
+/**
+ * Zod schema for OrchestratorPlanStep
+ * ARCHITECTURE PRINCIPLE: "Parse, don't validate"
+ * Validates structure at I/O boundaries instead of trusting type assertions
+ */
+const OrchestratorPlanStepSchema = z.object({
+  id: z.string(),
+  description: z.string(),
+  status: z.enum(['pending', 'in_progress', 'completed', 'failed']),
+  taskId: z.string().optional(),
+  dependsOn: z.array(z.string()).optional(),
+  failureCount: z.number().optional(),
+  lastError: z.string().optional(),
+});
+
+/**
+ * Zod schema for OrchestratorStateFile
+ * ARCHITECTURE PRINCIPLE: "Parse, don't validate"
+ * Single source of truth for state file validation
+ * Reference: https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/
+ */
+export const OrchestratorStateFileSchema = z.object({
+  version: z.literal(1),
+  goal: z.string(),
+  status: z.enum(['planning', 'executing', 'validating', 'complete', 'failed']),
+  plan: z.array(OrchestratorPlanStepSchema),
+  context: z.record(z.unknown()),
+  iterationCount: z.number(),
+});
 
 /**
  * Get the orchestrator state directory path
@@ -77,10 +108,11 @@ export function readStateFile(filePath: string): Result<OrchestratorStateFile> {
   try {
     const raw = readFileSync(filePath, 'utf-8');
     const parsed = JSON.parse(raw);
-    if (typeof parsed !== 'object' || parsed === null || parsed.version !== 1) {
-      return err(new Error(`Invalid state file format at ${filePath}`));
+    const validated = OrchestratorStateFileSchema.safeParse(parsed);
+    if (!validated.success) {
+      return err(new Error(`Invalid state file format at ${filePath}: ${validated.error.message}`));
     }
-    return ok(parsed as OrchestratorStateFile);
+    return ok(validated.data);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return err(new Error(`Failed to read state file at ${filePath}: ${message}`));
