@@ -19,6 +19,7 @@ import {
   ResourceMonitor,
   ScheduleRepository,
   SyncLoopOperations,
+  SyncOrchestrationOperations,
   SyncScheduleOperations,
   SyncTaskOperations,
   TaskQueue,
@@ -31,6 +32,7 @@ import { ShellExitConditionEvaluator } from './exit-condition-evaluator.js';
 import { CheckpointHandler } from './handlers/checkpoint-handler.js';
 import { DependencyHandler } from './handlers/dependency-handler.js';
 import { LoopHandler } from './handlers/loop-handler.js';
+import { OrchestrationHandler } from './handlers/orchestration-handler.js';
 import { PersistenceHandler } from './handlers/persistence-handler.js';
 import { QueueHandler } from './handlers/queue-handler.js';
 import { ScheduleHandler } from './handlers/schedule-handler.js';
@@ -55,6 +57,7 @@ export interface HandlerDependencies {
   readonly checkpointRepository: CheckpointRepository;
   readonly loopRepository: LoopRepository & SyncLoopOperations;
   readonly loopService?: LoopService;
+  readonly orchestrationRepository?: SyncOrchestrationOperations;
 }
 
 /**
@@ -70,6 +73,8 @@ export interface HandlerSetupResult {
   readonly checkpointHandler: CheckpointHandler;
   /** LoopHandler uses factory pattern, returned separately for unified lifecycle */
   readonly loopHandler: LoopHandler;
+  /** OrchestrationHandler uses factory pattern, returned separately for unified lifecycle */
+  readonly orchestrationHandler?: OrchestrationHandler;
 }
 
 /**
@@ -156,6 +161,10 @@ export function extractHandlerDependencies(container: Container): Result<Handler
   const loopServiceResult = getDependency<LoopService>(container, 'loopService');
   const loopService = loopServiceResult.ok ? loopServiceResult.value : undefined;
 
+  // Optional: OrchestrationRepository for OrchestrationHandler (graceful if not registered)
+  const orchestrationRepoResult = getDependency<SyncOrchestrationOperations>(container, 'orchestrationRepository');
+  const orchestrationRepository = orchestrationRepoResult.ok ? orchestrationRepoResult.value : undefined;
+
   return ok({
     config: configResult.value,
     logger: loggerResult.value,
@@ -171,6 +180,7 @@ export function extractHandlerDependencies(container: Container): Result<Handler
     checkpointRepository: checkpointRepositoryResult.value,
     loopRepository: loopRepositoryResult.value,
     loopService,
+    orchestrationRepository,
   });
 }
 
@@ -344,10 +354,31 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
 
   const loopHandler = loopHandlerResult.value;
 
+  // 8. Orchestration Handler - correlates loop events to orchestration status (v0.9.0)
+  // ARCHITECTURE: Optional — only created if orchestrationRepository is registered
+  let orchestrationHandler: OrchestrationHandler | undefined;
+  if (deps.orchestrationRepository) {
+    const orchestrationHandlerResult = await OrchestrationHandler.create(
+      deps.orchestrationRepository,
+      deps.loopRepository,
+      deps.database,
+      eventBus,
+      childLogger('OrchestrationHandler'),
+    );
+    if (!orchestrationHandlerResult.ok) {
+      // Non-fatal: log warning but continue without orchestration handler
+      setupLogger.warn('Failed to create OrchestrationHandler', {
+        error: orchestrationHandlerResult.error.message,
+      });
+    } else {
+      orchestrationHandler = orchestrationHandlerResult.value;
+    }
+  }
+
   setupLogger.info('Event handlers initialized successfully', {
     standardHandlers: standardHandlers.length,
-    totalHandlers: standardHandlers.length + 4, // +4 for DependencyHandler, ScheduleHandler, CheckpointHandler, LoopHandler
+    totalHandlers: standardHandlers.length + 4 + (orchestrationHandler ? 1 : 0),
   });
 
-  return ok({ registry, dependencyHandler, scheduleHandler, checkpointHandler, loopHandler });
+  return ok({ registry, dependencyHandler, scheduleHandler, checkpointHandler, loopHandler, orchestrationHandler });
 }

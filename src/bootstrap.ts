@@ -14,6 +14,8 @@ import {
   Logger,
   LoopRepository,
   LoopService,
+  OrchestrationRepository,
+  OrchestrationService,
   OutputCapture,
   OutputRepository,
   ProcessSpawner,
@@ -83,6 +85,7 @@ import { EventDrivenWorkerPool } from './implementations/event-driven-worker-poo
 import { GeminiAdapter } from './implementations/gemini-adapter.js';
 import { ConsoleLogger, LogLevel, StructuredLogger } from './implementations/logger.js';
 import { SQLiteLoopRepository } from './implementations/loop-repository.js';
+import { SQLiteOrchestrationRepository } from './implementations/orchestration-repository.js';
 import { BufferedOutputCapture } from './implementations/output-capture.js';
 import { SQLiteOutputRepository } from './implementations/output-repository.js';
 import { ClaudeProcessSpawner } from './implementations/process-spawner.js';
@@ -96,6 +99,7 @@ import { SQLiteWorkerRepository } from './implementations/worker-repository.js';
 // Services
 import { extractHandlerDependencies, setupEventHandlers } from './services/handler-setup.js';
 import { LoopManagerService } from './services/loop-manager.js';
+import { OrchestrationManagerService } from './services/orchestration-manager.js';
 import { RecoveryManager } from './services/recovery-manager.js';
 import { ScheduleExecutor } from './services/schedule-executor.js';
 import { ScheduleManagerService } from './services/schedule-manager.js';
@@ -275,6 +279,13 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
     return new SQLiteLoopRepository(dbResult.value);
   });
 
+  // Register OrchestrationRepository for orchestrator mode (v0.9.0)
+  container.registerSingleton('orchestrationRepository', () => {
+    const dbResult = container.get<Database>('database');
+    if (!dbResult.ok) throw new Error('Failed to get database for OrchestrationRepository');
+    return new SQLiteOrchestrationRepository(dbResult.value);
+  });
+
   // Register ScheduleService for schedule management (v0.4.0)
   container.registerSingleton('scheduleService', () => {
     return new ScheduleManagerService(
@@ -291,6 +302,17 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
       getFromContainer<EventBus>(container, 'eventBus'),
       getFromContainer<Logger>(container, 'logger').child({ module: 'LoopManager' }),
       getFromContainer<LoopRepository>(container, 'loopRepository'),
+      config,
+    );
+  });
+
+  // Register OrchestrationService for orchestrator mode (v0.9.0)
+  container.registerSingleton('orchestrationService', () => {
+    return new OrchestrationManagerService(
+      getFromContainer<EventBus>(container, 'eventBus'),
+      getFromContainer<Logger>(container, 'logger').child({ module: 'OrchestrationManager' }),
+      getFromContainer<OrchestrationRepository>(container, 'orchestrationRepository'),
+      getFromContainer<LoopService>(container, 'loopService'),
       config,
     );
   });
@@ -423,6 +445,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
       getFromContainer<LoopService>(container, 'loopService'),
       getFromContainer<AgentRegistry>(container, 'agentRegistry'),
       config,
+      getFromContainer<OrchestrationService>(container, 'orchestrationService'),
     );
   });
 
@@ -442,6 +465,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
       getFromContainer<WorkerRepository>(container, 'workerRepository'),
       getFromContainer<DependencyRepository>(container, 'dependencyRepository'),
       getFromContainer<LoopRepository>(container, 'loopRepository'),
+      getFromContainer<OrchestrationRepository>(container, 'orchestrationRepository'),
     );
   });
 

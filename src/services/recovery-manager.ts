@@ -10,6 +10,7 @@ import {
   DependencyRepository,
   Logger,
   LoopRepository,
+  OrchestrationRepository,
   TaskQueue,
   TaskRepository,
   WorkerRepository,
@@ -25,6 +26,7 @@ export class RecoveryManager {
     private readonly workerRepository: WorkerRepository,
     private readonly dependencyRepo: DependencyRepository,
     private readonly loopRepository?: LoopRepository,
+    private readonly orchestrationRepository?: OrchestrationRepository,
   ) {}
 
   /**
@@ -56,6 +58,9 @@ export class RecoveryManager {
 
     // Phase 1b: Cleanup old completed loops (FK cascade handles iterations)
     await this.cleanupOldLoops();
+
+    // Phase 1c: Cleanup old completed orchestrations (state files + DB rows)
+    await this.cleanupOldOrchestrations();
 
     // Fetch non-terminal tasks for recovery
     const queuedResult = await this.repository.findByStatus(TaskStatus.QUEUED);
@@ -171,6 +176,17 @@ export class RecoveryManager {
 
     if (cleanupResult.ok && cleanupResult.value > 0) {
       this.logger.info('Cleaned up old completed loops', { count: cleanupResult.value });
+    }
+  }
+
+  private async cleanupOldOrchestrations(): Promise<void> {
+    if (!this.orchestrationRepository) return;
+
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    const cleanupResult = await this.orchestrationRepository.cleanupOldOrchestrations(sevenDaysMs);
+
+    if (cleanupResult.ok && cleanupResult.value > 0) {
+      this.logger.info('Cleaned up old completed orchestrations', { count: cleanupResult.value });
     }
   }
 
