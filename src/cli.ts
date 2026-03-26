@@ -19,6 +19,7 @@ import { showHelp } from './cli/commands/help.js';
 import { initCommand } from './cli/commands/init.js';
 import { getTaskLogs } from './cli/commands/logs.js';
 import { handleLoopCommand } from './cli/commands/loop.js';
+import { handleOrchestrateCommand } from './cli/commands/orchestrate.js';
 import { handleMcpStart, handleMcpTest, showConfig } from './cli/commands/mcp.js';
 import { migrateCommand } from './cli/commands/migrate.js';
 import { handlePipelineCommand } from './cli/commands/pipeline.js';
@@ -251,6 +252,8 @@ if (mainCommand === 'mcp') {
   await handleScheduleCommand(subCommand, args.slice(2));
 } else if (mainCommand === 'pipeline') {
   await handlePipelineCommand(args.slice(1));
+} else if (mainCommand === 'orchestrate') {
+  await handleOrchestrateCommand(subCommand, args.slice(2));
 } else if (mainCommand === 'loop') {
   await handleLoopCommand(subCommand, args.slice(2));
 } else if (mainCommand === 'agents') {
