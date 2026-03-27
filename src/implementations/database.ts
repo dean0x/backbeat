@@ -718,6 +718,32 @@ export class Database implements TransactionRunner {
           db.exec(`ALTER TABLE loops ADD COLUMN best_iteration_commit_sha TEXT`);
         },
       },
+      {
+        version: 14,
+        description: 'Add orchestrations table for orchestrator mode (v0.9.0)',
+        up: (db) => {
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS orchestrations (
+              id TEXT PRIMARY KEY,
+              goal TEXT NOT NULL,
+              loop_id TEXT REFERENCES loops(id) ON DELETE SET NULL,
+              state_file_path TEXT NOT NULL,
+              working_directory TEXT NOT NULL,
+              agent TEXT,
+              max_depth INTEGER NOT NULL DEFAULT 3,
+              max_workers INTEGER NOT NULL DEFAULT 5,
+              max_iterations INTEGER NOT NULL DEFAULT 50,
+              status TEXT NOT NULL DEFAULT 'planning'
+                CHECK(status IN ('planning', 'running', 'completed', 'failed', 'cancelled')),
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              completed_at INTEGER
+            )
+          `);
+          db.exec(`CREATE INDEX IF NOT EXISTS idx_orchestrations_status ON orchestrations(status)`);
+          db.exec(`CREATE INDEX IF NOT EXISTS idx_orchestrations_loop_id ON orchestrations(loop_id)`);
+        },
+      },
     ];
   }
 

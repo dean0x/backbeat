@@ -10,22 +10,47 @@ import {
   DependencyRepository,
   Logger,
   LoopRepository,
+  OrchestrationRepository,
   TaskQueue,
   TaskRepository,
   WorkerRepository,
 } from '../core/interfaces.js';
 import { ok, Result } from '../core/result.js';
 
+export interface RecoveryManagerDeps {
+  readonly taskRepo: TaskRepository;
+  readonly queue: TaskQueue;
+  readonly eventBus: EventBus;
+  readonly logger: Logger;
+  readonly workerRepo: WorkerRepository;
+  readonly dependencyRepo: DependencyRepository;
+  readonly loopRepo?: LoopRepository;
+  readonly orchestrationRepo?: OrchestrationRepository;
+}
+
+/** 7-day retention window for cleanup of terminal tasks, loops, and orchestrations */
+const CLEANUP_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
 export class RecoveryManager {
-  constructor(
-    private readonly repository: TaskRepository,
-    private readonly queue: TaskQueue,
-    private readonly eventBus: EventBus,
-    private readonly logger: Logger,
-    private readonly workerRepository: WorkerRepository,
-    private readonly dependencyRepo: DependencyRepository,
-    private readonly loopRepository?: LoopRepository,
-  ) {}
+  private readonly taskRepo: TaskRepository;
+  private readonly queue: TaskQueue;
+  private readonly eventBus: EventBus;
+  private readonly logger: Logger;
+  private readonly workerRepo: WorkerRepository;
+  private readonly dependencyRepo: DependencyRepository;
+  private readonly loopRepo?: LoopRepository;
+  private readonly orchestrationRepo?: OrchestrationRepository;
+
+  constructor(deps: RecoveryManagerDeps) {
+    this.taskRepo = deps.taskRepo;
+    this.queue = deps.queue;
+    this.eventBus = deps.eventBus;
+    this.logger = deps.logger;
+    this.workerRepo = deps.workerRepo;
+    this.dependencyRepo = deps.dependencyRepo;
+    this.loopRepo = deps.loopRepo;
+    this.orchestrationRepo = deps.orchestrationRepo;
+  }
 
   /**
    * Check if a process is alive using signal 0 (existence check).
@@ -57,9 +82,12 @@ export class RecoveryManager {
     // Phase 1b: Cleanup old completed loops (FK cascade handles iterations)
     await this.cleanupOldLoops();
 
+    // Phase 1c: Cleanup old completed orchestrations (state files + DB rows)
+    await this.cleanupOldOrchestrations();
+
     // Fetch non-terminal tasks for recovery
-    const queuedResult = await this.repository.findByStatus(TaskStatus.QUEUED);
-    const runningResult = await this.repository.findByStatus(TaskStatus.RUNNING);
+    const queuedResult = await this.taskRepo.findByStatus(TaskStatus.QUEUED);
+    const runningResult = await this.taskRepo.findByStatus(TaskStatus.RUNNING);
 
     if (!queuedResult.ok) {
       this.logger.error('Failed to load queued tasks for recovery', queuedResult.error);
@@ -87,12 +115,12 @@ export class RecoveryManager {
   }
 
   private async cleanDeadWorkerRegistrations(): Promise<void> {
-    const allWorkers = this.workerRepository.findAll();
+    const allWorkers = this.workerRepo.findAll();
     if (!allWorkers.ok) return;
 
     for (const reg of allWorkers.value) {
       if (!this.isProcessAlive(reg.ownerPid)) {
-        const unregResult = this.workerRepository.unregister(reg.workerId);
+        const unregResult = this.workerRepo.unregister(reg.workerId);
         if (!unregResult.ok) {
           this.logger.error('Failed to unregister dead worker', unregResult.error, {
             workerId: reg.workerId,
@@ -100,7 +128,7 @@ export class RecoveryManager {
         }
 
         // Guard: only update non-terminal tasks
-        const taskResult = await this.repository.findById(reg.taskId);
+        const taskResult = await this.taskRepo.findById(reg.taskId);
         if (!taskResult.ok) {
           this.logger.error('Failed to look up task for dead worker', taskResult.error, {
             taskId: reg.taskId,
@@ -122,7 +150,7 @@ export class RecoveryManager {
         // Recovery runs during startup before event handlers are guaranteed to be ready,
         // so we write status directly rather than relying on PersistenceHandler to handle
         // TaskFailed. The subsequent emit notifies DependencyHandler to unblock downstream tasks.
-        const updateResult = await this.repository.update(reg.taskId, {
+        const updateResult = await this.taskRepo.update(reg.taskId, {
           status: TaskStatus.FAILED,
           completedAt: Date.now(),
           exitCode: -1, // Crash indicator
@@ -155,8 +183,7 @@ export class RecoveryManager {
   }
 
   private async cleanupOldCompletedTasks(): Promise<void> {
-    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-    const cleanupResult = await this.repository.cleanupOldTasks(sevenDaysMs);
+    const cleanupResult = await this.taskRepo.cleanupOldTasks(CLEANUP_RETENTION_MS);
 
     if (cleanupResult.ok && cleanupResult.value > 0) {
       this.logger.info('Cleaned up old completed tasks', { count: cleanupResult.value });
@@ -164,13 +191,22 @@ export class RecoveryManager {
   }
 
   private async cleanupOldLoops(): Promise<void> {
-    if (!this.loopRepository) return;
+    if (!this.loopRepo) return;
 
-    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-    const cleanupResult = await this.loopRepository.cleanupOldLoops(sevenDaysMs);
+    const cleanupResult = await this.loopRepo.cleanupOldLoops(CLEANUP_RETENTION_MS);
 
     if (cleanupResult.ok && cleanupResult.value > 0) {
       this.logger.info('Cleaned up old completed loops', { count: cleanupResult.value });
+    }
+  }
+
+  private async cleanupOldOrchestrations(): Promise<void> {
+    if (!this.orchestrationRepo) return;
+
+    const cleanupResult = await this.orchestrationRepo.cleanupOldOrchestrations(CLEANUP_RETENTION_MS);
+
+    if (cleanupResult.ok && cleanupResult.value > 0) {
+      this.logger.info('Cleaned up old completed orchestrations', { count: cleanupResult.value });
     }
   }
 
@@ -251,7 +287,7 @@ export class RecoveryManager {
     let failedCount = 0;
 
     for (const task of tasks) {
-      const workerResult = this.workerRepository.findByTaskId(task.id);
+      const workerResult = this.workerRepo.findByTaskId(task.id);
       const workerRegistration = workerResult.ok ? workerResult.value : null;
 
       if (workerRegistration !== null && this.isProcessAlive(workerRegistration.ownerPid)) {
@@ -264,7 +300,7 @@ export class RecoveryManager {
       }
 
       // Guard: verify task is still RUNNING (TOCTOU — another process may have completed it)
-      const freshResult = await this.repository.findById(task.id);
+      const freshResult = await this.taskRepo.findById(task.id);
       if (freshResult.ok && freshResult.value !== null && isTerminalState(freshResult.value.status)) {
         this.logger.info('Running task already terminal, skipping recovery', {
           taskId: task.id,
@@ -277,7 +313,7 @@ export class RecoveryManager {
       // Recovery runs during startup before event handlers are guaranteed to be ready,
       // so we write status directly rather than relying on PersistenceHandler to handle
       // TaskFailed. The subsequent emit notifies DependencyHandler to unblock downstream tasks.
-      const updateResult = await this.repository.update(task.id, {
+      const updateResult = await this.taskRepo.update(task.id, {
         status: TaskStatus.FAILED,
         completedAt: now,
         exitCode: -1, // Indicates crash

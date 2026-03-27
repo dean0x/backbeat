@@ -2,7 +2,7 @@
  * Event type definitions for the hybrid event-driven architecture.
  * Commands flow through events (TaskDelegated, TaskQueued, etc.).
  * Queries use direct repository access (no query events).
- * 31 event types after adding loop pause/resume events (v0.8.0).
+ * 34 event types after adding orchestration events (v0.9.0).
  */
 
 import {
@@ -10,6 +10,8 @@ import {
   LoopId,
   LoopIteration,
   MissedRunPolicy,
+  Orchestration,
+  OrchestratorId,
   Schedule,
   ScheduleId,
   Task,
@@ -239,6 +241,28 @@ export interface LoopResumedEvent extends BaseEvent {
 }
 
 /**
+ * Orchestration lifecycle events
+ * ARCHITECTURE: Part of autonomous orchestration system (v0.9.0)
+ * Pattern: Event-driven orchestration management with loop correlation
+ */
+export interface OrchestrationCreatedEvent extends BaseEvent {
+  type: 'OrchestrationCreated';
+  orchestration: Orchestration;
+}
+
+export interface OrchestrationCompletedEvent extends BaseEvent {
+  type: 'OrchestrationCompleted';
+  orchestratorId: OrchestratorId;
+  reason: string;
+}
+
+export interface OrchestrationCancelledEvent extends BaseEvent {
+  type: 'OrchestrationCancelled';
+  orchestratorId: OrchestratorId;
+  reason?: string;
+}
+
+/**
  * Union type of all events
  */
 export type AutobeatEvent =
@@ -279,7 +303,11 @@ export type AutobeatEvent =
   | LoopCompletedEvent
   | LoopCancelledEvent
   | LoopPausedEvent
-  | LoopResumedEvent;
+  | LoopResumedEvent
+  // Orchestration lifecycle events
+  | OrchestrationCreatedEvent
+  | OrchestrationCompletedEvent
+  | OrchestrationCancelledEvent;
 
 /**
  * Event handler function type

@@ -13,10 +13,17 @@
  */
 
 import { loadConfiguration } from '../core/configuration.js';
-import type { LoopRepository, OutputRepository, ScheduleRepository, TaskRepository } from '../core/interfaces.js';
+import type {
+  LoopRepository,
+  OrchestrationRepository,
+  OutputRepository,
+  ScheduleRepository,
+  TaskRepository,
+} from '../core/interfaces.js';
 import { Result, tryCatch } from '../core/result.js';
 import { Database } from '../implementations/database.js';
 import { SQLiteLoopRepository } from '../implementations/loop-repository.js';
+import { SQLiteOrchestrationRepository } from '../implementations/orchestration-repository.js';
 import { SQLiteOutputRepository } from '../implementations/output-repository.js';
 import { SQLiteScheduleRepository } from '../implementations/schedule-repository.js';
 import { SQLiteTaskRepository } from '../implementations/task-repository.js';
@@ -26,6 +33,7 @@ export interface ReadOnlyContext {
   readonly outputRepository: OutputRepository;
   readonly scheduleRepository: ScheduleRepository;
   readonly loopRepository: LoopRepository;
+  readonly orchestrationRepository: OrchestrationRepository;
   close(): void;
 }
 
@@ -41,12 +49,14 @@ export function createReadOnlyContext(): Result<ReadOnlyContext> {
     const outputRepository = new SQLiteOutputRepository(config, database);
     const scheduleRepository = new SQLiteScheduleRepository(database);
     const loopRepository = new SQLiteLoopRepository(database);
+    const orchestrationRepository = new SQLiteOrchestrationRepository(database);
 
     return {
       taskRepository,
       outputRepository,
       scheduleRepository,
       loopRepository,
+      orchestrationRepository,
       close: () => database.close(),
     };
   });

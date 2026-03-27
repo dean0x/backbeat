@@ -10,11 +10,13 @@ export type TaskId = string & { readonly __brand: 'TaskId' };
 export type WorkerId = string & { readonly __brand: 'WorkerId' };
 export type ScheduleId = string & { readonly __brand: 'ScheduleId' };
 export type LoopId = string & { readonly __brand: 'LoopId' };
+export type OrchestratorId = string & { readonly __brand: 'OrchestratorId' };
 
 export const TaskId = (id: string): TaskId => id as TaskId;
 export const WorkerId = (id: string): WorkerId => id as WorkerId;
 export const ScheduleId = (id: string): ScheduleId => id as ScheduleId;
 export const LoopId = (id: string): LoopId => id as LoopId;
+export const OrchestratorId = (id: string): OrchestratorId => id as OrchestratorId;
 
 export enum Priority {
   P0 = 'P0', // Critical
@@ -643,6 +645,99 @@ export const createLoop = (request: LoopCreateRequest, workingDirectory: string,
 export const updateLoop = (loop: Loop, update: Partial<Loop>): Loop => {
   return Object.freeze({
     ...loop,
+    ...update,
+    updatedAt: Date.now(),
+  });
+};
+
+// ============================================================================
+// Orchestrator types (v0.9.0: Orchestrator Mode)
+// ARCHITECTURE: Autonomous multi-agent orchestration with state file management
+// Pattern: Immutable domain objects with factory functions, following Loop conventions
+// ============================================================================
+
+/**
+ * Orchestrator status values
+ * ARCHITECTURE: Tracks lifecycle of autonomous orchestration sessions
+ */
+export enum OrchestratorStatus {
+  PLANNING = 'planning',
+  RUNNING = 'running',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+  CANCELLED = 'cancelled',
+}
+
+/**
+ * Orchestration interface - defines an autonomous orchestration session
+ * ARCHITECTURE: All fields readonly for immutability
+ * Pattern: Factory function createOrchestration() for construction
+ */
+export interface Orchestration {
+  readonly id: OrchestratorId;
+  readonly goal: string;
+  readonly loopId?: LoopId;
+  readonly stateFilePath: string;
+  readonly workingDirectory: string;
+  readonly agent?: AgentProvider;
+  readonly maxDepth: number;
+  readonly maxWorkers: number;
+  readonly maxIterations: number;
+  readonly status: OrchestratorStatus;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly completedAt?: number;
+}
+
+/**
+ * Request type for creating orchestrations
+ * ARCHITECTURE: Flat structure for MCP/CLI consumption
+ */
+export interface OrchestratorCreateRequest {
+  readonly goal: string;
+  readonly workingDirectory?: string;
+  readonly agent?: AgentProvider;
+  readonly maxDepth?: number;
+  readonly maxWorkers?: number;
+  readonly maxIterations?: number;
+}
+
+/**
+ * Create a new orchestration
+ * ARCHITECTURE: Factory function returns frozen immutable object
+ * Pattern: Follows createLoop() convention
+ */
+export const createOrchestration = (
+  request: OrchestratorCreateRequest,
+  stateFilePath: string,
+  workingDirectory: string,
+): Orchestration => {
+  const now = Date.now();
+  return Object.freeze({
+    id: OrchestratorId(`orchestrator-${crypto.randomUUID()}`),
+    goal: request.goal,
+    loopId: undefined,
+    stateFilePath,
+    workingDirectory,
+    agent: request.agent,
+    maxDepth: request.maxDepth ?? 3,
+    maxWorkers: request.maxWorkers ?? 5,
+    maxIterations: request.maxIterations ?? 50,
+    status: OrchestratorStatus.PLANNING,
+    createdAt: now,
+    updatedAt: now,
+    completedAt: undefined,
+  });
+};
+
+/**
+ * Immutable update helper for orchestrations
+ * ARCHITECTURE: Returns new frozen object, never mutates input
+ * Pattern: Follows updateLoop() convention
+ */
+export const updateOrchestration = (orchestration: Orchestration, update: Partial<Orchestration>): Orchestration => {
+  return Object.freeze({
+    ...orchestration,
     ...update,
     updatedAt: Date.now(),
   });

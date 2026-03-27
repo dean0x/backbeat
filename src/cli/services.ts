@@ -1,6 +1,6 @@
 import { bootstrap } from '../bootstrap.js';
 import type { Container } from '../core/container.js';
-import type { LoopService, ScheduleService, TaskManager } from '../core/interfaces.js';
+import type { LoopService, OrchestrationService, ScheduleService, TaskManager } from '../core/interfaces.js';
 import type { Result } from '../core/result.js';
 import { createReadOnlyContext, type ReadOnlyContext } from './read-only-context.js';
 import type { Spinner } from './ui.js';
@@ -64,6 +64,7 @@ export async function withServices(s?: Spinner): Promise<{
   taskManager: TaskManager;
   scheduleService: ScheduleService;
   loopService: LoopService;
+  orchestrationService: OrchestrationService;
 }> {
   s?.message('Initializing...');
   const container = exitOnError(await bootstrap({ mode: 'cli' }), s, 'Bootstrap failed', 'Initialization failed');
@@ -85,6 +86,12 @@ export async function withServices(s?: Spinner): Promise<{
     'Failed to get loop service',
     'Initialization failed',
   );
+  const orchestrationService = exitOnError(
+    container.get<OrchestrationService>('orchestrationService'),
+    s,
+    'Failed to get orchestration service',
+    'Initialization failed',
+  );
 
-  return { container, taskManager, scheduleService, loopService };
+  return { container, taskManager, scheduleService, loopService, orchestrationService };
 }

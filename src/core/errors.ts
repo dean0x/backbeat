@@ -92,6 +92,10 @@ export enum ErrorCode {
   AGENT_NOT_FOUND = 'AGENT_NOT_FOUND',
   /** Agent adapter exists but is misconfigured (e.g., CLI not installed) */
   AGENT_MISCONFIGURED = 'AGENT_MISCONFIGURED',
+
+  // Orchestrator errors (v0.9.0 Orchestrator Mode)
+  /** Orchestration with specified ID does not exist */
+  ORCHESTRATION_NOT_FOUND = 'ORCHESTRATION_NOT_FOUND',
 }
 
 /**

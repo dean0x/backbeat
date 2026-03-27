@@ -19,6 +19,7 @@ import type {
   DependencyRepository,
   Logger,
   LoopRepository,
+  OrchestrationRepository,
   TaskQueue,
   TaskRepository,
   WorkerRepository,
@@ -93,6 +94,17 @@ const createMockLoopRepository = () => ({
   updateIteration: vi.fn(),
 });
 
+const createMockOrchestrationRepository = () => ({
+  cleanupOldOrchestrations: vi.fn().mockResolvedValue(ok(0)),
+  save: vi.fn(),
+  update: vi.fn(),
+  findById: vi.fn(),
+  findAll: vi.fn(),
+  findByStatus: vi.fn(),
+  findByLoopId: vi.fn(),
+  delete: vi.fn(),
+});
+
 describe('RecoveryManager', () => {
   let manager: RecoveryManager;
   let repo: ReturnType<typeof createMockRepo>;
@@ -110,14 +122,14 @@ describe('RecoveryManager', () => {
     workerRepo = createMockWorkerRepository();
     dependencyRepo = createMockDependencyRepo();
 
-    manager = new RecoveryManager(
-      repo as unknown as TaskRepository,
-      queue as unknown as TaskQueue,
-      eventBus as unknown as EventBus,
-      logger as unknown as Logger,
-      workerRepo as unknown as WorkerRepository,
-      dependencyRepo as unknown as DependencyRepository,
-    );
+    manager = new RecoveryManager({
+      taskRepo: repo as unknown as TaskRepository,
+      queue: queue as unknown as TaskQueue,
+      eventBus: eventBus as unknown as EventBus,
+      logger: logger as unknown as Logger,
+      workerRepo: workerRepo as unknown as WorkerRepository,
+      dependencyRepo: dependencyRepo as unknown as DependencyRepository,
+    });
   });
 
   // --- Helpers ---
@@ -871,15 +883,15 @@ describe('RecoveryManager', () => {
       const mockLoopRepo = createMockLoopRepository();
       mockLoopRepo.cleanupOldLoops.mockResolvedValue(ok(3));
 
-      const managerWithLoops = new RecoveryManager(
-        repo as unknown as TaskRepository,
-        queue as unknown as TaskQueue,
-        eventBus as unknown as EventBus,
-        logger as unknown as Logger,
-        workerRepo as unknown as WorkerRepository,
-        dependencyRepo as unknown as DependencyRepository,
-        mockLoopRepo as unknown as LoopRepository,
-      );
+      const managerWithLoops = new RecoveryManager({
+        taskRepo: repo as unknown as TaskRepository,
+        queue: queue as unknown as TaskQueue,
+        eventBus: eventBus as unknown as EventBus,
+        logger: logger as unknown as Logger,
+        workerRepo: workerRepo as unknown as WorkerRepository,
+        dependencyRepo: dependencyRepo as unknown as DependencyRepository,
+        loopRepo: mockLoopRepo as unknown as LoopRepository,
+      });
 
       setupFindByStatus([], []);
 
@@ -892,15 +904,15 @@ describe('RecoveryManager', () => {
       const mockLoopRepo = createMockLoopRepository();
       mockLoopRepo.cleanupOldLoops.mockResolvedValue(ok(5));
 
-      const managerWithLoops = new RecoveryManager(
-        repo as unknown as TaskRepository,
-        queue as unknown as TaskQueue,
-        eventBus as unknown as EventBus,
-        logger as unknown as Logger,
-        workerRepo as unknown as WorkerRepository,
-        dependencyRepo as unknown as DependencyRepository,
-        mockLoopRepo as unknown as LoopRepository,
-      );
+      const managerWithLoops = new RecoveryManager({
+        taskRepo: repo as unknown as TaskRepository,
+        queue: queue as unknown as TaskQueue,
+        eventBus: eventBus as unknown as EventBus,
+        logger: logger as unknown as Logger,
+        workerRepo: workerRepo as unknown as WorkerRepository,
+        dependencyRepo: dependencyRepo as unknown as DependencyRepository,
+        loopRepo: mockLoopRepo as unknown as LoopRepository,
+      });
 
       setupFindByStatus([], []);
 
@@ -911,6 +923,82 @@ describe('RecoveryManager', () => {
 
     it('should skip loop cleanup when no LoopRepository is provided', async () => {
       // The default manager has no loop repo — verify no crash
+      setupFindByStatus([], []);
+
+      await manager.recover();
+      // No assertion needed — just verifying it doesn't throw
+    });
+  });
+
+  describe('Orchestration cleanup', () => {
+    it('should clean up old completed orchestrations during recovery', async () => {
+      const mockOrchRepo = createMockOrchestrationRepository();
+      mockOrchRepo.cleanupOldOrchestrations.mockResolvedValue(ok(4));
+
+      const managerWithOrch = new RecoveryManager({
+        taskRepo: repo as unknown as TaskRepository,
+        queue: queue as unknown as TaskQueue,
+        eventBus: eventBus as unknown as EventBus,
+        logger: logger as unknown as Logger,
+        workerRepo: workerRepo as unknown as WorkerRepository,
+        dependencyRepo: dependencyRepo as unknown as DependencyRepository,
+        orchestrationRepo: mockOrchRepo as unknown as OrchestrationRepository,
+      });
+
+      setupFindByStatus([], []);
+
+      await managerWithOrch.recover();
+
+      expect(mockOrchRepo.cleanupOldOrchestrations).toHaveBeenCalledWith(7 * 24 * 60 * 60 * 1000);
+    });
+
+    it('should log cleanup count when orchestrations are cleaned up', async () => {
+      const mockOrchRepo = createMockOrchestrationRepository();
+      mockOrchRepo.cleanupOldOrchestrations.mockResolvedValue(ok(7));
+
+      const managerWithOrch = new RecoveryManager({
+        taskRepo: repo as unknown as TaskRepository,
+        queue: queue as unknown as TaskQueue,
+        eventBus: eventBus as unknown as EventBus,
+        logger: logger as unknown as Logger,
+        workerRepo: workerRepo as unknown as WorkerRepository,
+        dependencyRepo: dependencyRepo as unknown as DependencyRepository,
+        orchestrationRepo: mockOrchRepo as unknown as OrchestrationRepository,
+      });
+
+      setupFindByStatus([], []);
+
+      await managerWithOrch.recover();
+
+      expect(logger.info).toHaveBeenCalledWith('Cleaned up old completed orchestrations', { count: 7 });
+    });
+
+    it('should not log cleanup when zero orchestrations are cleaned', async () => {
+      const mockOrchRepo = createMockOrchestrationRepository();
+      mockOrchRepo.cleanupOldOrchestrations.mockResolvedValue(ok(0));
+
+      const managerWithOrch = new RecoveryManager({
+        taskRepo: repo as unknown as TaskRepository,
+        queue: queue as unknown as TaskQueue,
+        eventBus: eventBus as unknown as EventBus,
+        logger: logger as unknown as Logger,
+        workerRepo: workerRepo as unknown as WorkerRepository,
+        dependencyRepo: dependencyRepo as unknown as DependencyRepository,
+        orchestrationRepo: mockOrchRepo as unknown as OrchestrationRepository,
+      });
+
+      setupFindByStatus([], []);
+
+      await managerWithOrch.recover();
+
+      const orchCleanupCalls = (logger.info as ReturnType<typeof vi.fn>).mock.calls.filter(
+        (call: unknown[]) => call[0] === 'Cleaned up old completed orchestrations',
+      );
+      expect(orchCleanupCalls).toHaveLength(0);
+    });
+
+    it('should skip orchestration cleanup when no OrchestrationRepository is provided', async () => {
+      // The default manager has no orchestration repo — verify no crash
       setupFindByStatus([], []);
 
       await manager.recover();

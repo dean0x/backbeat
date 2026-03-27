@@ -10,6 +10,10 @@ import {
   LoopId,
   LoopIteration,
   LoopStatus,
+  Orchestration,
+  OrchestratorCreateRequest,
+  OrchestratorId,
+  OrchestratorStatus,
   PipelineCreateRequest,
   PipelineResult,
   ResumeTaskRequest,
@@ -679,4 +683,54 @@ export interface EvalResult {
  */
 export interface ExitConditionEvaluator {
   evaluate(loop: Loop, taskId: TaskId): Promise<EvalResult>;
+}
+
+// ============================================================================
+// Orchestration interfaces (v0.9.0: Orchestrator Mode)
+// ARCHITECTURE: Repository and service interfaces for autonomous orchestration
+// Pattern: Follows LoopRepository/LoopService conventions
+// ============================================================================
+
+/**
+ * Orchestration persistence and query interface
+ * ARCHITECTURE: Pure Result pattern, no exceptions
+ * Pattern: Repository pattern for orchestration management
+ */
+export interface OrchestrationRepository {
+  save(orchestration: Orchestration): Promise<Result<void>>;
+  update(orchestration: Orchestration): Promise<Result<void>>;
+  findById(id: OrchestratorId): Promise<Result<Orchestration | null>>;
+  findAll(limit?: number, offset?: number): Promise<Result<readonly Orchestration[]>>;
+  findByStatus(status: OrchestratorStatus, limit?: number, offset?: number): Promise<Result<readonly Orchestration[]>>;
+  findByLoopId(loopId: LoopId): Promise<Result<Orchestration | null>>;
+  delete(id: OrchestratorId): Promise<Result<void>>;
+  cleanupOldOrchestrations(retentionMs: number): Promise<Result<number>>;
+}
+
+/**
+ * Synchronous orchestration operations for use inside Database.runInTransaction().
+ * These methods throw on error (the transaction wrapper catches and converts to Result).
+ * ARCHITECTURE: Narrow interface — only the operations needed inside transactions.
+ */
+export interface SyncOrchestrationOperations {
+  saveSync(orchestration: Orchestration): void;
+  updateSync(orchestration: Orchestration): void;
+  findByIdSync(id: OrchestratorId): Orchestration | null;
+  findByLoopIdSync(loopId: LoopId): Orchestration | null;
+}
+
+/**
+ * Orchestration management service
+ * ARCHITECTURE: Extracted for MCP/CLI reuse
+ * Pattern: Service layer with DI, Result types, event emission
+ */
+export interface OrchestrationService {
+  createOrchestration(request: OrchestratorCreateRequest): Promise<Result<Orchestration>>;
+  getOrchestration(id: OrchestratorId): Promise<Result<Orchestration>>;
+  listOrchestrations(
+    status?: OrchestratorStatus,
+    limit?: number,
+    offset?: number,
+  ): Promise<Result<readonly Orchestration[]>>;
+  cancelOrchestration(id: OrchestratorId, reason?: string): Promise<Result<void>>;
 }

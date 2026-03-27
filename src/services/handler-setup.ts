@@ -19,6 +19,7 @@ import {
   ResourceMonitor,
   ScheduleRepository,
   SyncLoopOperations,
+  SyncOrchestrationOperations,
   SyncScheduleOperations,
   SyncTaskOperations,
   TaskQueue,
@@ -31,6 +32,7 @@ import { ShellExitConditionEvaluator } from './exit-condition-evaluator.js';
 import { CheckpointHandler } from './handlers/checkpoint-handler.js';
 import { DependencyHandler } from './handlers/dependency-handler.js';
 import { LoopHandler } from './handlers/loop-handler.js';
+import { OrchestrationHandler } from './handlers/orchestration-handler.js';
 import { PersistenceHandler } from './handlers/persistence-handler.js';
 import { QueueHandler } from './handlers/queue-handler.js';
 import { ScheduleHandler } from './handlers/schedule-handler.js';
@@ -55,6 +57,7 @@ export interface HandlerDependencies {
   readonly checkpointRepository: CheckpointRepository;
   readonly loopRepository: LoopRepository & SyncLoopOperations;
   readonly loopService?: LoopService;
+  readonly orchestrationRepository?: SyncOrchestrationOperations;
 }
 
 /**
@@ -70,6 +73,8 @@ export interface HandlerSetupResult {
   readonly checkpointHandler: CheckpointHandler;
   /** LoopHandler uses factory pattern, returned separately for unified lifecycle */
   readonly loopHandler: LoopHandler;
+  /** OrchestrationHandler uses factory pattern, returned separately for unified lifecycle */
+  readonly orchestrationHandler?: OrchestrationHandler;
 }
 
 /**
@@ -156,6 +161,10 @@ export function extractHandlerDependencies(container: Container): Result<Handler
   const loopServiceResult = getDependency<LoopService>(container, 'loopService');
   const loopService = loopServiceResult.ok ? loopServiceResult.value : undefined;
 
+  // Optional: OrchestrationRepository for OrchestrationHandler (graceful if not registered)
+  const orchestrationRepoResult = getDependency<SyncOrchestrationOperations>(container, 'orchestrationRepository');
+  const orchestrationRepository = orchestrationRepoResult.ok ? orchestrationRepoResult.value : undefined;
+
   return ok({
     config: configResult.value,
     logger: loggerResult.value,
@@ -171,6 +180,7 @@ export function extractHandlerDependencies(container: Container): Result<Handler
     checkpointRepository: checkpointRepositoryResult.value,
     loopRepository: loopRepositoryResult.value,
     loopService,
+    orchestrationRepository,
   });
 }
 
@@ -213,15 +223,15 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
     // 2. Queue Handler - manages task queue operations with dependency awareness
     queueHandler,
     // 3. Worker Handler - manages worker lifecycle
-    new WorkerHandler(
-      deps.config,
-      deps.workerPool,
-      deps.resourceMonitor,
+    new WorkerHandler({
+      config: deps.config,
+      workerPool: deps.workerPool,
+      resourceMonitor: deps.resourceMonitor,
       eventBus,
-      deps.taskQueue,
-      deps.taskRepository,
-      childLogger('WorkerHandler'),
-    ),
+      taskQueue: deps.taskQueue,
+      taskRepo: deps.taskRepository,
+      logger: childLogger('WorkerHandler'),
+    }),
   ];
 
   // Register all standard handlers
@@ -250,10 +260,12 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
   // ARCHITECTURE: Factory pattern ensures handler is fully initialized before use
   // Cannot use registry because create() does its own event subscription
   const dependencyHandlerResult = await DependencyHandler.create(
-    deps.dependencyRepository,
-    deps.taskRepository,
-    logger,
-    eventBus,
+    {
+      dependencyRepo: deps.dependencyRepository,
+      taskRepo: deps.taskRepository,
+      logger,
+      eventBus,
+    },
     { checkpointLookup: deps.checkpointRepository },
   );
   if (!dependencyHandlerResult.ok) {
@@ -273,16 +285,15 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
   // 5. Schedule Handler - uses factory pattern for async event subscription
   // ARCHITECTURE: Factory pattern ensures handler is fully initialized before use
   // Cannot use registry because create() does its own event subscription
-  const scheduleHandlerResult = await ScheduleHandler.create(
-    deps.scheduleRepository,
-    deps.taskRepository,
+  const scheduleHandlerResult = await ScheduleHandler.create({
+    scheduleRepo: deps.scheduleRepository,
+    taskRepo: deps.taskRepository,
     eventBus,
-    deps.database,
-    deps.loopRepository,
-    childLogger('ScheduleHandler'),
-    undefined, // options
-    deps.loopService,
-  );
+    database: deps.database,
+    loopRepo: deps.loopRepository,
+    loopService: deps.loopService,
+    logger: childLogger('ScheduleHandler'),
+  });
   if (!scheduleHandlerResult.ok) {
     // Cleanup previous handlers on failure
     await registry.shutdown();
@@ -299,13 +310,13 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
 
   // 6. Checkpoint Handler - auto-creates checkpoints on task terminal events
   // ARCHITECTURE: Factory pattern ensures handler is fully initialized before use
-  const checkpointHandlerResult = await CheckpointHandler.create(
-    deps.checkpointRepository,
-    deps.outputCapture,
-    deps.taskRepository,
+  const checkpointHandlerResult = await CheckpointHandler.create({
+    checkpointRepo: deps.checkpointRepository,
+    outputCapture: deps.outputCapture,
+    taskRepo: deps.taskRepository,
     eventBus,
-    childLogger('CheckpointHandler'),
-  );
+    logger: childLogger('CheckpointHandler'),
+  });
   if (!checkpointHandlerResult.ok) {
     // Cleanup previous handlers on failure
     await registry.shutdown();
@@ -323,15 +334,15 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
   // 7. Loop Handler - iterative task/pipeline execution engine (v0.7.0)
   // ARCHITECTURE: Factory pattern ensures handler is fully initialized before use
   // Created AFTER CheckpointHandler because it needs checkpointRepository for context enrichment
-  const loopHandlerResult = await LoopHandler.create(
-    deps.loopRepository,
-    deps.taskRepository,
-    deps.checkpointRepository,
+  const loopHandlerResult = await LoopHandler.create({
+    loopRepo: deps.loopRepository,
+    taskRepo: deps.taskRepository,
+    checkpointRepo: deps.checkpointRepository,
     eventBus,
-    deps.database,
-    new ShellExitConditionEvaluator(),
-    childLogger('LoopHandler'),
-  );
+    database: deps.database,
+    exitConditionEvaluator: new ShellExitConditionEvaluator(),
+    logger: childLogger('LoopHandler'),
+  });
   if (!loopHandlerResult.ok) {
     // Cleanup previous handlers on failure
     await registry.shutdown();
@@ -344,10 +355,31 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
 
   const loopHandler = loopHandlerResult.value;
 
+  // 8. Orchestration Handler - correlates loop events to orchestration status (v0.9.0)
+  // ARCHITECTURE: Optional — only created if orchestrationRepository is registered
+  let orchestrationHandler: OrchestrationHandler | undefined;
+  if (deps.orchestrationRepository) {
+    const orchestrationHandlerResult = await OrchestrationHandler.create({
+      orchestrationRepo: deps.orchestrationRepository,
+      loopRepo: deps.loopRepository,
+      database: deps.database,
+      eventBus,
+      logger: childLogger('OrchestrationHandler'),
+    });
+    if (!orchestrationHandlerResult.ok) {
+      // Non-fatal: log warning but continue without orchestration handler
+      setupLogger.warn('Failed to create OrchestrationHandler', {
+        error: orchestrationHandlerResult.error.message,
+      });
+    } else {
+      orchestrationHandler = orchestrationHandlerResult.value;
+    }
+  }
+
   setupLogger.info('Event handlers initialized successfully', {
     standardHandlers: standardHandlers.length,
-    totalHandlers: standardHandlers.length + 4, // +4 for DependencyHandler, ScheduleHandler, CheckpointHandler, LoopHandler
+    totalHandlers: standardHandlers.length + 4 + (orchestrationHandler ? 1 : 0),
   });
 
-  return ok({ registry, dependencyHandler, scheduleHandler, checkpointHandler, loopHandler });
+  return ok({ registry, dependencyHandler, scheduleHandler, checkpointHandler, loopHandler, orchestrationHandler });
 }

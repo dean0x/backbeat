@@ -1,7 +1,3 @@
-import { spawn } from 'child_process';
-import { closeSync, mkdirSync, openSync, readFileSync } from 'fs';
-import { homedir } from 'os';
-import path from 'path';
 import { bootstrap } from '../../bootstrap.js';
 import type { AgentProvider } from '../../core/agents.js';
 import type { Container } from '../../core/container.js';
@@ -16,6 +12,7 @@ import type {
   TaskTimeoutEvent,
 } from '../../core/events/events.js';
 import type { TaskManager } from '../../core/interfaces.js';
+import { createDetachLogDir, createDetachLogFile, pollLogFileForId, spawnDetachedProcess } from '../detach-helpers.js';
 import { errorMessage } from '../services.js';
 import * as ui from '../ui.js';
 
@@ -90,7 +87,7 @@ export function waitForTaskCompletion(container: Container, taskId: string): Pro
  * with --foreground so it doesn't recurse back into detach mode.
  * The foreground polls the background's log file to extract and print the task ID, then exits.
  */
-export function handleDetachMode(runArgs: string[]): void {
+export async function handleDetachMode(runArgs: string[]): Promise<void> {
   // Validate that at least one non-flag word exists (the prompt)
   const hasPrompt = runArgs.some((arg) => !arg.startsWith('-'));
   if (!hasPrompt) {
@@ -99,103 +96,31 @@ export function handleDetachMode(runArgs: string[]): void {
     process.exit(1);
   }
 
-  // Create log directory
-  const logDir = path.join(homedir(), '.autobeat', 'detach-logs');
-  try {
-    mkdirSync(logDir, { recursive: true });
-  } catch (error) {
-    ui.error(`Failed to create log directory: ${logDir}: ${errorMessage(error)}`);
-    process.exit(1);
-  }
-
-  // Create log file with timestamp and random suffix for uniqueness
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const suffix = Math.random().toString(36).substring(2, 8);
-  const logFile = path.join(logDir, `detach-${timestamp}-${suffix}.log`);
-  let logFd: number;
-  try {
-    logFd = openSync(logFile, 'w');
-  } catch (error) {
-    ui.error(`Failed to create log file: ${logFile}: ${errorMessage(error)}`);
-    process.exit(1);
-  }
+  const logDir = createDetachLogDir();
+  const { logFile, logFd } = createDetachLogFile(logDir, 'detach');
 
   // Re-spawn CLI with --foreground as a detached background process
   const childArgs = [process.argv[1], 'run', '--foreground', ...runArgs];
-  try {
-    const child = spawn(process.argv[0], childArgs, {
-      detached: true,
-      stdio: ['ignore', logFd, logFd],
-      cwd: process.cwd(),
-      env: process.env,
-    });
+  const pid = spawnDetachedProcess(childArgs, logFd);
 
-    child.unref();
+  ui.info(`Background process started (PID: ${pid})`);
+  ui.info(`Log file: ${logFile}`);
 
-    if (!child.pid) {
-      closeSync(logFd);
-      ui.error('Failed to spawn background process');
-      process.exit(1);
-    }
+  // Poll log file for task ID (max 15s at 200ms intervals)
+  const result = await pollLogFileForId(logFile, {
+    idPattern: /Task ID:\s+(task-\S+)/,
+    errorPattern: /^❌/m,
+    foundMessage: (id) => `Task delegated: ${id}`,
+    timeoutMessage: 'Task ID not yet available (background process still starting)',
+    infoLines: ['Check status: beat status {id}', 'View logs:    beat logs {id}'],
+    maxAttempts: 75,
+    pollIntervalMs: 200,
+  });
 
-    ui.info(`Background process started (PID: ${child.pid})`);
-    ui.info(`Log file: ${logFile}`);
-    closeSync(logFd);
-
-    // Poll log file for task ID (max 15s at 200ms intervals)
-    const maxAttempts = 75; // 15s / 200ms
-    let attempt = 0;
-    const taskIdPattern = /Task ID:\s+(task-\S+)/;
-    const errorPattern = /^❌/m;
-
-    const s = ui.createSpinner();
-    s.start('Waiting for task ID...');
-
-    const pollInterval = setInterval(() => {
-      attempt++;
-      try {
-        const content = readFileSync(logFile, 'utf-8');
-
-        // Check for task ID first — once delegation succeeds, task output may
-        // contain ❌ which would be a false positive for the error check below.
-        const match = content.match(taskIdPattern);
-        if (match) {
-          clearInterval(pollInterval);
-          const taskId = match[1];
-          s.stop(`Task delegated: ${taskId}`);
-          ui.info(`Check status: beat status ${taskId}`);
-          ui.info(`View logs:    beat logs ${taskId}`);
-          process.exit(0);
-        }
-
-        // Only check for CLI errors if no task ID yet (pre-delegation phase)
-        if (errorPattern.test(content)) {
-          clearInterval(pollInterval);
-          s.stop('Background process error');
-          const lines = content.split('\n').filter((l) => l.trim().length > 0);
-          const lastLines = lines.slice(-5);
-          ui.error('Background process encountered an error:');
-          for (const line of lastLines) {
-            process.stderr.write(`  ${line}\n`);
-          }
-          process.exit(1);
-        }
-      } catch {
-        // Log file not yet readable, continue polling
-      }
-
-      if (attempt >= maxAttempts) {
-        clearInterval(pollInterval);
-        s.stop('Task ID not yet available (background process still starting)');
-        ui.info(`Check log file: ${logFile}`);
-        process.exit(0);
-      }
-    }, 200);
-  } catch (error) {
-    closeSync(logFd);
-    ui.error(`Failed to spawn background process: ${errorMessage(error)}`);
+  if (result.type === 'error') {
     process.exit(1);
   }
+  process.exit(0);
 }
 
 export async function runTask(
@@ -209,7 +134,7 @@ export async function runTask(
     maxOutputBuffer?: number;
     agent?: string;
   },
-) {
+): Promise<void> {
   let container: Container | undefined;
   const s = ui.createSpinner();
   try {

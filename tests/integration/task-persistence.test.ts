@@ -81,14 +81,14 @@ describe('Integration: Task persistence', () => {
 
       // Create recovery manager
       const dependencyRepo2 = new SQLiteDependencyRepository(database2);
-      const recoveryManager = new RecoveryManager(
-        repository2,
-        queue2,
+      const recoveryManager = new RecoveryManager({
+        taskRepo: repository2,
+        queue: queue2,
         eventBus,
         logger,
-        createMockWorkerRepository(),
-        dependencyRepo2,
-      );
+        workerRepo: createMockWorkerRepository(),
+        dependencyRepo: dependencyRepo2,
+      });
 
       // Perform recovery
       await recoveryManager.recover();
@@ -345,14 +345,14 @@ describe('Integration: Task persistence', () => {
       });
 
       const dependencyRepo = new SQLiteDependencyRepository(database);
-      const recoveryManager = new RecoveryManager(
-        repository,
-        new PriorityTaskQueue(logger),
+      const recoveryManager = new RecoveryManager({
+        taskRepo: repository,
+        queue: new PriorityTaskQueue(logger),
         eventBus,
         logger,
-        createMockWorkerRepository(),
+        workerRepo: createMockWorkerRepository(),
         dependencyRepo,
-      );
+      });
 
       await recoveryManager.recover();
 
@@ -428,14 +428,14 @@ describe('Integration: Task persistence', () => {
       });
 
       // Run recovery with real dependency repository
-      const recoveryManager = new RecoveryManager(
-        repository,
+      const recoveryManager = new RecoveryManager({
+        taskRepo: repository,
         queue,
         eventBus,
         logger,
-        createMockWorkerRepository(),
+        workerRepo: createMockWorkerRepository(),
         dependencyRepo,
-      );
+      });
 
       await recoveryManager.recover();
 

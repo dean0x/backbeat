@@ -21,6 +21,7 @@ import { getTaskLogs } from './cli/commands/logs.js';
 import { handleLoopCommand } from './cli/commands/loop.js';
 import { handleMcpStart, handleMcpTest, showConfig } from './cli/commands/mcp.js';
 import { migrateCommand } from './cli/commands/migrate.js';
+import { handleOrchestrateCommand } from './cli/commands/orchestrate.js';
 import { handlePipelineCommand } from './cli/commands/pipeline.js';
 import { handleResumeCommand } from './cli/commands/resume.js';
 import { retryTask } from './cli/commands/retry.js';
@@ -63,7 +64,7 @@ if (mainCommand === 'mcp') {
   const hasForeground = runArgs.includes('--foreground') || runArgs.includes('-f');
 
   if (!hasForeground) {
-    handleDetachMode(runArgs);
+    await handleDetachMode(runArgs);
   } else {
     const foregroundArgs = runArgs.filter((arg) => arg !== '--foreground' && arg !== '-f');
 
@@ -251,6 +252,8 @@ if (mainCommand === 'mcp') {
   await handleScheduleCommand(subCommand, args.slice(2));
 } else if (mainCommand === 'pipeline') {
   await handlePipelineCommand(args.slice(1));
+} else if (mainCommand === 'orchestrate') {
+  await handleOrchestrateCommand(subCommand, args.slice(2));
 } else if (mainCommand === 'loop') {
   await handleLoopCommand(subCommand, args.slice(2));
 } else if (mainCommand === 'agents') {
