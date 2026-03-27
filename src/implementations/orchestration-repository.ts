@@ -6,7 +6,7 @@
  */
 
 import SQLite from 'better-sqlite3';
-import { unlinkSync } from 'fs';
+import { unlink } from 'fs/promises';
 import { z } from 'zod';
 import { type AgentProvider, isAgentProvider } from '../core/agents.js';
 import { LoopId, Orchestration, OrchestratorId, OrchestratorStatus } from '../core/domain.js';
@@ -211,21 +211,26 @@ export class SQLiteOrchestrationRepository implements OrchestrationRepository, S
       const cutoff = Date.now() - retentionMs;
       const rows = this.cleanupStmt.all(cutoff) as Array<{ id: string; state_file_path: string }>;
 
-      // Delete state files first (best effort)
-      for (const row of rows) {
-        try {
-          unlinkSync(row.state_file_path);
-        } catch {
-          // Non-fatal: state file may already be deleted
-        }
-      }
+      if (rows.length === 0) return 0;
 
-      // Delete DB rows
-      if (rows.length > 0) {
-        const ids = rows.map((r) => r.id);
-        const placeholders = ids.map(() => '?').join(',');
-        this.db.prepare(`DELETE FROM orchestrations WHERE id IN (${placeholders})`).run(...ids);
-      }
+      // DB is source of truth — delete rows first (crash-safe: orphan files are harmless)
+      // Batch deletes in groups of 500 to avoid SQLite parameter limits
+      const BATCH_SIZE = 500;
+      const deleteInTransaction = this.db.transaction((ids: readonly string[]) => {
+        for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+          const batch = ids.slice(i, i + BATCH_SIZE);
+          const placeholders = batch.map(() => '?').join(',');
+          this.db.prepare(`DELETE FROM orchestrations WHERE id IN (${placeholders})`).run(...batch);
+        }
+      });
+
+      const ids = rows.map((r) => r.id);
+      deleteInTransaction(ids);
+
+      // Best-effort async file cleanup — orphan files are harmless
+      // Only delete per-orchestration state files (not shared files like check-complete.js)
+      const filePaths = rows.map((r) => r.state_file_path);
+      await Promise.allSettled(filePaths.map((filePath) => unlink(filePath)));
 
       return rows.length;
     }, operationErrorHandler('cleanup old orchestrations'));
