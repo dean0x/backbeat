@@ -317,7 +317,14 @@ describe('MCPAdapter - Protocol Compliance', () => {
   beforeEach(() => {
     mockTaskManager = new MockTaskManager();
     mockLogger = new MockLogger();
-    adapter = new MCPAdapter({ taskManager: mockTaskManager, logger: mockLogger, scheduleService: stubScheduleService, loopService: stubLoopService, agentRegistry: undefined, config: testConfig });
+    adapter = new MCPAdapter({
+      taskManager: mockTaskManager,
+      logger: mockLogger,
+      scheduleService: stubScheduleService,
+      loopService: stubLoopService,
+      agentRegistry: undefined,
+      config: testConfig,
+    });
   });
 
   afterEach(() => {
@@ -851,7 +858,14 @@ describe('MCPAdapter - Multi-Agent Support (v0.5.0)', () => {
   beforeEach(() => {
     mockTaskManager = new MockTaskManager();
     mockLogger = new MockLogger();
-    adapter = new MCPAdapter({ taskManager: mockTaskManager, logger: mockLogger, scheduleService: stubScheduleService, loopService: stubLoopService, agentRegistry: undefined, config: testConfig });
+    adapter = new MCPAdapter({
+      taskManager: mockTaskManager,
+      logger: mockLogger,
+      scheduleService: stubScheduleService,
+      loopService: stubLoopService,
+      agentRegistry: undefined,
+      config: testConfig,
+    });
   });
 
   afterEach(() => {

@@ -55,7 +55,12 @@ describe('DependencyHandler - Behavioral Tests', () => {
       const freshLogger = new TestLogger();
 
       // Act - Create handler using factory pattern
-      const result = await DependencyHandler.create({ dependencyRepo, taskRepo, logger: freshLogger, eventBus: freshEventBus });
+      const result = await DependencyHandler.create({
+        dependencyRepo,
+        taskRepo,
+        logger: freshLogger,
+        eventBus: freshEventBus,
+      });
 
       // Assert
       expect(result.ok).toBe(true);
@@ -975,7 +980,12 @@ describe('DependencyHandler - Behavioral Tests', () => {
       checkpointRepo = new SQLiteCheckpointRepository(enrichmentDb);
 
       const handlerResult = await DependencyHandler.create(
-        { dependencyRepo: enrichDepRepo, taskRepo: enrichTaskRepo, logger: enrichmentLogger, eventBus: enrichmentEventBus },
+        {
+          dependencyRepo: enrichDepRepo,
+          taskRepo: enrichTaskRepo,
+          logger: enrichmentLogger,
+          eventBus: enrichmentEventBus,
+        },
         { checkpointLookup: checkpointRepo },
       );
       if (!handlerResult.ok) {
