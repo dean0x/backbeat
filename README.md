@@ -6,13 +6,13 @@ One goal in. Finished work out. No human in the loop.
 beat orchestrate "Migrate the payment module to a standalone microservice with its own database, API, and test suite"
 ```
 
-Autobeat gives you four composable primitives — delegation, eval loops, persistence, and resource management — and lets you wire them together however you want. Loops inside loops. Pipelines inside orchestrators. Agents spawning agents. The framework doesn't prescribe your workflow. It gives you the building blocks and gets out of the way.
+Autobeat gives you four composable primitives -delegation, eval loops, persistence, and resource management -and lets you wire them together however you want. Loops inside loops. Pipelines inside orchestrators. Agents spawning agents. The framework doesn't prescribe your workflow. It gives you the building blocks and gets out of the way.
 
 The orchestrator mode is where it all comes together: a meta-agent that uses Autobeat's own tools recursively to break down goals, spawn workers, handle failures, and iterate until everything passes. Fully autonomous. Nothing else works like this.
 
 ## How It Works
 
-The orchestrator is a meta-agent — a coding agent whose tools are Autobeat's own primitives. Each iteration, it:
+The orchestrator is a meta-agent -a coding agent whose tools are Autobeat's own primitives. Each iteration, it:
 
 1. Reads its persistent state file (plan, worker status, what passed, what failed)
 2. Breaks the goal into subtasks and delegates to worker agents
@@ -25,16 +25,16 @@ The orchestrator runs as a loop. Workers it spawns can themselves be loops. Loop
 
 ## Why This Architecture
 
-Every other orchestration framework builds infrastructure the agent could do itself — worktree management, CI parsing, PR automation, inter-agent messaging. Every line of that code becomes technical debt as models improve.
+Every other orchestration framework builds infrastructure the agent could do itself -worktree management, CI parsing, PR automation, inter-agent messaging. Every line of that code becomes technical debt as models improve.
 
 Autobeat provides four primitives that agents *can't* do for themselves:
 
-1. **Persistence** — crash-proof SQLite state that survives restarts
-2. **Delegation** — spawn background agents with dependency ordering
-3. **Eval loops** — run, score, iterate until optimal
-4. **Resource management** — autoscaling workers, CPU/memory monitoring
+1. **Persistence** -crash-proof SQLite state that survives restarts
+2. **Delegation** -spawn background agents with dependency ordering
+3. **Eval loops** -run, score, iterate until optimal
+4. **Resource management** -autoscaling workers, CPU/memory monitoring
 
-Everything else — worktrees, CI, PRs, code review, testing, deployment — is the agent's job. As models get smarter, the framework automatically gets more powerful without changing a line of code.
+Everything else -worktrees, CI, PRs, code review, testing, deployment -is the agent's job. As models get smarter, the framework automatically gets more powerful without changing a line of code.
 
 ## Quick Start
 
@@ -63,10 +63,10 @@ Restart your MCP client to connect. Autobeat works with Claude Code, Codex, Gemi
 ### First Run
 
 ```bash
-# Initialize — detects installed agents, sets defaults
+# Initialize -detects installed agents, sets defaults
 beat init
 
-# Orchestrate — fire and forget
+# Orchestrate -fire and forget
 beat orchestrate "Add real-time collaborative editing to the document editor"
 
 # Or run a single task in the foreground
@@ -78,10 +78,10 @@ beat run "Fix the failing test in parser.test.ts" -f
 The flagship. One command, autonomous execution.
 
 ```bash
-# Detached (default) — runs in the background
+# Detached (default) -runs in the background
 beat orchestrate "Set up a GraphQL API with subscriptions, pagination, and integration tests"
 
-# Foreground — blocks and shows progress, Ctrl+C cancels
+# Foreground -blocks and shows progress, Ctrl+C cancels
 beat orchestrate "Migrate the database schema" --foreground
 
 # With options
@@ -104,13 +104,13 @@ beat orchestrate cancel <id>     # Stop gracefully
 
 The Karpathy loop for coding agents. Run a task, evaluate the result, iterate until optimal.
 
-**Retry strategy** — run until a condition passes:
+**Retry strategy** -run until a condition passes:
 
 ```bash
 beat loop "Fix the failing tests" --until "npm test"
 ```
 
-**Optimize strategy** — score output, seek the best:
+**Optimize strategy** -score output, seek the best:
 
 ```bash
 beat loop "Optimize the bundle size" \
@@ -119,7 +119,7 @@ beat loop "Optimize the bundle size" \
   --max-iterations 10
 ```
 
-**Pipeline loops** — repeat a multi-step workflow:
+**Pipeline loops** -repeat a multi-step workflow:
 
 ```bash
 beat loop "Implement and verify the feature" \
@@ -169,7 +169,7 @@ beat pipeline "Design the API schema" \
   --step "Write integration tests" \
   --step "Review for security issues"
 
-# Scheduled pipeline — runs every day at 2am
+# Scheduled pipeline -runs every day at 2am
 beat schedule create "Run nightly checks" \
   --cron "0 2 * * *" \
   --pipeline \
