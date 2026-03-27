@@ -64,7 +64,7 @@ if (mainCommand === 'mcp') {
   const hasForeground = runArgs.includes('--foreground') || runArgs.includes('-f');
 
   if (!hasForeground) {
-    handleDetachMode(runArgs);
+    await handleDetachMode(runArgs);
   } else {
     const foregroundArgs = runArgs.filter((arg) => arg !== '--foreground' && arg !== '-f');
 

@@ -4,10 +4,6 @@
  * Pattern: Follows run.ts detach pattern for fire-and-forget orchestration
  */
 
-import { spawn } from 'child_process';
-import { closeSync, mkdirSync, openSync, readFileSync } from 'fs';
-import { homedir } from 'os';
-import path from 'path';
 import { bootstrap } from '../../bootstrap.js';
 import type { AgentProvider } from '../../core/agents.js';
 import { AGENT_PROVIDERS, isAgentProvider } from '../../core/agents.js';
@@ -19,6 +15,7 @@ import type { OrchestrationService } from '../../core/interfaces.js';
 import { readStateFile } from '../../core/orchestrator-state.js';
 import { err, ok, type Result } from '../../core/result.js';
 import { validatePath } from '../../utils/validation.js';
+import { createDetachLogDir, createDetachLogFile, pollLogFileForId, spawnDetachedProcess } from '../detach-helpers.js';
 import { errorMessage, withReadOnlyContext, withServices } from '../services.js';
 import * as ui from '../ui.js';
 
@@ -177,104 +174,37 @@ function parseOrchestrateArgs(subCommand: string | undefined, subArgs: readonly 
 // Detach mode (fire-and-forget)
 // ============================================================================
 
-function handleOrchestrateDetach(args: readonly string[]): void {
-  const logDir = path.join(homedir(), '.autobeat', 'detach-logs');
-  try {
-    mkdirSync(logDir, { recursive: true });
-  } catch (error) {
-    ui.error(`Failed to create log directory: ${logDir}: ${errorMessage(error)}`);
-    process.exit(1);
-  }
+async function handleOrchestrateDetach(args: readonly string[]): Promise<void> {
+  const logDir = createDetachLogDir();
+  const { logFile, logFd } = createDetachLogFile(logDir, 'orchestrate');
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const suffix = Math.random().toString(36).substring(2, 8);
-  const logFile = path.join(logDir, `orchestrate-${timestamp}-${suffix}.log`);
-  let logFd: number;
-  try {
-    logFd = openSync(logFile, 'w');
-  } catch (error) {
-    ui.error(`Failed to create log file: ${logFile}: ${errorMessage(error)}`);
-    process.exit(1);
-  }
-
-  // Re-spawn with --foreground
+  // Re-spawn with --foreground, filtering out any existing --foreground/-f flags
   const childArgs = [
     process.argv[1],
     'orchestrate',
     '--foreground',
     ...args.filter((a) => a !== '--foreground' && a !== '-f'),
   ];
-  try {
-    const child = spawn(process.argv[0], childArgs, {
-      detached: true,
-      stdio: ['ignore', logFd, logFd],
-      cwd: process.cwd(),
-      env: process.env,
-    });
+  const pid = spawnDetachedProcess(childArgs, logFd);
 
-    child.unref();
+  ui.info(`Background process started (PID: ${pid})`);
+  ui.info(`Log file: ${logFile}`);
 
-    if (!child.pid) {
-      closeSync(logFd);
-      ui.error('Failed to spawn background process');
-      process.exit(1);
-    }
+  // Poll log file for orchestration ID (max 15s at 200ms intervals)
+  const result = await pollLogFileForId(logFile, {
+    idPattern: /Orchestration ID:\s+(orchestrator-\S+)/,
+    errorPattern: /^❌/m,
+    foundMessage: (id) => `Orchestration started: ${id}`,
+    timeoutMessage: 'Orchestration ID not yet available (background process still starting)',
+    infoLines: ['Check status:   beat orchestrate status {id}', 'Cancel:         beat orchestrate cancel {id}'],
+    maxAttempts: 75,
+    pollIntervalMs: 200,
+  });
 
-    ui.info(`Background process started (PID: ${child.pid})`);
-    ui.info(`Log file: ${logFile}`);
-    closeSync(logFd);
-
-    // Poll log file for orchestration ID (max 15s at 200ms intervals)
-    const maxAttempts = 75;
-    let attempt = 0;
-    const idPattern = /Orchestration ID:\s+(orchestrator-\S+)/;
-    const errorPattern = /^❌/m;
-
-    const s = ui.createSpinner();
-    s.start('Waiting for orchestration ID...');
-
-    const pollInterval = setInterval(() => {
-      attempt++;
-      try {
-        const content = readFileSync(logFile, 'utf-8');
-
-        const match = content.match(idPattern);
-        if (match) {
-          clearInterval(pollInterval);
-          const id = match[1];
-          s.stop(`Orchestration started: ${id}`);
-          ui.info(`Check status:   beat orchestrate status ${id}`);
-          ui.info(`Cancel:         beat orchestrate cancel ${id}`);
-          process.exit(0);
-        }
-
-        if (errorPattern.test(content)) {
-          clearInterval(pollInterval);
-          s.stop('Background process error');
-          const lines = content.split('\n').filter((l) => l.trim().length > 0);
-          const lastLines = lines.slice(-5);
-          ui.error('Background process encountered an error:');
-          for (const line of lastLines) {
-            process.stderr.write(`  ${line}\n`);
-          }
-          process.exit(1);
-        }
-      } catch {
-        // Log file not yet readable
-      }
-
-      if (attempt >= maxAttempts) {
-        clearInterval(pollInterval);
-        s.stop('Orchestration ID not yet available (background process still starting)');
-        ui.info(`Check log file: ${logFile}`);
-        process.exit(0);
-      }
-    }, 200);
-  } catch (error) {
-    closeSync(logFd);
-    ui.error(`Failed to spawn background process: ${errorMessage(error)}`);
+  if (result.type === 'error') {
     process.exit(1);
   }
+  process.exit(0);
 }
 
 // ============================================================================
@@ -569,7 +499,7 @@ export async function handleOrchestrateCommand(
       } else {
         // Collect args for re-spawn (excluding --foreground since we add it)
         const rawArgs = subCommand ? [subCommand, ...subArgs] : [...subArgs];
-        handleOrchestrateDetach(rawArgs);
+        await handleOrchestrateDetach(rawArgs);
       }
       break;
     }
