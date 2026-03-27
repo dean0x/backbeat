@@ -123,11 +123,11 @@ describe('RecoveryManager', () => {
     dependencyRepo = createMockDependencyRepo();
 
     manager = new RecoveryManager({
-      repository: repo as unknown as TaskRepository,
+      taskRepo: repo as unknown as TaskRepository,
       queue: queue as unknown as TaskQueue,
       eventBus: eventBus as unknown as EventBus,
       logger: logger as unknown as Logger,
-      workerRepository: workerRepo as unknown as WorkerRepository,
+      workerRepo: workerRepo as unknown as WorkerRepository,
       dependencyRepo: dependencyRepo as unknown as DependencyRepository,
     });
   });
@@ -884,13 +884,13 @@ describe('RecoveryManager', () => {
       mockLoopRepo.cleanupOldLoops.mockResolvedValue(ok(3));
 
       const managerWithLoops = new RecoveryManager({
-        repository: repo as unknown as TaskRepository,
+        taskRepo: repo as unknown as TaskRepository,
         queue: queue as unknown as TaskQueue,
         eventBus: eventBus as unknown as EventBus,
         logger: logger as unknown as Logger,
-        workerRepository: workerRepo as unknown as WorkerRepository,
+        workerRepo: workerRepo as unknown as WorkerRepository,
         dependencyRepo: dependencyRepo as unknown as DependencyRepository,
-        loopRepository: mockLoopRepo as unknown as LoopRepository,
+        loopRepo: mockLoopRepo as unknown as LoopRepository,
       });
 
       setupFindByStatus([], []);
@@ -905,13 +905,13 @@ describe('RecoveryManager', () => {
       mockLoopRepo.cleanupOldLoops.mockResolvedValue(ok(5));
 
       const managerWithLoops = new RecoveryManager({
-        repository: repo as unknown as TaskRepository,
+        taskRepo: repo as unknown as TaskRepository,
         queue: queue as unknown as TaskQueue,
         eventBus: eventBus as unknown as EventBus,
         logger: logger as unknown as Logger,
-        workerRepository: workerRepo as unknown as WorkerRepository,
+        workerRepo: workerRepo as unknown as WorkerRepository,
         dependencyRepo: dependencyRepo as unknown as DependencyRepository,
-        loopRepository: mockLoopRepo as unknown as LoopRepository,
+        loopRepo: mockLoopRepo as unknown as LoopRepository,
       });
 
       setupFindByStatus([], []);
@@ -936,13 +936,13 @@ describe('RecoveryManager', () => {
       mockOrchRepo.cleanupOldOrchestrations.mockResolvedValue(ok(4));
 
       const managerWithOrch = new RecoveryManager({
-        repository: repo as unknown as TaskRepository,
+        taskRepo: repo as unknown as TaskRepository,
         queue: queue as unknown as TaskQueue,
         eventBus: eventBus as unknown as EventBus,
         logger: logger as unknown as Logger,
-        workerRepository: workerRepo as unknown as WorkerRepository,
+        workerRepo: workerRepo as unknown as WorkerRepository,
         dependencyRepo: dependencyRepo as unknown as DependencyRepository,
-        orchestrationRepository: mockOrchRepo as unknown as OrchestrationRepository,
+        orchestrationRepo: mockOrchRepo as unknown as OrchestrationRepository,
       });
 
       setupFindByStatus([], []);
@@ -957,13 +957,13 @@ describe('RecoveryManager', () => {
       mockOrchRepo.cleanupOldOrchestrations.mockResolvedValue(ok(7));
 
       const managerWithOrch = new RecoveryManager({
-        repository: repo as unknown as TaskRepository,
+        taskRepo: repo as unknown as TaskRepository,
         queue: queue as unknown as TaskQueue,
         eventBus: eventBus as unknown as EventBus,
         logger: logger as unknown as Logger,
-        workerRepository: workerRepo as unknown as WorkerRepository,
+        workerRepo: workerRepo as unknown as WorkerRepository,
         dependencyRepo: dependencyRepo as unknown as DependencyRepository,
-        orchestrationRepository: mockOrchRepo as unknown as OrchestrationRepository,
+        orchestrationRepo: mockOrchRepo as unknown as OrchestrationRepository,
       });
 
       setupFindByStatus([], []);
@@ -978,13 +978,13 @@ describe('RecoveryManager', () => {
       mockOrchRepo.cleanupOldOrchestrations.mockResolvedValue(ok(0));
 
       const managerWithOrch = new RecoveryManager({
-        repository: repo as unknown as TaskRepository,
+        taskRepo: repo as unknown as TaskRepository,
         queue: queue as unknown as TaskQueue,
         eventBus: eventBus as unknown as EventBus,
         logger: logger as unknown as Logger,
-        workerRepository: workerRepo as unknown as WorkerRepository,
+        workerRepo: workerRepo as unknown as WorkerRepository,
         dependencyRepo: dependencyRepo as unknown as DependencyRepository,
-        orchestrationRepository: mockOrchRepo as unknown as OrchestrationRepository,
+        orchestrationRepo: mockOrchRepo as unknown as OrchestrationRepository,
       });
 
       setupFindByStatus([], []);

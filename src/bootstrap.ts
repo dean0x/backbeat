@@ -457,14 +457,14 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
     }
 
     return new RecoveryManager({
-      repository: repositoryResult.value as TaskRepository,
+      taskRepo: repositoryResult.value as TaskRepository,
       queue: getFromContainer<TaskQueue>(container, 'taskQueue'),
       eventBus: getFromContainer<EventBus>(container, 'eventBus'),
       logger: getFromContainer<Logger>(container, 'logger').child({ module: 'Recovery' }),
-      workerRepository: getFromContainer<WorkerRepository>(container, 'workerRepository'),
+      workerRepo: getFromContainer<WorkerRepository>(container, 'workerRepository'),
       dependencyRepo: getFromContainer<DependencyRepository>(container, 'dependencyRepository'),
-      loopRepository: getFromContainer<LoopRepository>(container, 'loopRepository'),
-      orchestrationRepository: getFromContainer<OrchestrationRepository>(container, 'orchestrationRepository'),
+      loopRepo: getFromContainer<LoopRepository>(container, 'loopRepository'),
+      orchestrationRepo: getFromContainer<OrchestrationRepository>(container, 'orchestrationRepository'),
     });
   });
 
