@@ -1,8 +1,8 @@
 # Autobeat Development Roadmap
 
-## Current Status: v1.0.0 (in progress)
+## Current Status: v1.0.0 RELEASED (2026-03-28)
 
-Orchestrator Mode — the autonomous meta-agent that uses Autobeat's own MCP tools to break down goals, spawn workers, monitor progress, and iterate until done — has landed on main. v1.0.0 is a version bump, README overhaul, and release.
+Orchestrator Mode -- the autonomous meta-agent that uses Autobeat's own MCP tools to break down goals, spawn workers, monitor progress, and iterate until done.
 
 ---
 
@@ -52,7 +52,7 @@ Autoscaling workers, event-driven architecture, SQLite persistence.
 
 ## v1.0.0 - Autonomous Orchestration
 
-**Status**: Feature-complete on main. Release pending version bump + positioning.
+**Status**: **RELEASED** (2026-03-28)
 
 The flagship feature: a meta-agent that uses Autobeat's own infrastructure recursively. Give it a goal, walk away, come back to finished work.
 
@@ -137,7 +137,7 @@ Multi-server support, shared state (Redis backend), fault tolerance, task affini
 | v0.6.0 | ✅ Released | Architectural Simplification |
 | v0.7.0 | ✅ Released | Task/Pipeline Loops |
 | v0.8.0–v0.8.2 | ✅ Released | Loop Enhancements, Git Integration, Rename |
-| **v1.0.0** | **In Progress** | **Autonomous Orchestration** |
+| **v1.0.0** | ✅ Released | **Autonomous Orchestration** |
 
 ---
 

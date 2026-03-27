@@ -2,7 +2,43 @@
 
 This document lists all features that are **currently implemented and working** in Autobeat.
 
-Last Updated: March 2026 (v0.8.1)
+Last Updated: March 2026 (v1.0.0)
+
+## ✅ Autonomous Orchestration (v1.0.0)
+
+### Orchestrator Mode
+- **Goal-Driven Execution**: Give the orchestrator a goal and it autonomously breaks it into subtasks, delegates to worker agents, monitors progress, and iterates until done
+- **Meta-Agent Architecture**: The orchestrator is a loop running a lead agent whose prompt gives it access to all of Autobeat's CLI commands (`beat run`, `beat status`, `beat loop`, etc.)
+- **Persistent State File**: JSON state file in `~/.autobeat/orchestrator-state/` with plan, step statuses, iteration count, and agent context. Atomic writes (temp + rename) prevent corruption
+- **Crash Recovery**: Orchestrations persisted in SQLite. Recovery manager detects and resumes interrupted orchestrations on startup
+- **Multi-Agent**: Per-orchestration agent selection (Claude, Codex, Gemini)
+
+### MCP Tools
+- **CreateOrchestrator**: Create and start an orchestration with goal, guardrails, and agent selection
+- **OrchestratorStatus**: Get orchestration details including plan steps and state
+- **ListOrchestrators**: List orchestrations with status filter and pagination
+- **CancelOrchestrator**: Cancel an active orchestration with optional reason
+
+### CLI Commands
+- `beat orchestrate "<goal>"`: Create and run an orchestration (detached by default)
+- `beat orchestrate "<goal>" --foreground`: Block and wait for completion (Ctrl+C to cancel)
+- `beat orchestrate status <id>`: Check orchestration status and plan progress
+- `beat orchestrate list [--status <status>]`: List orchestrations with optional status filter
+- `beat orchestrate cancel <id> [reason]`: Cancel an active orchestration
+
+### Guardrails
+- **Max Depth** (1-10, default 3): Maximum delegation depth
+- **Max Workers** (1-20, default 5): Maximum concurrent worker agents
+- **Max Iterations** (1-200, default 50): Maximum orchestrator loop iterations
+- **Goal Length**: 1-8,000 characters with Zod validation
+
+### Event-Driven Integration
+- **OrchestrationCreated**: Emitted when a new orchestration is created
+- **OrchestrationCompleted**: Emitted when the orchestration goal is achieved
+- **OrchestrationCancelled**: Emitted when an orchestration is cancelled
+
+### Database Schema
+- **Migration 14**: `orchestrations` table with goal, status, guardrail columns, loop FK, and indexes on status and loop_id
 
 ## ✅ Core Task Delegation
 
@@ -154,8 +190,8 @@ Last Updated: March 2026 (v0.8.1)
 
 ### Design Patterns (v0.6.0 Hybrid Event Model)
 - **Hybrid Event-Driven Architecture**: Commands (state changes) flow through EventBus; queries use direct repository access
-- **Event Handlers**: Specialized handlers (Persistence, Queue, Worker, Dependency, Schedule, Checkpoint, Loop)
-- **Singleton EventBus**: Shared event bus across all system components (31 events)
+- **Event Handlers**: Specialized handlers (Persistence, Queue, Worker, Dependency, Schedule, Checkpoint, Loop, Orchestration)
+- **Singleton EventBus**: Shared event bus across all system components (34 events)
 - **Dependency Injection**: Container-based DI with Result types
 - **Result Pattern**: No exceptions in business logic
 - **Immutable Domain**: Readonly data structures
@@ -338,14 +374,32 @@ Last Updated: March 2026 (v0.8.1)
 ### Database Schema
 - **Migration 10**: `loops` table for loop definitions and state, `loop_iterations` table for per-iteration execution records
 
-## ❌ NOT Implemented (Despite Some Documentation Claims)
+## ❌ NOT Implemented
 - **Distributed Processing**: Single-server only
 - **Web UI**: No dashboard interface
-- **Task Templates**: No preset task configurations
+- **Workflow Templates**: No preset YAML/JSON workflow specifications (post-v1 roadmap item)
 - **Multi-User Support**: Single-user focused
 - **REST API**: MCP protocol only
 
 ---
+
+---
+
+## 🆕 What's New in v1.0.0
+
+### Orchestrator Mode
+- **Autonomous Goal Execution**: Meta-agent that uses Autobeat's own infrastructure to break down goals, delegate to workers, monitor progress, and iterate until done
+- **4 CLI Commands**: `beat orchestrate`, `beat orchestrate status`, `beat orchestrate list`, `beat orchestrate cancel`
+- **4 MCP Tools**: `CreateOrchestrator`, `OrchestratorStatus`, `ListOrchestrators`, `CancelOrchestrator`
+- **Persistent State File**: Atomic JSON state file with plan, steps, and agent context
+- **Guardrails**: `maxDepth` (3), `maxWorkers` (5), `maxIterations` (50) with configurable limits
+- **Crash Recovery**: SQLite persistence with startup recovery for interrupted orchestrations
+
+### Events
+- 3 new events (34 total): `OrchestrationCreated`, `OrchestrationCompleted`, `OrchestrationCancelled`
+
+### Database
+- **Migration 14**: `orchestrations` table with goal, status, guardrails, loop FK, and indexes
 
 ---
 

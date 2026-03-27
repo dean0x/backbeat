@@ -10,6 +10,40 @@ Nothing yet.
 
 ---
 
+## [1.0.0] - 2026-03-28
+
+### 🚀 Features
+- **Orchestrator Mode**: Autonomous goal execution via a meta-agent that uses Autobeat's own infrastructure (task delegation, dependency ordering, eval loops, crash recovery) to break down goals and drive them to completion
+- **4 CLI Commands**: `beat orchestrate`, `beat orchestrate status`, `beat orchestrate list`, `beat orchestrate cancel` with detach/foreground modes
+- **4 MCP Tools**: `CreateOrchestrator`, `OrchestratorStatus`, `ListOrchestrators`, `CancelOrchestrator`
+- **Persistent State File**: JSON state file with atomic I/O (temp + rename) for crash resilience, stored in `~/.autobeat/orchestrator-state/`
+- **Guardrails**: Configurable `maxDepth` (1-10), `maxWorkers` (1-20), `maxIterations` (1-200) safety limits
+- **Multi-Agent Orchestration**: Per-orchestration agent selection (Claude, Codex, Gemini)
+
+### 🔄 Refactoring
+- **RecoveryManagerDeps**: Standardized naming pattern for all handler dependency types
+- **waitForLoopCompletion**: Extracted from CLI into reusable service function
+- **handleOrchestrateForeground**: Extracted for testability
+
+### 🔄 Events
+- 3 new events (34 total): `OrchestrationCreated`, `OrchestrationCompleted`, `OrchestrationCancelled`
+
+### 🗄️ Database
+- **Migration 14**: `orchestrations` table with goal, status, guardrail columns, loop FK, and indexes on status and loop_id
+
+### 📚 Documentation
+- README overhauled for autonomous orchestration positioning
+- ROADMAP updated for v1.0.0 release
+
+### 🧪 Test Coverage
+- 88 new orchestration tests across 8 test files (state, CLI, repository, service, handler, prompt, integration)
+- 1,500+ total tests passing
+
+### ℹ️ Semver Note
+Despite the major version bump, all changes from v0.8.2 are **additive**. No breaking changes. v1.0.0 marks the completion of autonomous orchestration -- the original vision for Autobeat.
+
+---
+
 ## [0.8.2] - 2026-03-26
 
 ### 💥 Breaking Changes
