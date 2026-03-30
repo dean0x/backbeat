@@ -2998,6 +2998,92 @@ describe('CLI - Loop Commands', () => {
       if (!result.ok) return;
       expect(result.value.gitBranch).toBeUndefined();
     });
+
+    it('should parse --eval-mode agent with --strategy retry', () => {
+      const result = parseLoopCreateArgs(['fix', 'code', '--eval-mode', 'agent', '--strategy', 'retry']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.evalMode).toBe('agent');
+      expect(result.value.strategy).toBe(LoopStrategy.RETRY);
+    });
+
+    it('should parse --eval-mode agent with --strategy optimize', () => {
+      const result = parseLoopCreateArgs([
+        'optimize',
+        'perf',
+        '--eval-mode',
+        'agent',
+        '--strategy',
+        'optimize',
+      ]);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.evalMode).toBe('agent');
+      expect(result.value.strategy).toBe(LoopStrategy.OPTIMIZE);
+    });
+
+    it('should parse --eval-prompt with --eval-mode agent', () => {
+      const result = parseLoopCreateArgs([
+        'review',
+        '--eval-mode',
+        'agent',
+        '--strategy',
+        'retry',
+        '--eval-prompt',
+        'Check for security issues',
+      ]);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.evalMode).toBe('agent');
+      expect(result.value.evalPrompt).toBe('Check for security issues');
+    });
+
+    it('should reject --eval-prompt without --eval-mode agent', () => {
+      const result = parseLoopCreateArgs(['fix', '--until', 'true', '--eval-prompt', 'Review changes']);
+      expect(result.ok).toBe(false);
+    });
+
+    it('should reject --until with --eval-mode agent', () => {
+      const result = parseLoopCreateArgs(['fix', '--eval-mode', 'agent', '--strategy', 'retry', '--until', 'npm test']);
+      expect(result.ok).toBe(false);
+    });
+
+    it('should reject --eval with --eval-mode agent', () => {
+      const result = parseLoopCreateArgs([
+        'fix',
+        '--eval-mode',
+        'agent',
+        '--strategy',
+        'optimize',
+        '--eval',
+        'echo 42',
+      ]);
+      expect(result.ok).toBe(false);
+    });
+
+    it('should reject --eval-mode agent without --strategy', () => {
+      const result = parseLoopCreateArgs(['fix', '--eval-mode', 'agent']);
+      expect(result.ok).toBe(false);
+    });
+
+    it('should not require exitCondition for agent mode', () => {
+      const result = parseLoopCreateArgs(['fix', '--eval-mode', 'agent', '--strategy', 'retry']);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.exitCondition).toBe('');
+    });
+
+    it('should reject --maximize with --eval-mode agent', () => {
+      const result = parseLoopCreateArgs([
+        'fix',
+        '--eval-mode',
+        'agent',
+        '--strategy',
+        'optimize',
+        '--maximize',
+      ]);
+      expect(result.ok).toBe(false);
+    });
   });
 
   describe('loop create — service integration', () => {
