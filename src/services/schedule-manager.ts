@@ -22,7 +22,6 @@ import {
   ScheduleStatus,
   ScheduleType,
   TaskId,
-  updateSchedule,
 } from '../core/domain.js';
 import { AutobeatError, ErrorCode } from '../core/errors.js';
 import { EventBus } from '../core/events/event-bus.js';
@@ -514,28 +513,27 @@ export class ScheduleManagerService implements ScheduleService {
       loopConfig: request.loopConfig,
     });
 
-    // Inject computed nextRunAt via immutable update helper
-    const scheduleWithNext = updateSchedule(schedule, { nextRunAt });
-
     const promptSummary = request.loopConfig.prompt
       ? truncatePrompt(request.loopConfig.prompt, 50)
       : `Loop (${request.loopConfig.strategy})`;
 
     this.logger.info('Creating scheduled loop', {
-      scheduleId: scheduleWithNext.id,
-      scheduleType: scheduleWithNext.scheduleType,
+      scheduleId: schedule.id,
+      scheduleType: schedule.scheduleType,
+      nextRunAt: new Date(nextRunAt).toISOString(),
       prompt: promptSummary,
     });
 
-    const emitResult = await this.eventBus.emit('ScheduleCreated', { schedule: scheduleWithNext });
+    // Emit event — ScheduleHandler persists with calculated nextRunAt
+    const emitResult = await this.eventBus.emit('ScheduleCreated', { schedule });
     if (!emitResult.ok) {
       this.logger.error('Failed to emit ScheduleCreated event', emitResult.error, {
-        scheduleId: scheduleWithNext.id,
+        scheduleId: schedule.id,
       });
       return err(emitResult.error);
     }
 
-    return ok(scheduleWithNext);
+    return ok(schedule);
   }
 
   /**

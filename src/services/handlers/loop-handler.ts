@@ -245,9 +245,7 @@ export class LoopHandler extends BaseEventHandler {
           taskId,
           iterationStatus: iteration.status,
         });
-        this.cleanupPipelineTaskTracking(iteration);
-        this.taskToLoop.delete(taskId);
-        this.cleanupPipelineTasks(loopId, iteration.iterationNumber);
+        this.cleanupIterationTracking(taskId, loopId, iteration);
         return ok(undefined);
       }
 
