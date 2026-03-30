@@ -71,9 +71,6 @@ export class LoopManagerService implements LoopService {
           }),
         );
       }
-    } else {
-      // Agent mode: exitCondition optional (can be empty), evalPrompt allowed
-      // (no constraint on exitCondition or evalPrompt presence)
     }
 
     // Validate workingDirectory

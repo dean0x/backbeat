@@ -22,6 +22,12 @@ import type {
   OutputRepository,
 } from '../core/interfaces.js';
 
+type TaskCompletionStatus =
+  | { type: 'completed' }
+  | { type: 'failed'; error?: string }
+  | { type: 'timeout' }
+  | { type: 'cancelled' };
+
 export class AgentExitConditionEvaluator implements ExitConditionEvaluator {
   constructor(
     private readonly eventBus: EventBus,
@@ -38,7 +44,6 @@ export class AgentExitConditionEvaluator implements ExitConditionEvaluator {
   async evaluate(loop: Loop, taskId: TaskId): Promise<EvalResult> {
     const prompt = await this.buildEvalPrompt(loop, taskId);
 
-    // Create eval task via pure domain factory
     const evalTask = createTask({
       prompt: `[EVAL] ${prompt}`,
       priority: loop.taskTemplate.priority,
@@ -58,7 +63,6 @@ export class AgentExitConditionEvaluator implements ExitConditionEvaluator {
     // Set up completion listener BEFORE emitting to prevent race conditions
     const completionPromise = this.waitForTaskCompletion(evalTaskId, loop.evalTimeout);
 
-    // Emit TaskDelegated — PersistenceHandler persists, WorkerHandler spawns
     const emitResult = await this.eventBus.emit('TaskDelegated', { task: evalTask });
     if (!emitResult.ok) {
       this.logger.error('Failed to emit TaskDelegated for eval task', emitResult.error, {
@@ -71,20 +75,21 @@ export class AgentExitConditionEvaluator implements ExitConditionEvaluator {
       };
     }
 
-    // Wait for eval task completion
     const completionStatus = await completionPromise;
 
-    if (
-      completionStatus.type === 'failed' ||
-      completionStatus.type === 'timeout' ||
-      completionStatus.type === 'cancelled'
-    ) {
-      const errorMsg =
-        completionStatus.type === 'timeout'
-          ? `Eval agent timed out after ${loop.evalTimeout}ms`
-          : completionStatus.type === 'cancelled'
-            ? 'Eval agent was cancelled'
-            : `Eval agent failed: ${completionStatus.error ?? 'unknown error'}`;
+    if (completionStatus.type !== 'completed') {
+      let errorMsg: string;
+      switch (completionStatus.type) {
+        case 'timeout':
+          errorMsg = `Eval agent timed out after ${loop.evalTimeout}ms`;
+          break;
+        case 'cancelled':
+          errorMsg = 'Eval agent was cancelled';
+          break;
+        case 'failed':
+          errorMsg = `Eval agent failed: ${completionStatus.error ?? 'unknown error'}`;
+          break;
+      }
 
       this.logger.warn('Eval task did not complete successfully', {
         loopId: loop.id,
@@ -95,7 +100,6 @@ export class AgentExitConditionEvaluator implements ExitConditionEvaluator {
       return { passed: false, error: errorMsg };
     }
 
-    // Read eval task output
     const outputResult = await this.outputRepository.get(evalTaskId);
     if (!outputResult.ok || !outputResult.value) {
       this.logger.warn('Failed to read eval task output', {
@@ -128,42 +132,29 @@ export class AgentExitConditionEvaluator implements ExitConditionEvaluator {
       ? `Use \`git diff ${preIterationCommitSha}..HEAD\` to see what changed in this iteration.`
       : 'Use `git diff HEAD~1..HEAD` to see what changed in this iteration.';
 
-    if (loop.strategy === LoopStrategy.RETRY) {
-      const userPrompt =
-        loop.evalPrompt ??
-        `Review the code changes. ${gitDiffInstruction} Use \`beat logs ${taskId}\` to read the worker's output. Output PASS if the changes are acceptable, FAIL if not. The LAST LINE of your response must be exactly PASS or FAIL.`;
+    const isRetry = loop.strategy === LoopStrategy.RETRY;
+    const header = isRetry
+      ? 'You are evaluating the result of an automated code improvement iteration.'
+      : 'You are evaluating and scoring the result of an automated code improvement iteration.';
+    const defaultInstructions = isRetry
+      ? `Review the code changes. ${gitDiffInstruction} Use \`beat logs ${taskId}\` to read the worker's output. Output PASS if the changes are acceptable, FAIL if not. The LAST LINE of your response must be exactly PASS or FAIL.`
+      : `Score the code change quality 0-100. ${gitDiffInstruction} Use \`beat logs ${taskId}\` to read the worker's output. Provide your analysis, then on the LAST LINE output a single numeric score between 0 and 100.`;
+    const instructions = loop.evalPrompt ?? defaultInstructions;
 
-      return `You are evaluating the result of an automated code improvement iteration.
-
-Working directory: ${loop.workingDirectory}
-Iteration: ${loop.currentIteration}
-Task ID: ${taskId}
-
-${userPrompt}`;
-    } else {
-      // OPTIMIZE strategy
-      const userPrompt =
-        loop.evalPrompt ??
-        `Score the code change quality 0-100. ${gitDiffInstruction} Use \`beat logs ${taskId}\` to read the worker's output. Provide your analysis, then on the LAST LINE output a single numeric score between 0 and 100.`;
-
-      return `You are evaluating and scoring the result of an automated code improvement iteration.
+    return `${header}
 
 Working directory: ${loop.workingDirectory}
 Iteration: ${loop.currentIteration}
 Task ID: ${taskId}
 
-${userPrompt}`;
-    }
+${instructions}`;
   }
 
   /**
    * Wait for eval task to reach a terminal state.
    * Uses .unref() on timer to not block process exit.
    */
-  private waitForTaskCompletion(
-    evalTaskId: TaskId,
-    evalTimeout: number,
-  ): Promise<{ type: 'completed' } | { type: 'failed'; error?: string } | { type: 'timeout' } | { type: 'cancelled' }> {
+  private waitForTaskCompletion(evalTaskId: TaskId, evalTimeout: number): Promise<TaskCompletionStatus> {
     return new Promise((resolve) => {
       const subscriptionIds: string[] = [];
       let resolved = false;
@@ -174,13 +165,7 @@ ${userPrompt}`;
         }
       };
 
-      const resolveOnce = (
-        result:
-          | { type: 'completed' }
-          | { type: 'failed'; error?: string }
-          | { type: 'timeout' }
-          | { type: 'cancelled' },
-      ): void => {
+      const resolveOnce = (result: TaskCompletionStatus): void => {
         if (resolved) return;
         resolved = true;
         clearTimeout(timer);
@@ -188,7 +173,6 @@ ${userPrompt}`;
         resolve(result);
       };
 
-      // Subscribe to all terminal events for this specific task
       const completedSub = this.eventBus.subscribe<TaskCompletedEvent>('TaskCompleted', async (event) => {
         if (event.taskId === evalTaskId) {
           resolveOnce({ type: 'completed' });
@@ -213,7 +197,6 @@ ${userPrompt}`;
         }
       });
 
-      // Collect subscription IDs for cleanup
       if (completedSub.ok) subscriptionIds.push(completedSub.value);
       if (failedSub.ok) subscriptionIds.push(failedSub.value);
       if (cancelledSub.ok) subscriptionIds.push(cancelledSub.value);

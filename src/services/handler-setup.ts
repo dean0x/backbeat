@@ -118,7 +118,7 @@ function getDependency<T>(container: Container, key: string): Result<T> {
  * ```
  */
 export function extractHandlerDependencies(container: Container): Result<HandlerDependencies> {
-  // Extract all 13 dependencies - fail fast on any missing
+  // Extract all dependencies - fail fast on any missing
   const configResult = getDependency<Configuration>(container, 'config');
   if (!configResult.ok) return configResult;
 
