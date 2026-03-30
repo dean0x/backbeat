@@ -244,6 +244,7 @@ const CreateLoopSchema = z.object({
   evalMode: z
     .nativeEnum(EvalMode)
     .optional()
+    .default(EvalMode.SHELL)
     .describe('Evaluation mode: shell command or agent review'),
   evalPrompt: z
     .string()
@@ -318,6 +319,7 @@ const ScheduleLoopSchema = z.object({
   evalMode: z
     .nativeEnum(EvalMode)
     .optional()
+    .default(EvalMode.SHELL)
     .describe('Evaluation mode: shell command or agent review'),
   evalPrompt: z
     .string()
