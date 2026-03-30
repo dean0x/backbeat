@@ -674,6 +674,7 @@ export interface EvalResult {
   readonly score?: number;
   readonly exitCode?: number;
   readonly error?: string;
+  readonly feedback?: string; // Narrative feedback from agent evaluator (agent mode only)
 }
 
 /**

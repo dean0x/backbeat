@@ -15,6 +15,8 @@ import * as ui from '../ui.js';
 interface ParsedLoopBaseArgs {
   readonly strategy: LoopStrategy;
   readonly exitCondition: string;
+  readonly evalMode: 'shell' | 'agent';
+  readonly evalPrompt?: string;
   readonly evalDirection?: 'minimize' | 'maximize';
   readonly evalTimeout?: number;
   readonly workingDirectory?: string;
@@ -39,6 +41,9 @@ export function parseLoopCreateArgs(loopArgs: string[]): Result<ParsedLoopArgs, 
   const promptWords: string[] = [];
   let untilCmd: string | undefined;
   let evalCmd: string | undefined;
+  let evalMode: 'shell' | 'agent' | undefined;
+  let evalPrompt: string | undefined;
+  let strategyFlag: string | undefined;
   let minimizeFlag = false;
   let maximizeFlag = false;
   let maxIterations: number | undefined;
@@ -62,6 +67,21 @@ export function parseLoopCreateArgs(loopArgs: string[]): Result<ParsedLoopArgs, 
       i++;
     } else if (arg === '--eval' && next) {
       evalCmd = next;
+      i++;
+    } else if (arg === '--eval-mode' && next) {
+      if (next !== 'shell' && next !== 'agent') {
+        return err('--eval-mode must be "shell" or "agent"');
+      }
+      evalMode = next;
+      i++;
+    } else if (arg === '--eval-prompt' && next) {
+      evalPrompt = next;
+      i++;
+    } else if (arg === '--strategy' && next) {
+      if (next !== 'retry' && next !== 'optimize') {
+        return err('--strategy must be "retry" or "optimize"');
+      }
+      strategyFlag = next;
       i++;
     } else if (arg === '--minimize') {
       minimizeFlag = true;
@@ -130,12 +150,71 @@ export function parseLoopCreateArgs(loopArgs: string[]): Result<ParsedLoopArgs, 
     }
   }
 
-  // Strategy inference from flags
+  // Validate --eval-prompt requires --eval-mode agent
+  if (evalPrompt && evalMode !== 'agent') {
+    return err('--eval-prompt requires --eval-mode agent');
+  }
+
+  // Agent eval mode: --strategy is required; --until/--eval are forbidden
+  if (evalMode === 'agent') {
+    if (untilCmd || evalCmd) {
+      return err('--until and --eval are not valid with --eval-mode agent. Use --strategy retry|optimize instead.');
+    }
+    if (!strategyFlag) {
+      return err('--strategy retry|optimize is required with --eval-mode agent');
+    }
+    if (minimizeFlag || maximizeFlag) {
+      return err('--minimize/--maximize are not valid with --eval-mode agent');
+    }
+
+    // Pipeline mode validation
+    if (isPipeline) {
+      if (pipelineSteps.length < 2) {
+        return err('Pipeline requires at least 2 --step flags');
+      }
+    } else if (pipelineSteps.length > 0) {
+      return err(
+        '--step requires --pipeline. Did you mean: beat loop --pipeline --step "..." --step "..." --eval-mode agent --strategy retry',
+      );
+    }
+
+    // Non-pipeline mode: prompt is required
+    const prompt = promptWords.join(' ');
+    if (!isPipeline && !prompt) {
+      return err('Usage: beat loop <prompt> --eval-mode agent --strategy retry|optimize [options]');
+    }
+
+    const shared = {
+      strategy: strategyFlag === 'optimize' ? LoopStrategy.OPTIMIZE : LoopStrategy.RETRY,
+      exitCondition: '',
+      evalMode: 'agent' as const,
+      evalPrompt,
+      evalTimeout,
+      workingDirectory,
+      maxIterations,
+      maxConsecutiveFailures: maxFailures,
+      cooldownMs: cooldown,
+      freshContext: !continueContext,
+      priority,
+      agent,
+      gitBranch,
+    };
+    if (isPipeline) {
+      return ok({ ...shared, isPipeline: true as const, pipelineSteps });
+    }
+    return ok({ ...shared, isPipeline: false as const, prompt });
+  }
+
+  // Shell eval mode (default): strategy inferred from --until / --eval flags
+  if (strategyFlag) {
+    return err('--strategy is only valid with --eval-mode agent');
+  }
+
   if (untilCmd && evalCmd) {
     return err('Cannot specify both --until and --eval. Use --until for retry strategy, --eval for optimize strategy.');
   }
   if (!untilCmd && !evalCmd) {
-    return err('Provide --until <cmd> for retry strategy or --eval <cmd> --minimize|--maximize for optimize strategy.');
+    return err('Provide --until <cmd> for retry strategy, --eval <cmd> --minimize|--maximize for optimize strategy, or --eval-mode agent --strategy retry|optimize for agent evaluation.');
   }
 
   const isOptimize = !!evalCmd;
@@ -177,6 +256,7 @@ export function parseLoopCreateArgs(loopArgs: string[]): Result<ParsedLoopArgs, 
   const shared = {
     strategy: isOptimize ? LoopStrategy.OPTIMIZE : LoopStrategy.RETRY,
     exitCondition,
+    evalMode: 'shell' as const,
     evalDirection: direction,
     evalTimeout,
     workingDirectory,
@@ -252,7 +332,9 @@ async function handleLoopCreate(loopArgs: string[]): Promise<void> {
   const result = await loopService.createLoop({
     prompt: args.isPipeline ? undefined : args.prompt,
     strategy: args.strategy,
-    exitCondition: args.exitCondition,
+    exitCondition: args.exitCondition || undefined,
+    evalMode: args.evalMode,
+    evalPrompt: args.evalPrompt,
     evalDirection: toOptimizeDirection(args.evalDirection),
     evalTimeout: args.evalTimeout,
     workingDirectory: args.workingDirectory,
@@ -380,7 +462,12 @@ async function handleLoopStatus(loopArgs: string[]): Promise<void> {
     lines.push(`Failures:      ${loop.consecutiveFailures}/${loop.maxConsecutiveFailures}`);
     if (loop.bestScore !== undefined) lines.push(`Best Score:    ${loop.bestScore}`);
     if (loop.evalDirection) lines.push(`Direction:     ${loop.evalDirection}`);
-    lines.push(`Exit Cond:     ${loop.exitCondition}`);
+    lines.push(`Eval Mode:     ${loop.evalMode}`);
+    if (loop.evalMode === 'shell') {
+      lines.push(`Exit Cond:     ${loop.exitCondition}`);
+    } else if (loop.evalPrompt) {
+      lines.push(`Eval Prompt:   ${truncatePrompt(loop.evalPrompt, 80)}`);
+    }
     lines.push(`Cooldown:      ${loop.cooldownMs}ms`);
     lines.push(`Fresh Context: ${loop.freshContext}`);
     lines.push(`Working Dir:   ${loop.workingDirectory}`);
@@ -416,6 +503,7 @@ async function handleLoopStatus(loopArgs: string[]): Promise<void> {
           const score = iter.score !== undefined ? ` | score: ${iter.score}` : '';
           const task = iter.taskId ? ` | task: ${iter.taskId}` : ' | task: cleaned up';
           const error = iter.errorMessage ? ` | error: ${iter.errorMessage}` : '';
+          const feedback = iter.evalFeedback ? ` | feedback: ${truncatePrompt(iter.evalFeedback, 60)}` : '';
           let git = '';
           if (iter.gitCommitSha) {
             git = ` | commit: ${iter.gitCommitSha.slice(0, 8)}`;
@@ -423,7 +511,7 @@ async function handleLoopStatus(loopArgs: string[]): Promise<void> {
             git = ` | branch: ${iter.gitBranch}`;
           }
           process.stderr.write(
-            `  #${iter.iterationNumber} ${ui.colorStatus(iter.status)}${score}${task}${error}${git}\n`,
+            `  #${iter.iterationNumber} ${ui.colorStatus(iter.status)}${score}${task}${error}${feedback}${git}\n`,
           );
         }
       } else {

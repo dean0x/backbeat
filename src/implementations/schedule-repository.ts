@@ -117,9 +117,11 @@ const PipelineStepsSchema = z
 const LoopConfigSchema = z.object({
   prompt: z.string().optional(),
   strategy: z.nativeEnum(LoopStrategy),
-  exitCondition: z.string().min(1),
+  exitCondition: z.string().min(1).optional(),
   evalDirection: z.nativeEnum(OptimizeDirection).optional(),
   evalTimeout: z.number().optional(),
+  evalMode: z.enum(['shell', 'agent']).optional(),
+  evalPrompt: z.string().optional(),
   workingDirectory: z.string().optional(),
   maxIterations: z.number().optional(),
   maxConsecutiveFailures: z.number().optional(),

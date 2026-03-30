@@ -273,8 +273,34 @@ export class LoopHandler extends BaseEventHandler {
         }
       } else {
         // Task COMPLETED — run exit condition evaluation
+        // Note: agent eval mode can take a long time; re-fetch state afterwards to guard stale data
         const evalResult = await this.exitConditionEvaluator.evaluate(loop, taskId);
-        await this.handleIterationResult(loop, iteration, evalResult);
+
+        // Stale state guard: re-fetch loop and iteration after potentially slow eval (Step 8b)
+        // If loop was cancelled/paused while eval ran, skip result processing
+        const freshLoopResult = await this.loopRepo.findById(loopId);
+        if (!freshLoopResult.ok || !freshLoopResult.value || freshLoopResult.value.status !== LoopStatus.RUNNING) {
+          const staleStatus = freshLoopResult.ok ? (freshLoopResult.value?.status ?? 'null') : 'error';
+          this.logger.info('Loop no longer running after eval, skipping result processing', {
+            loopId,
+            status: staleStatus,
+          });
+          return ok(undefined);
+        }
+        const freshLoop = freshLoopResult.value;
+
+        const freshIterationResult = await this.loopRepo.findIterationByTaskId(taskId);
+        if (!freshIterationResult.ok || !freshIterationResult.value || freshIterationResult.value.status !== 'running') {
+          const staleIterStatus = freshIterationResult.ok ? (freshIterationResult.value?.status ?? 'null') : 'error';
+          this.logger.info('Iteration no longer running after eval, skipping result processing', {
+            loopId,
+            iterationStatus: staleIterStatus,
+          });
+          return ok(undefined);
+        }
+        const freshIteration = freshIterationResult.value;
+
+        await this.handleIterationResult(freshLoop, freshIteration, evalResult);
       }
 
       // Clean up all pipeline task tracking for this iteration
@@ -784,6 +810,7 @@ export class LoopHandler extends BaseEventHandler {
           ...iteration,
           status: 'pass',
           exitCode: evalResult.exitCode,
+          evalFeedback: evalResult.feedback,
           gitCommitSha,
           gitDiffSummary,
           completedAt: Date.now(),
@@ -816,7 +843,7 @@ export class LoopHandler extends BaseEventHandler {
       'fail',
       newConsecutiveFailures,
       { consecutiveFailures: newConsecutiveFailures },
-      { exitCode: evalResult.exitCode, errorMessage: evalResult.error },
+      { exitCode: evalResult.exitCode, errorMessage: evalResult.error, evalFeedback: evalResult.feedback },
     );
   }
 
@@ -841,7 +868,7 @@ export class LoopHandler extends BaseEventHandler {
         'crash',
         newConsecutiveFailures,
         { consecutiveFailures: newConsecutiveFailures },
-        { exitCode: evalResult.exitCode, errorMessage: evalResult.error },
+        { exitCode: evalResult.exitCode, errorMessage: evalResult.error, evalFeedback: evalResult.feedback },
       );
       return;
     }
@@ -856,7 +883,7 @@ export class LoopHandler extends BaseEventHandler {
         'keep',
         0,
         { bestScore: score, bestIterationId: iterationNumber, consecutiveFailures: 0 },
-        { score, exitCode: evalResult.exitCode },
+        { score, exitCode: evalResult.exitCode, evalFeedback: evalResult.feedback },
       );
       this.logger.info('Baseline score established', { loopId, score, iterationNumber });
       return;
@@ -880,7 +907,7 @@ export class LoopHandler extends BaseEventHandler {
         'keep',
         0,
         { bestScore: score, bestIterationId: iterationNumber, consecutiveFailures: 0 },
-        { score, exitCode: evalResult.exitCode },
+        { score, exitCode: evalResult.exitCode, evalFeedback: evalResult.feedback },
       );
     } else {
       // Equal or worse → 'discard'
@@ -892,7 +919,7 @@ export class LoopHandler extends BaseEventHandler {
         'discard',
         newConsecutiveFailures,
         { consecutiveFailures: newConsecutiveFailures },
-        { score, exitCode: evalResult.exitCode },
+        { score, exitCode: evalResult.exitCode, evalFeedback: evalResult.feedback },
       );
     }
   }
@@ -1077,7 +1104,7 @@ export class LoopHandler extends BaseEventHandler {
     iterationStatus: LoopIteration['status'],
     consecutiveFailures: number,
     loopUpdate: Partial<Loop>,
-    evalResult?: { score?: number; exitCode?: number; errorMessage?: string },
+    evalResult?: { score?: number; exitCode?: number; errorMessage?: string; evalFeedback?: string },
   ): Promise<void> {
     const { gitCommitSha, gitDiffSummary } = await this.handleIterationGitOutcome(loop, iteration, iterationStatus);
 
@@ -1093,6 +1120,7 @@ export class LoopHandler extends BaseEventHandler {
         score: evalResult?.score ?? iteration.score,
         exitCode: evalResult?.exitCode ?? iteration.exitCode,
         errorMessage: evalResult?.errorMessage ?? iteration.errorMessage,
+        evalFeedback: evalResult?.evalFeedback ?? iteration.evalFeedback,
         gitCommitSha,
         gitDiffSummary: gitDiffSummary ?? iteration.gitDiffSummary,
         completedAt: Date.now(),

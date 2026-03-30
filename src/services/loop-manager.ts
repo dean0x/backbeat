@@ -53,13 +53,27 @@ export class LoopManagerService implements LoopService {
       }
     }
 
-    // Validate exitCondition: required, non-empty
-    if (!request.exitCondition || request.exitCondition.trim().length === 0) {
-      return err(
-        new AutobeatError(ErrorCode.INVALID_INPUT, 'exitCondition is required', {
-          field: 'exitCondition',
-        }),
-      );
+    // Validate evalMode + exitCondition
+    const evalMode = request.evalMode ?? 'shell';
+    if (evalMode === 'shell') {
+      // Shell mode: exitCondition required, evalPrompt forbidden
+      if (!request.exitCondition || request.exitCondition.trim().length === 0) {
+        return err(
+          new AutobeatError(ErrorCode.INVALID_INPUT, 'exitCondition is required for shell eval mode', {
+            field: 'exitCondition',
+          }),
+        );
+      }
+      if (request.evalPrompt) {
+        return err(
+          new AutobeatError(ErrorCode.INVALID_INPUT, 'evalPrompt is only valid with evalMode: agent', {
+            field: 'evalPrompt',
+          }),
+        );
+      }
+    } else {
+      // Agent mode: exitCondition optional (can be empty), evalPrompt allowed
+      // (no constraint on exitCondition or evalPrompt presence)
     }
 
     // Validate workingDirectory
@@ -104,8 +118,10 @@ export class LoopManagerService implements LoopService {
       );
     }
 
-    // Validate evalTimeout: 1000ms (1 second) to 300000ms (5 minutes)
+    // Validate evalTimeout: 1000ms min; max depends on evalMode (agent: 600s, shell: 300s)
     if (request.evalTimeout !== undefined) {
+      const maxEvalTimeout = evalMode === 'agent' ? 600000 : 300000;
+      const maxEvalTimeoutLabel = evalMode === 'agent' ? '10 minute' : '5 minute';
       if (request.evalTimeout < 1000) {
         return err(
           new AutobeatError(ErrorCode.INVALID_INPUT, 'evalTimeout must be >= 1000ms (1 second minimum)', {
@@ -114,12 +130,16 @@ export class LoopManagerService implements LoopService {
           }),
         );
       }
-      if (request.evalTimeout > 300000) {
+      if (request.evalTimeout > maxEvalTimeout) {
         return err(
-          new AutobeatError(ErrorCode.INVALID_INPUT, 'evalTimeout must be <= 300000ms (5 minute maximum)', {
-            field: 'evalTimeout',
-            value: request.evalTimeout,
-          }),
+          new AutobeatError(
+            ErrorCode.INVALID_INPUT,
+            `evalTimeout must be <= ${maxEvalTimeout}ms (${maxEvalTimeoutLabel} maximum)`,
+            {
+              field: 'evalTimeout',
+              value: request.evalTimeout,
+            },
+          ),
         );
       }
     }
