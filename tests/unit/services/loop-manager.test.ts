@@ -310,6 +310,14 @@ describe('LoopManagerService - Unit Tests', () => {
       if (result.ok) return;
       expect(result.error.message).toContain('evalTimeout');
     });
+
+    it('should reject evalTimeout over 300s for shell mode', async () => {
+      const result = await service.createLoop(retryRequest({ evalTimeout: 300001 }));
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.message).toContain('evalTimeout');
+    });
   });
 
   // Helper: save a loop directly in the repository (bypasses event handler)

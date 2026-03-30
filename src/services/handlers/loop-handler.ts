@@ -61,6 +61,17 @@ export interface LoopHandlerDeps {
   readonly logger: Logger;
 }
 
+/**
+ * Fields from an exit condition evaluation result that are persisted on the iteration record.
+ * Extracted to avoid duplicating the inline type across the five recordAndContinue call sites.
+ */
+export type IterationResultFields = {
+  score?: number;
+  exitCode?: number;
+  errorMessage?: string;
+  evalFeedback?: string;
+};
+
 export class LoopHandler extends BaseEventHandler {
   // In-memory state (rebuilt from DB on restart)
   private readonly taskToLoop: Map<TaskId, LoopId> = new Map(); // taskId → loopId
@@ -1119,7 +1130,7 @@ export class LoopHandler extends BaseEventHandler {
     iterationStatus: LoopIteration['status'],
     consecutiveFailures: number,
     loopUpdate: Partial<Loop>,
-    evalResult?: { score?: number; exitCode?: number; errorMessage?: string; evalFeedback?: string },
+    evalResult?: IterationResultFields,
   ): Promise<void> {
     const { gitCommitSha, gitDiffSummary } = await this.handleIterationGitOutcome(loop, iteration, iterationStatus);
 

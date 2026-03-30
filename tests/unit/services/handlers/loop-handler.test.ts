@@ -782,6 +782,11 @@ describe('LoopHandler - Behavioral Tests', () => {
 
   describe('Stale state guard after agent eval', () => {
     it('should skip result processing when loop is no longer running after eval', async () => {
+      // Create loop first so loop.id is in scope before configuring the mock
+      const loop = await createAndEmitLoop({ maxIterations: 5, evalMode: 'agent' });
+      const taskId = await getLatestTaskId(loop.id);
+      expect(taskId).toBeDefined();
+
       // Evaluator takes long — in the meantime, loop is cancelled
       mockEvaluator.evaluate.mockImplementation(async () => {
         // Simulate loop being cancelled while eval runs
@@ -792,10 +797,6 @@ describe('LoopHandler - Behavioral Tests', () => {
         return { passed: true, exitCode: 0 };
       });
 
-      const loop = await createAndEmitLoop({ maxIterations: 5, evalMode: 'agent' });
-      const taskId = await getLatestTaskId(loop.id);
-      expect(taskId).toBeDefined();
-
       // Complete the task — evaluator will cancel the loop, then stale guard skips processing
       await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
       await flushEventLoop();
@@ -803,6 +804,38 @@ describe('LoopHandler - Behavioral Tests', () => {
       // Loop should be CANCELLED (not COMPLETED — because stale guard prevented completion)
       const updatedLoop = await getLoop(loop.id);
       expect(updatedLoop!.status).toBe(LoopStatus.CANCELLED);
+    });
+
+    it('should skip result processing when iteration is no longer running after eval', async () => {
+      // Create loop first so loop.id is in scope before configuring the mock
+      const loop = await createAndEmitLoop({ maxIterations: 5, evalMode: 'agent' });
+      const taskId = await getLatestTaskId(loop.id);
+      expect(taskId).toBeDefined();
+
+      // Evaluator takes long — in the meantime, the iteration is force-cancelled (e.g. stale recovery)
+      mockEvaluator.evaluate.mockImplementation(async () => {
+        // Simulate iteration being cancelled while eval runs (loop stays running)
+        const iterResult = await loopRepo.findIterationByTaskId(taskId!);
+        if (iterResult.ok && iterResult.value) {
+          await loopRepo.updateIteration({ ...iterResult.value, status: 'cancelled', completedAt: Date.now() });
+        }
+        return { passed: true, exitCode: 0 };
+      });
+
+      // Complete the task — evaluator will cancel the iteration, then stale guard skips processing
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // Loop should still be RUNNING (stale guard skipped the completion logic)
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.status).toBe(LoopStatus.RUNNING);
+
+      // Iteration should be CANCELLED (not 'pass' — processing was skipped)
+      const allIters = await loopRepo.getIterations(loop.id, 10);
+      expect(allIters.ok).toBe(true);
+      const iter1 = allIters.value.find((i) => i.iterationNumber === 1);
+      expect(iter1).toBeDefined();
+      expect(iter1!.status).toBe('cancelled');
     });
   });
 

@@ -104,6 +104,40 @@ async function simulateEvalTaskTimeout(eventBus: TestEventBus, evalTaskId: strin
   await eventBus.emit('TaskTimeout', { taskId: evalTaskId as ReturnType<typeof TaskId> });
 }
 
+/**
+ * Evaluate with automatic completion simulation.
+ * Spies on eventBus.emit to capture the eval task ID from TaskDelegated,
+ * then after a tick calls simulateFn(evalTaskId) to drive the eval task to a
+ * terminal state. Returns the resolved EvalResult.
+ *
+ * Reduces each test to: setup evaluator → call evaluateWithCompletion → assert result.
+ */
+async function evaluateWithCompletion(
+  evaluator: AgentExitConditionEvaluator,
+  loop: Loop,
+  taskId: ReturnType<typeof TaskId>,
+  eventBus: TestEventBus,
+  simulateFn: (evalTaskId: string) => Promise<void>,
+): Promise<EvalResult> {
+  let capturedEvalTaskId: string | undefined;
+  const origEmit = eventBus.emit.bind(eventBus);
+  vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
+    if (type === 'TaskDelegated') {
+      capturedEvalTaskId = (payload as { task: { id: string } }).task.id;
+    }
+    return origEmit(type as never, payload as never);
+  });
+
+  const evalPromise = evaluator.evaluate(loop, taskId);
+  // Give async operations a tick to set up subscription before driving terminal event
+  await new Promise((r) => setImmediate(r));
+  if (capturedEvalTaskId) {
+    await simulateFn(capturedEvalTaskId);
+  }
+
+  return evalPromise;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tests
 // ─────────────────────────────────────────────────────────────────────────────
@@ -133,25 +167,9 @@ describe('AgentExitConditionEvaluator', () => {
       const loopRepo = createLoopRepo();
       const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
 
-      // Start eval and immediately resolve it by simulating completion
-      let capturedEvalTaskId: string | undefined;
-      const origEmit = eventBus.emit.bind(eventBus);
-      vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
-        if (type === 'TaskDelegated') {
-          capturedEvalTaskId = (payload as { task: { id: string } }).task.id;
-        }
-        return origEmit(type as never, payload as never);
-      });
-
-      const evalPromise = evaluator.evaluate(loop, workTaskId);
-      // Give async operations a tick to set up subscription
-      await new Promise((r) => setImmediate(r));
-      // Simulate eval task completing
-      if (capturedEvalTaskId) {
-        await simulateEvalTaskComplete(eventBus, capturedEvalTaskId);
-      }
-
-      const result = await evalPromise;
+      const result = await evaluateWithCompletion(evaluator, loop, workTaskId, eventBus, (id) =>
+        simulateEvalTaskComplete(eventBus, id),
+      );
       expect(result.passed).toBe(true);
       expect(result.error).toBeUndefined();
     });
@@ -162,22 +180,9 @@ describe('AgentExitConditionEvaluator', () => {
       const loopRepo = createLoopRepo();
       const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
 
-      let capturedEvalTaskId: string | undefined;
-      const origEmit = eventBus.emit.bind(eventBus);
-      vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
-        if (type === 'TaskDelegated') {
-          capturedEvalTaskId = (payload as { task: { id: string } }).task.id;
-        }
-        return origEmit(type as never, payload as never);
-      });
-
-      const evalPromise = evaluator.evaluate(loop, workTaskId);
-      await new Promise((r) => setImmediate(r));
-      if (capturedEvalTaskId) {
-        await simulateEvalTaskComplete(eventBus, capturedEvalTaskId);
-      }
-
-      const result = await evalPromise;
+      const result = await evaluateWithCompletion(evaluator, loop, workTaskId, eventBus, (id) =>
+        simulateEvalTaskComplete(eventBus, id),
+      );
       expect(result.passed).toBe(false);
       expect(result.error).toBeUndefined();
     });
@@ -188,22 +193,9 @@ describe('AgentExitConditionEvaluator', () => {
       const loopRepo = createLoopRepo();
       const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
 
-      let capturedEvalTaskId: string | undefined;
-      const origEmit = eventBus.emit.bind(eventBus);
-      vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
-        if (type === 'TaskDelegated') {
-          capturedEvalTaskId = (payload as { task: { id: string } }).task.id;
-        }
-        return origEmit(type as never, payload as never);
-      });
-
-      const evalPromise = evaluator.evaluate(loop, workTaskId);
-      await new Promise((r) => setImmediate(r));
-      if (capturedEvalTaskId) {
-        await simulateEvalTaskComplete(eventBus, capturedEvalTaskId);
-      }
-
-      const result = await evalPromise;
+      const result = await evaluateWithCompletion(evaluator, loop, workTaskId, eventBus, (id) =>
+        simulateEvalTaskComplete(eventBus, id),
+      );
       expect(result.passed).toBe(false);
       expect(result.error).toContain('PASS or FAIL');
       expect(result.error).toContain('MAYBE');
@@ -221,22 +213,9 @@ describe('AgentExitConditionEvaluator', () => {
       const loopRepo = createLoopRepo();
       const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
 
-      let capturedEvalTaskId: string | undefined;
-      const origEmit = eventBus.emit.bind(eventBus);
-      vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
-        if (type === 'TaskDelegated') {
-          capturedEvalTaskId = (payload as { task: { id: string } }).task.id;
-        }
-        return origEmit(type as never, payload as never);
-      });
-
-      const evalPromise = evaluator.evaluate(loop, workTaskId);
-      await new Promise((r) => setImmediate(r));
-      if (capturedEvalTaskId) {
-        await simulateEvalTaskComplete(eventBus, capturedEvalTaskId);
-      }
-
-      const result = await evalPromise;
+      const result = await evaluateWithCompletion(evaluator, loop, workTaskId, eventBus, (id) =>
+        simulateEvalTaskComplete(eventBus, id),
+      );
       expect(result.passed).toBe(true);
       expect(result.score).toBe(85);
     });
@@ -247,22 +226,9 @@ describe('AgentExitConditionEvaluator', () => {
       const loopRepo = createLoopRepo();
       const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
 
-      let capturedEvalTaskId: string | undefined;
-      const origEmit = eventBus.emit.bind(eventBus);
-      vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
-        if (type === 'TaskDelegated') {
-          capturedEvalTaskId = (payload as { task: { id: string } }).task.id;
-        }
-        return origEmit(type as never, payload as never);
-      });
-
-      const evalPromise = evaluator.evaluate(loop, workTaskId);
-      await new Promise((r) => setImmediate(r));
-      if (capturedEvalTaskId) {
-        await simulateEvalTaskComplete(eventBus, capturedEvalTaskId);
-      }
-
-      const result = await evalPromise;
+      const result = await evaluateWithCompletion(evaluator, loop, workTaskId, eventBus, (id) =>
+        simulateEvalTaskComplete(eventBus, id),
+      );
       expect(result.passed).toBe(true);
       expect(result.score).toBe(72.5);
     });
@@ -273,22 +239,9 @@ describe('AgentExitConditionEvaluator', () => {
       const loopRepo = createLoopRepo();
       const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
 
-      let capturedEvalTaskId: string | undefined;
-      const origEmit = eventBus.emit.bind(eventBus);
-      vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
-        if (type === 'TaskDelegated') {
-          capturedEvalTaskId = (payload as { task: { id: string } }).task.id;
-        }
-        return origEmit(type as never, payload as never);
-      });
-
-      const evalPromise = evaluator.evaluate(loop, workTaskId);
-      await new Promise((r) => setImmediate(r));
-      if (capturedEvalTaskId) {
-        await simulateEvalTaskComplete(eventBus, capturedEvalTaskId);
-      }
-
-      const result = await evalPromise;
+      const result = await evaluateWithCompletion(evaluator, loop, workTaskId, eventBus, (id) =>
+        simulateEvalTaskComplete(eventBus, id),
+      );
       expect(result.passed).toBe(false);
       expect(result.error).toContain('numeric score');
     });
@@ -309,22 +262,9 @@ describe('AgentExitConditionEvaluator', () => {
       const loopRepo = createLoopRepo();
       const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
 
-      let capturedEvalTaskId: string | undefined;
-      const origEmit = eventBus.emit.bind(eventBus);
-      vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
-        if (type === 'TaskDelegated') {
-          capturedEvalTaskId = (payload as { task: { id: string } }).task.id;
-        }
-        return origEmit(type as never, payload as never);
-      });
-
-      const evalPromise = evaluator.evaluate(loop, workTaskId);
-      await new Promise((r) => setImmediate(r));
-      if (capturedEvalTaskId) {
-        await simulateEvalTaskComplete(eventBus, capturedEvalTaskId);
-      }
-
-      const result = await evalPromise;
+      const result = await evaluateWithCompletion(evaluator, loop, workTaskId, eventBus, (id) =>
+        simulateEvalTaskComplete(eventBus, id),
+      );
       expect(result.passed).toBe(true);
       expect(result.feedback).toContain('Line 1: The imports look clean.');
       expect(result.feedback).toContain('Line 2: Error handling is solid.');
@@ -336,22 +276,9 @@ describe('AgentExitConditionEvaluator', () => {
       const loopRepo = createLoopRepo();
       const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
 
-      let capturedEvalTaskId: string | undefined;
-      const origEmit = eventBus.emit.bind(eventBus);
-      vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
-        if (type === 'TaskDelegated') {
-          capturedEvalTaskId = (payload as { task: { id: string } }).task.id;
-        }
-        return origEmit(type as never, payload as never);
-      });
-
-      const evalPromise = evaluator.evaluate(loop, workTaskId);
-      await new Promise((r) => setImmediate(r));
-      if (capturedEvalTaskId) {
-        await simulateEvalTaskComplete(eventBus, capturedEvalTaskId);
-      }
-
-      const result = await evalPromise;
+      const result = await evaluateWithCompletion(evaluator, loop, workTaskId, eventBus, (id) =>
+        simulateEvalTaskComplete(eventBus, id),
+      );
       expect(result.passed).toBe(true);
       expect(result.feedback).toBeUndefined();
     });
@@ -368,22 +295,9 @@ describe('AgentExitConditionEvaluator', () => {
       const loopRepo = createLoopRepo();
       const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
 
-      let capturedEvalTaskId: string | undefined;
-      const origEmit = eventBus.emit.bind(eventBus);
-      vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
-        if (type === 'TaskDelegated') {
-          capturedEvalTaskId = (payload as { task: { id: string } }).task.id;
-        }
-        return origEmit(type as never, payload as never);
-      });
-
-      const evalPromise = evaluator.evaluate(loop, workTaskId);
-      await new Promise((r) => setImmediate(r));
-      if (capturedEvalTaskId) {
-        await simulateEvalTaskComplete(eventBus, capturedEvalTaskId);
-      }
-
-      const result = await evalPromise;
+      const result = await evaluateWithCompletion(evaluator, loop, workTaskId, eventBus, (id) =>
+        simulateEvalTaskComplete(eventBus, id),
+      );
       expect(result.passed).toBe(false);
       expect(result.error).toContain('no output');
     });
@@ -400,22 +314,9 @@ describe('AgentExitConditionEvaluator', () => {
       const loopRepo = createLoopRepo();
       const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
 
-      let capturedEvalTaskId: string | undefined;
-      const origEmit = eventBus.emit.bind(eventBus);
-      vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
-        if (type === 'TaskDelegated') {
-          capturedEvalTaskId = (payload as { task: { id: string } }).task.id;
-        }
-        return origEmit(type as never, payload as never);
-      });
-
-      const evalPromise = evaluator.evaluate(loop, workTaskId);
-      await new Promise((r) => setImmediate(r));
-      if (capturedEvalTaskId) {
-        await simulateEvalTaskFailed(eventBus, capturedEvalTaskId, 'Agent crashed');
-      }
-
-      const result = await evalPromise;
+      const result = await evaluateWithCompletion(evaluator, loop, workTaskId, eventBus, (id) =>
+        simulateEvalTaskFailed(eventBus, id, 'Agent crashed'),
+      );
       expect(result.passed).toBe(false);
       expect(result.error).toContain('Agent crashed');
     });
@@ -426,22 +327,9 @@ describe('AgentExitConditionEvaluator', () => {
       const loopRepo = createLoopRepo();
       const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
 
-      let capturedEvalTaskId: string | undefined;
-      const origEmit = eventBus.emit.bind(eventBus);
-      vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
-        if (type === 'TaskDelegated') {
-          capturedEvalTaskId = (payload as { task: { id: string } }).task.id;
-        }
-        return origEmit(type as never, payload as never);
-      });
-
-      const evalPromise = evaluator.evaluate(loop, workTaskId);
-      await new Promise((r) => setImmediate(r));
-      if (capturedEvalTaskId) {
-        await simulateEvalTaskCancelled(eventBus, capturedEvalTaskId);
-      }
-
-      const result = await evalPromise;
+      const result = await evaluateWithCompletion(evaluator, loop, workTaskId, eventBus, (id) =>
+        simulateEvalTaskCancelled(eventBus, id),
+      );
       expect(result.passed).toBe(false);
       expect(result.error).toContain('cancelled');
     });
@@ -452,22 +340,9 @@ describe('AgentExitConditionEvaluator', () => {
       const loopRepo = createLoopRepo();
       const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
 
-      let capturedEvalTaskId: string | undefined;
-      const origEmit = eventBus.emit.bind(eventBus);
-      vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
-        if (type === 'TaskDelegated') {
-          capturedEvalTaskId = (payload as { task: { id: string } }).task.id;
-        }
-        return origEmit(type as never, payload as never);
-      });
-
-      const evalPromise = evaluator.evaluate(loop, workTaskId);
-      await new Promise((r) => setImmediate(r));
-      if (capturedEvalTaskId) {
-        await simulateEvalTaskTimeout(eventBus, capturedEvalTaskId);
-      }
-
-      const result = await evalPromise;
+      const result = await evaluateWithCompletion(evaluator, loop, workTaskId, eventBus, (id) =>
+        simulateEvalTaskTimeout(eventBus, id),
+      );
       expect(result.passed).toBe(false);
       expect(result.error).toContain('timed out');
     });
@@ -681,22 +556,9 @@ describe('AgentExitConditionEvaluator', () => {
       const loopRepo = createLoopRepo();
       const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
 
-      let capturedEvalTaskId: string | undefined;
-      const origEmit = eventBus.emit.bind(eventBus);
-      vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
-        if (type === 'TaskDelegated') {
-          capturedEvalTaskId = (payload as { task: { id: string } }).task.id;
-        }
-        return origEmit(type as never, payload as never);
-      });
-
-      const evalPromise = evaluator.evaluate(loop, workTaskId);
-      await new Promise((r) => setImmediate(r));
-      if (capturedEvalTaskId) {
-        await simulateEvalTaskComplete(eventBus, capturedEvalTaskId);
-      }
-
-      const result = await evalPromise;
+      const result = await evaluateWithCompletion(evaluator, loop, workTaskId, eventBus, (id) =>
+        simulateEvalTaskComplete(eventBus, id),
+      );
       expect(result.passed).toBe(false);
       expect(result.error).toContain('eval agent output');
     });
@@ -712,22 +574,9 @@ describe('AgentExitConditionEvaluator', () => {
       const loopRepo = createLoopRepo();
       const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
 
-      let capturedEvalTaskId: string | undefined;
-      const origEmit = eventBus.emit.bind(eventBus);
-      vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
-        if (type === 'TaskDelegated') {
-          capturedEvalTaskId = (payload as { task: { id: string } }).task.id;
-        }
-        return origEmit(type as never, payload as never);
-      });
-
-      const evalPromise = evaluator.evaluate(loop, workTaskId);
-      await new Promise((r) => setImmediate(r));
-      if (capturedEvalTaskId) {
-        await simulateEvalTaskComplete(eventBus, capturedEvalTaskId);
-      }
-
-      const result = await evalPromise;
+      const result = await evaluateWithCompletion(evaluator, loop, workTaskId, eventBus, (id) =>
+        simulateEvalTaskComplete(eventBus, id),
+      );
       expect(result.passed).toBe(false);
       expect(result.error).toContain('eval agent output');
     });
