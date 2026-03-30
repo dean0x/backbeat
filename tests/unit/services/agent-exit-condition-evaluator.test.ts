@@ -485,7 +485,7 @@ describe('AgentExitConditionEvaluator', () => {
       expect(capturedTasks[0].prompt).toMatch(/^\[EVAL\]/);
     });
 
-    it('uses custom evalPrompt when provided', async () => {
+    it('uses custom evalPrompt but still includes format directive for retry', async () => {
       const customPrompt = 'Custom evaluation criteria: check test coverage.';
       const loop = createTestLoop({ strategy: LoopStrategy.RETRY, evalPrompt: customPrompt });
       const outputRepo = createOutputRepo(['PASS']);
@@ -510,6 +510,70 @@ describe('AgentExitConditionEvaluator', () => {
       await evalPromise;
 
       expect(capturedTasks[0].prompt).toContain(customPrompt);
+      // Format directive must be present even with custom evalPrompt
+      expect(capturedTasks[0].prompt).toContain('PASS or FAIL');
+    });
+
+    it('uses custom evalPrompt but still includes format directive for optimize', async () => {
+      const customPrompt = 'Score correctness and efficiency.';
+      const loop = createTestLoop({
+        strategy: LoopStrategy.OPTIMIZE,
+        evalDirection: OptimizeDirection.MAXIMIZE,
+        evalPrompt: customPrompt,
+      });
+      const outputRepo = createOutputRepo(['85']);
+      const loopRepo = createLoopRepo();
+
+      const capturedTasks: Array<{ id: string; prompt: string }> = [];
+      const origEmit = eventBus.emit.bind(eventBus);
+      vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
+        if (type === 'TaskDelegated') {
+          const task = (payload as { task: { id: string; prompt: string } }).task;
+          capturedTasks.push({ id: task.id, prompt: task.prompt });
+        }
+        return origEmit(type as never, payload as never);
+      });
+
+      const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
+      const evalPromise = evaluator.evaluate(loop, workTaskId);
+      await new Promise((r) => setImmediate(r));
+      if (capturedTasks[0]) {
+        await simulateEvalTaskComplete(eventBus, capturedTasks[0].id);
+      }
+      await evalPromise;
+
+      expect(capturedTasks[0].prompt).toContain(customPrompt);
+      // Format directive must be present even with custom evalPrompt
+      expect(capturedTasks[0].prompt).toContain('numeric score');
+    });
+
+    it('includes git diff and beat logs instructions even with custom evalPrompt', async () => {
+      const customPrompt = 'Check for security issues.';
+      const sha = 'deadbeef12345678';
+      const loop = createTestLoop({ strategy: LoopStrategy.RETRY, evalPrompt: customPrompt });
+      const outputRepo = createOutputRepo(['PASS']);
+      const loopRepo = createLoopRepo(sha);
+
+      const capturedTasks: Array<{ id: string; prompt: string }> = [];
+      const origEmit = eventBus.emit.bind(eventBus);
+      vi.spyOn(eventBus, 'emit').mockImplementation(async (type: string, payload: unknown) => {
+        if (type === 'TaskDelegated') {
+          const task = (payload as { task: { id: string; prompt: string } }).task;
+          capturedTasks.push({ id: task.id, prompt: task.prompt });
+        }
+        return origEmit(type as never, payload as never);
+      });
+
+      const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
+      const evalPromise = evaluator.evaluate(loop, workTaskId);
+      await new Promise((r) => setImmediate(r));
+      if (capturedTasks[0]) {
+        await simulateEvalTaskComplete(eventBus, capturedTasks[0].id);
+      }
+      await evalPromise;
+
+      expect(capturedTasks[0].prompt).toContain(`git diff ${sha}..HEAD`);
+      expect(capturedTasks[0].prompt).toContain('beat logs');
     });
 
     it('includes preIterationCommitSha in git diff instruction when available', async () => {

@@ -70,8 +70,12 @@ function parseAgentModeArgs(flags: RawLoopFlags): Result<ParsedLoopArgs, string>
   if (!flags.strategyFlag) {
     return err('--strategy retry|optimize is required with --eval-mode agent');
   }
-  if (flags.minimizeFlag || flags.maximizeFlag) {
-    return err('--minimize/--maximize are not valid with --eval-mode agent');
+  // Validate direction flags: allowed only with optimize strategy
+  if (flags.minimizeFlag && flags.maximizeFlag) {
+    return err('Cannot specify both --minimize and --maximize');
+  }
+  if ((flags.minimizeFlag || flags.maximizeFlag) && flags.strategyFlag !== 'optimize') {
+    return err('--minimize/--maximize are only valid with --strategy optimize');
   }
 
   // Pipeline mode validation
@@ -91,11 +95,18 @@ function parseAgentModeArgs(flags: RawLoopFlags): Result<ParsedLoopArgs, string>
     return err('Usage: beat loop <prompt> --eval-mode agent --strategy retry|optimize [options]');
   }
 
+  const direction: 'minimize' | 'maximize' | undefined = flags.minimizeFlag
+    ? 'minimize'
+    : flags.maximizeFlag
+      ? 'maximize'
+      : undefined;
+
   const shared = {
     strategy: flags.strategyFlag === 'optimize' ? LoopStrategy.OPTIMIZE : LoopStrategy.RETRY,
     exitCondition: '',
     evalMode: EvalMode.AGENT,
     evalPrompt: flags.evalPrompt,
+    evalDirection: direction,
     evalTimeout: flags.evalTimeout,
     workingDirectory: flags.workingDirectory,
     maxIterations: flags.maxIterations,

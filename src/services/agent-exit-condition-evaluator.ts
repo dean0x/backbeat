@@ -139,10 +139,18 @@ export class AgentExitConditionEvaluator implements ExitConditionEvaluator {
     const header = isRetry
       ? 'You are evaluating the result of an automated code improvement iteration.'
       : 'You are evaluating and scoring the result of an automated code improvement iteration.';
-    const defaultInstructions = isRetry
-      ? `Review the code changes. ${gitDiffInstruction} Use \`beat logs ${taskId}\` to read the worker's output. Output PASS if the changes are acceptable, FAIL if not. The LAST LINE of your response must be exactly PASS or FAIL.`
-      : `Score the code change quality 0-100. ${gitDiffInstruction} Use \`beat logs ${taskId}\` to read the worker's output. Provide your analysis, then on the LAST LINE output a single numeric score between 0 and 100.`;
-    const instructions = loop.evalPrompt ?? defaultInstructions;
+
+    const toolInstructions = `${gitDiffInstruction} Use \`beat logs ${taskId}\` to read the worker's output.`;
+
+    const criteria =
+      loop.evalPrompt ??
+      (isRetry
+        ? 'Review the code changes. Output PASS if the changes are acceptable, FAIL if not.'
+        : 'Score the code change quality 0-100. Provide your analysis.');
+
+    const formatDirective = isRetry
+      ? 'The LAST LINE of your response must be exactly PASS or FAIL.'
+      : 'On the LAST LINE output a single numeric score between 0 and 100.';
 
     return `${header}
 
@@ -152,7 +160,11 @@ Working directory: ${loop.workingDirectory}
 Iteration: ${loop.currentIteration}
 Task ID: ${taskId}
 
-${instructions}`;
+${toolInstructions}
+
+${criteria}
+
+${formatDirective}`;
   }
 
   /**
