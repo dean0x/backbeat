@@ -2,7 +2,7 @@
 
 This document lists all features that are **currently implemented and working** in Autobeat.
 
-Last Updated: March 2026 (v1.0.0)
+Last Updated: March 2026
 
 ## ✅ Autonomous Orchestration (v1.0.0)
 
