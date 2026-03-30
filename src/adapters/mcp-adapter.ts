@@ -1181,7 +1181,12 @@ export class MCPAdapter {
                     description: 'Custom prompt for agent evaluator (agent eval mode only)',
                   },
                   evalDirection: { type: 'string', enum: ['minimize', 'maximize'] },
-                  evalTimeout: { type: 'number', description: 'Eval script timeout in ms', minimum: 1000, maximum: 600000 },
+                  evalTimeout: {
+                    type: 'number',
+                    description: 'Eval script timeout in ms',
+                    minimum: 1000,
+                    maximum: 600000,
+                  },
                   workingDirectory: { type: 'string' },
                   maxIterations: { type: 'number', description: 'Max iterations (0 = unlimited)', minimum: 0 },
                   maxConsecutiveFailures: { type: 'number', minimum: 0 },

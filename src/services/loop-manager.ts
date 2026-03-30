@@ -58,10 +58,14 @@ export class LoopManagerService implements LoopService {
     const evalMode = request.evalMode ?? EvalMode.SHELL;
     if (evalMode !== EvalMode.SHELL && evalMode !== EvalMode.AGENT) {
       return err(
-        new AutobeatError(ErrorCode.INVALID_INPUT, `evalMode must be "${EvalMode.SHELL}" or "${EvalMode.AGENT}", got "${evalMode}"`, {
-          field: 'evalMode',
-          value: evalMode,
-        }),
+        new AutobeatError(
+          ErrorCode.INVALID_INPUT,
+          `evalMode must be "${EvalMode.SHELL}" or "${EvalMode.AGENT}", got "${evalMode}"`,
+          {
+            field: 'evalMode',
+            value: evalMode,
+          },
+        ),
       );
     }
     if (evalMode === EvalMode.SHELL) {

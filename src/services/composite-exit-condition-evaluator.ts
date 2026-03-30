@@ -4,8 +4,8 @@
  * Pattern: Composite pattern — transparent to callers, implements ExitConditionEvaluator
  */
 
-import { EvalMode } from '../core/domain.js';
 import type { Loop, TaskId } from '../core/domain.js';
+import { EvalMode } from '../core/domain.js';
 import type { EvalResult, ExitConditionEvaluator } from '../core/interfaces.js';
 
 export class CompositeExitConditionEvaluator implements ExitConditionEvaluator {

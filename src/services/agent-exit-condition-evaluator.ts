@@ -213,22 +213,19 @@ ${instructions}`;
       // The eval task is not tracked in LoopHandler.taskToLoop by design, so
       // handleLoopCancelled cannot reach it. We detect the cancellation here
       // and emit TaskCancellationRequested to free the worker slot immediately.
-      const loopCancelledSub = this.eventBus.subscribe<LoopCancelledEvent>(
-        'LoopCancelled',
-        async (event) => {
-          if (event.loopId !== loopId) return;
-          this.logger.info('Loop cancelled while eval task running — cancelling eval task', {
-            loopId,
-            evalTaskId,
-          });
-          await this.eventBus.emit('TaskCancellationRequested', {
-            taskId: evalTaskId,
-            reason: `Loop ${loopId} cancelled`,
-          });
-          // resolveOnce will fire once TaskCancelled arrives for evalTaskId above.
-          // Do not resolve here to avoid double-resolve ordering issues.
-        },
-      );
+      const loopCancelledSub = this.eventBus.subscribe<LoopCancelledEvent>('LoopCancelled', async (event) => {
+        if (event.loopId !== loopId) return;
+        this.logger.info('Loop cancelled while eval task running — cancelling eval task', {
+          loopId,
+          evalTaskId,
+        });
+        await this.eventBus.emit('TaskCancellationRequested', {
+          taskId: evalTaskId,
+          reason: `Loop ${loopId} cancelled`,
+        });
+        // resolveOnce will fire once TaskCancelled arrives for evalTaskId above.
+        // Do not resolve here to avoid double-resolve ordering issues.
+      });
 
       if (completedSub.ok) subscriptionIds.push(completedSub.value);
       if (failedSub.ok) subscriptionIds.push(failedSub.value);
