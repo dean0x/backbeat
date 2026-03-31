@@ -410,9 +410,11 @@ beat orchestrate cancel <id> [reason]
 ### Setup Commands
 
 ```
-beat init                  Interactive setup
-beat init --agent <name>   Non-interactive setup
-beat init --install-skills Install agent skills
-beat agents list           Show agents with status
-beat help                  Show help
+beat init                              Interactive setup
+beat init --agent <name>               Non-interactive setup
+beat init --install-skills             Install agent skills
+beat init --skills-agents <agents>     Comma-separated agents to install skills for (e.g. claude,codex)
+beat init --yes, -y                    Non-interactive: skip confirmations
+beat agents list                       Show agents with status
+beat help                              Show help
 ```
