@@ -316,17 +316,13 @@ async function runSkillInstall(
   }
 
   // Check for existing skills
-  if (deps.skillsExist?.(agents, projectRoot)) {
-    if (options.yes) {
-      // Auto-update with --yes
-    } else if (deps.confirmSkillUpdate) {
-      const updateResult = await deps.confirmSkillUpdate();
-      if (updateResult === 'cancelled') {
-        return { code: 0, reason: 'Skills update cancelled.' };
-      }
-      if (!updateResult) {
-        return { code: 0, reason: 'Skills unchanged.' };
-      }
+  if (deps.skillsExist?.(agents, projectRoot) && !options.yes && deps.confirmSkillUpdate) {
+    const updateResult = await deps.confirmSkillUpdate();
+    if (updateResult === 'cancelled') {
+      return { code: 0, reason: 'Skills update cancelled.' };
+    }
+    if (!updateResult) {
+      return { code: 0, reason: 'Skills unchanged.' };
     }
   }
 
