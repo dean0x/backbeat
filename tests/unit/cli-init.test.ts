@@ -456,11 +456,14 @@ describe('runInit — skill install (interactive)', () => {
       selectSkillAgents: async () => ['claude', 'codex', 'gemini'],
       copySkills(agents) {
         copiedAgents = agents;
-        return { ok: true, paths: [
-          '/project/.claude/skills/autobeat',
-          '/project/.agents/skills/autobeat',
-          '/project/.gemini/skills/autobeat',
-        ] };
+        return {
+          ok: true,
+          paths: [
+            '/project/.claude/skills/autobeat',
+            '/project/.agents/skills/autobeat',
+            '/project/.gemini/skills/autobeat',
+          ],
+        };
       },
     });
 
@@ -510,10 +513,7 @@ describe('runInit — skill install (non-interactive)', () => {
       isTTY: false,
       copySkills(agents) {
         copiedAgents = agents;
-        return { ok: true, paths: [
-          '/project/.claude/skills/autobeat',
-          '/project/.agents/skills/autobeat',
-        ] };
+        return { ok: true, paths: ['/project/.claude/skills/autobeat', '/project/.agents/skills/autobeat'] };
       },
     });
 
