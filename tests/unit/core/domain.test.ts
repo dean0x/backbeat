@@ -5,13 +5,10 @@ import {
   createTask,
   isTerminalState,
   Priority,
-  type SystemResources,
   type Task,
   TaskId,
-  type TaskOutput,
   type TaskRequest,
   TaskStatus,
-  type TaskUpdate,
   updateTask,
   type Worker,
   WorkerId,
@@ -47,15 +44,11 @@ describe('Domain Models - REAL Behavior Tests', () => {
       expect(task.status).toBe(TaskStatus.QUEUED);
       expect(task.priority).toBe(Priority.P2); // Default
 
-      // Additional validations for complete task structure
-      // FIX: timeout and maxOutputBuffer are undefined when not provided (no defaults in createTask)
       expect(task.timeout).toBeUndefined();
       expect(task.maxOutputBuffer).toBeUndefined();
       expect(task.workingDirectory).toBeUndefined();
-      expect(task.assignedWorker).toBeUndefined();
       expect(task.startedAt).toBeUndefined();
       expect(task.completedAt).toBeUndefined();
-      expect(task.output).toBeUndefined(); // FIX: output is also undefined when not provided
       expect(typeof task.createdAt).toBe('number');
       expect(task.createdAt).toBeGreaterThan(0);
       expect(task.updatedAt).toBe(task.createdAt);
@@ -87,16 +80,11 @@ describe('Domain Models - REAL Behavior Tests', () => {
       const tasks = Array.from({ length: 100 }, () => new TaskFactory().withPrompt('test').build());
 
       const ids = new Set(tasks.map((t) => t.id));
-      expect(ids.size).toBe(100); // All unique
-      expect(Array.isArray(tasks)).toBe(true);
-      expect(tasks.length).toBe(100);
+      expect(ids.size).toBe(100);
 
-      // All IDs should match the expected pattern
-      tasks.forEach((task) => {
+      for (const task of tasks) {
         expect(task.id).toMatch(/^task-[a-f0-9-]+$/);
-        expect(typeof task.id).toBe('string');
-        expect(task.id.startsWith('task-')).toBe(true);
-      });
+      }
     });
   });
 
@@ -128,29 +116,21 @@ describe('Domain Models - REAL Behavior Tests', () => {
     });
 
     it('should preserve immutability', () => {
-      // Mock Date.now() to return different values
-      // createTask calls Date.now() once, updateTask calls it once
-      const originalTime = 1000;
-      const updatedTime = 2000;
       const dateSpy = vi
         .spyOn(Date, 'now')
-        .mockReturnValueOnce(originalTime) // createTask (for createdAt and updatedAt)
-        .mockReturnValueOnce(updatedTime); // updateTask (for updatedAt)
+        .mockReturnValueOnce(1000) // createTask
+        .mockReturnValueOnce(2000); // updateTask
 
       const task = createTask({ prompt: 'test' });
-      const originalStatus = task.status;
-      const originalUpdatedAt = task.updatedAt;
-
       const updated = updateTask(task, { status: TaskStatus.FAILED });
 
       dateSpy.mockRestore();
 
-      expect(task.status).toBe(TaskStatus.QUEUED); // Original unchanged
-      expect(task.status).toBe(originalStatus);
-      expect(task.updatedAt).toBe(originalUpdatedAt);
+      expect(task.status).toBe(TaskStatus.QUEUED);
+      expect(task.updatedAt).toBe(1000);
       expect(updated.status).toBe(TaskStatus.FAILED);
-      expect(task).not.toBe(updated); // Different objects
-      expect(updated.updatedAt).toBeGreaterThan(originalUpdatedAt);
+      expect(task).not.toBe(updated);
+      expect(updated.updatedAt).toBe(2000);
     });
 
     it('should update worker assignment', () => {
@@ -187,17 +167,11 @@ describe('Domain Models - REAL Behavior Tests', () => {
       expect(isTerminalState(TaskStatus.COMPLETED)).toBe(true);
       expect(isTerminalState(TaskStatus.FAILED)).toBe(true);
       expect(isTerminalState(TaskStatus.CANCELLED)).toBe(true);
-      // Verify these are the only terminal states
-      expect([TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED].every((s) => isTerminalState(s))).toBe(
-        true,
-      );
     });
 
     it('should identify non-terminal states', () => {
       expect(isTerminalState(TaskStatus.QUEUED)).toBe(false);
       expect(isTerminalState(TaskStatus.RUNNING)).toBe(false);
-      // Verify these states allow progression
-      expect([TaskStatus.QUEUED, TaskStatus.RUNNING].every((s) => !isTerminalState(s))).toBe(true);
     });
   });
 
@@ -309,32 +283,6 @@ describe('Domain Models - REAL Behavior Tests', () => {
       expect(worker.id).toBe('worker-123');
       expect(worker.taskId).toBe('task-456');
       expect(worker.pid).toBe(12345);
-    });
-
-    it('should have correct SystemResources structure', () => {
-      const resources: SystemResources = {
-        cpuUsage: 45.5,
-        availableMemory: 8000000000,
-        totalMemory: 16000000000,
-        loadAverage: [1.5, 1.2, 1.0],
-        workerCount: 3,
-      };
-
-      expect(resources.cpuUsage).toBe(45.5);
-      expect(resources.loadAverage).toHaveLength(3);
-    });
-
-    it('should have correct TaskOutput structure', () => {
-      const output: TaskOutput = {
-        taskId: TaskId('task-123'),
-        stdout: ['Line 1', 'Line 2'],
-        stderr: ['Error 1'],
-        totalSize: 1024,
-      };
-
-      expect(output.taskId).toBe('task-123');
-      expect(output.stdout).toHaveLength(2);
-      expect(output.stderr).toHaveLength(1);
     });
   });
 

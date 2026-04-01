@@ -365,6 +365,7 @@ export class ScheduleManagerService implements ScheduleService {
         workingDirectory: step.workingDirectory ?? request.workingDirectory,
         afterScheduleId: previousScheduleId,
         agent: step.agent ?? request.agent,
+        model: step.model ?? request.model,
       });
 
       if (!result.ok) {

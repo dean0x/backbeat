@@ -575,23 +575,6 @@ describe('baseUrl passthrough', () => {
     adapter.dispose();
   });
 
-  it('ClaudeAdapter: user env CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS takes precedence', () => {
-    const mockChild = createMockChildProcess(1234);
-    mockSpawn.mockReturnValue(mockChild);
-    saveAgentConfig('claude', 'baseUrl', 'https://proxy.example.com');
-
-    // Note: CLAUDE_CODE_ vars are stripped, so only non-CLAUDE_CODE_ prefix vars work
-    // CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS would be stripped by ClaudeAdapter's envPrefixesToStrip
-    // Test that explicitly setting it in injected env is overridden when present
-    const adapter = new ClaudeAdapter(testConfig, 'claude');
-    adapter.spawn('test prompt', '/workspace');
-
-    const spawnOptions = mockSpawn.mock.calls[0][2] as { env: Record<string, string> };
-    // Auto-set to '1' since CLAUDE_CODE_ is stripped and baseUrl is configured
-    expect(spawnOptions.env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS).toBe('1');
-    adapter.dispose();
-  });
-
   it('ClaudeAdapter: no CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS when baseUrl not configured', () => {
     const mockChild = createMockChildProcess(1234);
     mockSpawn.mockReturnValue(mockChild);

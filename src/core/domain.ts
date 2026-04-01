@@ -229,7 +229,7 @@ export const createTask = (request: TaskRequest): Task => {
     // NOTE: dependsOn from request is the initial dependency list
     // Actual validation and DAG cycle detection happens in DependencyHandler
     dependsOn: request.dependsOn,
-    dependents: undefined, // Populated by DependencyRepository queries
+    // dependents populated by DependencyRepository queries — omitted here
     dependencyState: request.dependsOn && request.dependsOn.length > 0 ? 'blocked' : 'none',
     continueFrom: request.continueFrom,
 
@@ -239,8 +239,6 @@ export const createTask = (request: TaskRequest): Task => {
 
     // Multi-agent support (v0.5.0)
     agent: request.agent,
-
-    // Per-task model override
     model: request.model,
 
     createdAt: now,
@@ -655,18 +653,12 @@ export const createLoop = (request: LoopCreateRequest, workingDirectory: string,
     cooldownMs: request.cooldownMs ?? 0,
     freshContext: request.freshContext ?? true,
     currentIteration: 0,
-    bestScore: undefined,
-    bestIterationId: undefined,
-    bestIterationCommitSha: undefined,
     consecutiveFailures: 0,
     status: LoopStatus.RUNNING,
     gitBranch: request.gitBranch,
-    gitBaseBranch: undefined,
-    gitStartCommitSha: undefined,
     scheduleId,
     createdAt: now,
     updatedAt: now,
-    completedAt: undefined,
   });
 };
 
@@ -751,7 +743,6 @@ export const createOrchestration = (
   return Object.freeze({
     id: OrchestratorId(`orchestrator-${crypto.randomUUID()}`),
     goal: request.goal,
-    loopId: undefined,
     stateFilePath,
     workingDirectory,
     agent: request.agent,
@@ -762,7 +753,6 @@ export const createOrchestration = (
     status: OrchestratorStatus.PLANNING,
     createdAt: now,
     updatedAt: now,
-    completedAt: undefined,
   });
 };
 

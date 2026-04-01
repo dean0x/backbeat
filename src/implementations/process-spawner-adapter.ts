@@ -37,9 +37,6 @@ export class ProcessSpawnerAdapter implements AgentAdapter {
   }
 
   dispose(): void {
-    // ProcessSpawner may or may not have dispose
-    if ('dispose' in this.spawner && typeof this.spawner.dispose === 'function') {
-      (this.spawner as { dispose: () => void }).dispose();
-    }
+    // ProcessSpawner interface does not define dispose — nothing to clean up
   }
 }
