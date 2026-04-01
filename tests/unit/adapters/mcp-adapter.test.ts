@@ -11,8 +11,12 @@
  * Quality: 3-5 assertions per test, AAA pattern, behavioral testing
  */
 
+import { mkdirSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MCPAdapter } from '../../../src/adapters/mcp-adapter';
+import { _testSetConfigDir, saveAgentConfig } from '../../../src/core/configuration';
 import type {
   Loop,
   LoopCreateRequest,
@@ -2764,3 +2768,192 @@ describe('Orchestration tools via callTool()', () => {
 
 // NOTE: simulatePauseLoop and simulateResumeLoop helpers removed in favor of
 // adapter.callTool() which exercises full Zod validation + dispatch pipeline.
+
+// ============================================================================
+// ConfigureAgent Warning Tests — Claude baseUrl + missing apiKey
+// ============================================================================
+
+describe('ConfigureAgent — Claude baseUrl warning via callTool()', () => {
+  let testDir: string;
+  let restoreConfig: () => void;
+
+  function makeConfigureAgentAdapter() {
+    return new MCPAdapter({
+      taskManager: new MockTaskManager(),
+      logger: new MockLogger(),
+      scheduleService: stubScheduleService,
+      loopService: stubLoopService,
+      agentRegistry: undefined,
+      config: testConfig,
+    });
+  }
+
+  beforeEach(() => {
+    testDir = path.join(tmpdir(), `autobeat-configure-agent-warning-test-${Date.now()}`);
+    mkdirSync(testDir, { recursive: true });
+    restoreConfig = _testSetConfigDir(testDir);
+  });
+
+  afterEach(() => {
+    restoreConfig();
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  describe('set action', () => {
+    it('should include warning when setting baseUrl without an API key for Claude', async () => {
+      const adapter = makeConfigureAgentAdapter();
+
+      const result = await adapter.callTool('ConfigureAgent', {
+        agent: 'claude',
+        action: 'set',
+        baseUrl: 'https://proxy.example.com/v1',
+      });
+
+      expect(result.isError).toBeFalsy();
+      const response = JSON.parse(result.content[0].text);
+      expect(response.success).toBe(true);
+      expect(response.warning).toContain('API key');
+      expect(response.warning).toContain('baseUrl');
+    });
+
+    it('should not include warning when setting baseUrl with an API key for Claude', async () => {
+      const adapter = makeConfigureAgentAdapter();
+
+      const result = await adapter.callTool('ConfigureAgent', {
+        agent: 'claude',
+        action: 'set',
+        baseUrl: 'https://proxy.example.com/v1',
+        apiKey: 'sk-test-key',
+      });
+
+      expect(result.isError).toBeFalsy();
+      const response = JSON.parse(result.content[0].text);
+      expect(response.success).toBe(true);
+      expect(response.warning).toBeUndefined();
+    });
+
+    it('should include warning when setting only apiKey=false and baseUrl already stored for Claude', async () => {
+      // Pre-condition: baseUrl already stored, no apiKey
+      saveAgentConfig('claude', 'baseUrl', 'https://proxy.example.com/v1');
+
+      const adapter = makeConfigureAgentAdapter();
+
+      // Set a model update (no apiKey provided, baseUrl already present)
+      const result = await adapter.callTool('ConfigureAgent', {
+        agent: 'claude',
+        action: 'set',
+        model: 'claude-opus-4-5',
+      });
+
+      expect(result.isError).toBeFalsy();
+      const response = JSON.parse(result.content[0].text);
+      expect(response.success).toBe(true);
+      expect(response.warning).toContain('API key');
+    });
+
+    it('should not include warning for non-Claude agents with baseUrl', async () => {
+      const adapter = makeConfigureAgentAdapter();
+
+      const result = await adapter.callTool('ConfigureAgent', {
+        agent: 'codex',
+        action: 'set',
+        baseUrl: 'https://proxy.example.com/v1',
+      });
+
+      expect(result.isError).toBeFalsy();
+      const response = JSON.parse(result.content[0].text);
+      expect(response.success).toBe(true);
+      expect(response.warning).toBeUndefined();
+    });
+  });
+
+  describe('check action', () => {
+    it('should include warning when baseUrl is configured without apiKey for Claude', async () => {
+      saveAgentConfig('claude', 'baseUrl', 'https://proxy.example.com/v1');
+
+      const adapter = makeConfigureAgentAdapter();
+      const result = await adapter.callTool('ConfigureAgent', {
+        agent: 'claude',
+        action: 'check',
+      });
+
+      expect(result.isError).toBeFalsy();
+      const response = JSON.parse(result.content[0].text);
+      expect(response.success).toBe(true);
+      expect(response.warning).toContain('API key');
+      expect(response.warning).toContain('baseUrl');
+    });
+
+    it('should not include warning when Claude has both baseUrl and apiKey configured', async () => {
+      saveAgentConfig('claude', 'baseUrl', 'https://proxy.example.com/v1');
+      saveAgentConfig('claude', 'apiKey', 'sk-stored-key');
+
+      const adapter = makeConfigureAgentAdapter();
+      const result = await adapter.callTool('ConfigureAgent', {
+        agent: 'claude',
+        action: 'check',
+      });
+
+      expect(result.isError).toBeFalsy();
+      const response = JSON.parse(result.content[0].text);
+      expect(response.success).toBe(true);
+      expect(response.warning).toBeUndefined();
+    });
+
+    it('should not include warning when Claude has no baseUrl configured', async () => {
+      const adapter = makeConfigureAgentAdapter();
+      const result = await adapter.callTool('ConfigureAgent', {
+        agent: 'claude',
+        action: 'check',
+      });
+
+      expect(result.isError).toBeFalsy();
+      const response = JSON.parse(result.content[0].text);
+      expect(response.success).toBe(true);
+      expect(response.warning).toBeUndefined();
+    });
+  });
+
+  describe('ListAgents warning for Claude baseUrl without apiKey', () => {
+    it('should include warning on Claude entry in ListAgents when baseUrl is set without apiKey', async () => {
+      saveAgentConfig('claude', 'baseUrl', 'https://proxy.example.com/v1');
+
+      const adapter = makeConfigureAgentAdapter();
+      const result = await adapter.callTool('ListAgents', {});
+
+      expect(result.isError).toBeFalsy();
+      const response = JSON.parse(result.content[0].text);
+      expect(response.success).toBe(true);
+
+      const claudeEntry = response.agents.find((a: { provider: string }) => a.provider === 'claude');
+      expect(claudeEntry).toBeDefined();
+      expect(claudeEntry.warning).toContain('API key');
+      expect(claudeEntry.warning).toContain('baseUrl');
+    });
+
+    it('should not include warning on Claude entry when apiKey is also configured', async () => {
+      saveAgentConfig('claude', 'baseUrl', 'https://proxy.example.com/v1');
+      saveAgentConfig('claude', 'apiKey', 'sk-stored-key');
+
+      const adapter = makeConfigureAgentAdapter();
+      const result = await adapter.callTool('ListAgents', {});
+
+      expect(result.isError).toBeFalsy();
+      const response = JSON.parse(result.content[0].text);
+      const claudeEntry = response.agents.find((a: { provider: string }) => a.provider === 'claude');
+      expect(claudeEntry.warning).toBeUndefined();
+    });
+
+    it('should not include warning on non-Claude agents with baseUrl', async () => {
+      saveAgentConfig('codex', 'baseUrl', 'https://proxy.example.com/v1');
+
+      const adapter = makeConfigureAgentAdapter();
+      const result = await adapter.callTool('ListAgents', {});
+
+      expect(result.isError).toBeFalsy();
+      const response = JSON.parse(result.content[0].text);
+      const codexEntry = response.agents.find((a: { provider: string }) => a.provider === 'codex');
+      expect(codexEntry.warning).toBeUndefined();
+    });
+  });
+});

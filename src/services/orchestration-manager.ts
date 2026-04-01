@@ -157,6 +157,7 @@ export class OrchestrationManagerService implements OrchestrationService {
       freshContext: true,
       workingDirectory: validatedWorkingDirectory,
       agent,
+      ...(orchestration.model !== undefined && { model: orchestration.model }),
     });
 
     if (!loopResult.ok) {

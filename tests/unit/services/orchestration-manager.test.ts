@@ -150,6 +150,38 @@ describe('OrchestrationManagerService - Unit Tests', () => {
       expect(result.value.maxWorkers).toBe(15);
       expect(result.value.maxIterations).toBe(100);
     });
+
+    it('should pass model to loop creation when model is specified', async () => {
+      const result = await service.createOrchestration({
+        goal: 'Build auth with specific model',
+        model: 'claude-opus-4-5',
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // Verify the LoopCreated event contains the model
+      const loopEvents = eventBus.getEmittedEvents('LoopCreated');
+      expect(loopEvents.length).toBe(1);
+      const createdLoop = (loopEvents[0] as { loop: { taskTemplate?: { model?: string } } }).loop;
+      // Model is stored on the loop's taskTemplate
+      expect(createdLoop?.taskTemplate?.model).toBe('claude-opus-4-5');
+    });
+
+    it('should not set model on loop when model is not specified', async () => {
+      const result = await service.createOrchestration({
+        goal: 'Build without model override',
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const loopEvents = eventBus.getEmittedEvents('LoopCreated');
+      expect(loopEvents.length).toBe(1);
+      const createdLoop = (loopEvents[0] as { loop: { taskTemplate?: { model?: string } } }).loop;
+      // No model should be set when not requested
+      expect(createdLoop?.taskTemplate?.model).toBeUndefined();
+    });
   });
 
   describe('getOrchestration()', () => {

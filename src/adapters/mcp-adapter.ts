@@ -1382,7 +1382,8 @@ export class MCPAdapter {
             },
             {
               name: 'ConfigureAgent',
-              description: 'Check auth status, store API key/baseUrl/model, or reset stored config for an agent',
+              description:
+                'Check auth status, store API key/baseUrl/model, or reset stored config for an agent. Note: to clear individual fields (baseUrl, model), use action=reset (clears all) or the CLI `beat agents config set <agent> <field> ""`. The MCP set action requires non-empty values.',
               inputSchema: {
                 type: 'object',
                 properties: {
@@ -2684,6 +2685,12 @@ export class MCPAdapter {
       const agentConfig = loadAgentConfig(provider);
       const authStatus = checkAgentAuth(provider, agentConfig.apiKey);
 
+      // Claude-specific: warn when baseUrl is configured without an API key
+      const claudeBaseUrlWarning =
+        provider === 'claude' && agentConfig.baseUrl && !agentConfig.apiKey
+          ? 'Warning: Claude requires an API key when using a custom baseUrl. The base URL will be ignored with login-based auth.'
+          : undefined;
+
       return {
         provider,
         description: AGENT_DESCRIPTIONS[provider],
@@ -2694,6 +2701,7 @@ export class MCPAdapter {
         ...(authStatus.hint && { hint: authStatus.hint }),
         ...(agentConfig.baseUrl && { baseUrl: agentConfig.baseUrl }),
         ...(agentConfig.model && { model: agentConfig.model }),
+        ...(claudeBaseUrlWarning && { warning: claudeBaseUrlWarning }),
       };
     });
 
@@ -2948,21 +2956,25 @@ export class MCPAdapter {
       case 'check': {
         const agentConfig = loadAgentConfig(agent);
         const status = checkAgentAuth(agent, agentConfig.apiKey);
+
+        // Claude-specific: warn when baseUrl is configured without an API key
+        const checkPayload: Record<string, unknown> = {
+          success: true,
+          ...status,
+          ...(agentConfig.apiKey && { storedKey: maskApiKey(agentConfig.apiKey) }),
+          ...(agentConfig.baseUrl && { baseUrl: agentConfig.baseUrl }),
+          ...(agentConfig.model && { model: agentConfig.model }),
+        };
+        if (agent === 'claude' && agentConfig.baseUrl && !agentConfig.apiKey) {
+          checkPayload.warning =
+            'Warning: Claude requires an API key when using a custom baseUrl. The base URL will be ignored with login-based auth.';
+        }
+
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify(
-                {
-                  success: true,
-                  ...status,
-                  ...(agentConfig.apiKey && { storedKey: maskApiKey(agentConfig.apiKey) }),
-                  ...(agentConfig.baseUrl && { baseUrl: agentConfig.baseUrl }),
-                  ...(agentConfig.model && { model: agentConfig.model }),
-                },
-                null,
-                2,
-              ),
+              text: JSON.stringify(checkPayload, null, 2),
             },
           ],
         };
@@ -3020,15 +3032,33 @@ export class MCPAdapter {
           messages.push(model ? `model set to ${model}` : 'model cleared');
         }
 
+        // Claude-specific: warn when baseUrl is configured without an API key
+        // (login-based auth does not work with a custom baseUrl)
+        const warningMessages: string[] = [];
+        if (agent === 'claude') {
+          const currentConfig = loadAgentConfig(agent);
+          const effectiveBaseUrl = baseUrl !== undefined ? baseUrl : currentConfig.baseUrl;
+          const effectiveApiKey = apiKey ?? currentConfig.apiKey;
+          if (effectiveBaseUrl && !effectiveApiKey) {
+            warningMessages.push(
+              'Warning: Claude requires an API key when using a custom baseUrl. The base URL will be ignored with login-based auth.',
+            );
+          }
+        }
+
+        const responsePayload: Record<string, unknown> = {
+          success: true,
+          message: `${agent}: ${messages.join(', ')}`,
+        };
+        if (warningMessages.length > 0) {
+          responsePayload.warning = warningMessages.join(' ');
+        }
+
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify(
-                { success: true, message: `${agent}: ${messages.join(', ')}` },
-                null,
-                2,
-              ),
+              text: JSON.stringify(responsePayload, null, 2),
             },
           ],
         };
