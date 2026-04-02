@@ -116,6 +116,16 @@ export async function agentsConfigSet(
     );
   }
 
+  // Validate baseUrl is a well-formed absolute URL before saving
+  if (key === 'baseUrl' && value !== '') {
+    try {
+      new URL(value);
+    } catch {
+      ui.error(`Invalid baseUrl: "${value}" is not a valid URL. Example: https://proxy.example.com/v1`);
+      process.exit(1);
+    }
+  }
+
   const result = saveAgentConfig(agent, key, value);
   if (!result.ok) {
     ui.error(result.error);
