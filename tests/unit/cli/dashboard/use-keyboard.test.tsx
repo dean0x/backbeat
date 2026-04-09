@@ -367,22 +367,22 @@ describe('useKeyboard — filter cycling', () => {
     const { lastFrame, stdin } = render(<KeyboardWrapper />);
     expect(lastFrame()).toContain('filter-loops:null');
     await press(stdin, 'f');
-    // After one press, filter should be 'running' (first non-null in FILTER_CYCLE)
+    // Loops cycle: null → running → paused → completed → failed → cancelled
     expect(lastFrame()).toContain('filter-loops:running');
   });
 
   it('"f" cycles back to null after going through all filters', async () => {
     const { lastFrame, stdin } = render(<KeyboardWrapper />);
-    // FILTER_CYCLE has 9 entries (null + 8 statuses) — press 9 times to wrap around
-    for (let i = 0; i < 9; i++) {
+    // Loops cycle has 6 entries (null + 5 statuses) — press 6 times to wrap around
+    for (let i = 0; i < 6; i++) {
       await press(stdin, 'f');
     }
     expect(lastFrame()).toContain('filter-loops:null');
   });
 
-  it('filter is per-panel — cycling loops filter does not affect tasks filter', async () => {
+  it('filter is per-panel — each panel cycles its own statuses', async () => {
     const { lastFrame, stdin } = render(<KeyboardWrapper />);
-    await press(stdin, 'f'); // cycles loops filter
+    await press(stdin, 'f'); // cycles loops filter → running
     expect(lastFrame()).toContain('filter-loops:running');
     expect(lastFrame()).toContain('filter-tasks:null'); // tasks unchanged
   });

@@ -22,18 +22,13 @@ interface Identifiable {
 /** Ordered panel cycle for Tab navigation */
 const PANEL_ORDER: readonly PanelId[] = ['loops', 'tasks', 'schedules', 'orchestrations'];
 
-/** Cycled filter states — covers all statuses across tasks, schedules, loops, and orchestrations */
-const FILTER_CYCLE: readonly (string | null)[] = [
-  null,
-  'running',
-  'active',
-  'queued',
-  'planning',
-  'paused',
-  'completed',
-  'failed',
-  'cancelled',
-];
+/** Per-panel filter cycles — each panel only includes its valid statuses */
+const FILTER_CYCLES: Record<PanelId, readonly (string | null)[]> = {
+  loops:          [null, 'running', 'paused', 'completed', 'failed', 'cancelled'],
+  tasks:          [null, 'queued', 'running', 'completed', 'failed', 'cancelled'],
+  schedules:      [null, 'active', 'paused', 'completed', 'cancelled', 'expired'],
+  orchestrations: [null, 'planning', 'running', 'completed', 'failed', 'cancelled'],
+};
 
 /** Map of digit keys 1–4 to their corresponding panel IDs */
 const PANEL_JUMP_KEYS: Record<string, PanelId> = {
@@ -280,9 +275,10 @@ function handleMainKeys(
     setNav((prev) => {
       const panel = prev.focusedPanel;
       const currentFilter = prev.filters[panel];
-      const currentIdx = FILTER_CYCLE.indexOf(currentFilter);
-      const nextIdx = (currentIdx + 1) % FILTER_CYCLE.length;
-      const nextFilter = FILTER_CYCLE[nextIdx] ?? null;
+      const cycle = FILTER_CYCLES[panel];
+      const currentIdx = cycle.indexOf(currentFilter);
+      const nextIdx = (currentIdx + 1) % cycle.length;
+      const nextFilter = cycle[nextIdx] ?? null;
 
       // Clamp selectedIndex to new filtered length (use ref for freshness)
       const newLength = filteredLength(panel, dataRef.current, nextFilter);
