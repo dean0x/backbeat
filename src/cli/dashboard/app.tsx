@@ -5,7 +5,7 @@
  */
 
 import { Box, useApp } from 'ink';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { ReadOnlyContext } from '../read-only-context.js';
 import { Footer } from './components/footer.js';
 import { Header } from './components/header.js';
@@ -38,6 +38,15 @@ export const App: React.FC<AppProps> = React.memo(({ ctx, version }) => {
   const [view, setView] = useState<ViewState>({ kind: 'main' });
   const [nav, setNav] = useState<NavState>(INITIAL_NAV);
 
+  // Shared animation frame counter — single interval drives all StatusBadge animations
+  const [animFrame, setAnimFrame] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAnimFrame((prev) => prev + 1);
+    }, 250);
+    return () => clearInterval(timer);
+  }, []);
+
   const { data, error, refreshedAt, refreshNow } = useDashboardData(ctx, view);
 
   useKeyboard({
@@ -61,6 +70,7 @@ export const App: React.FC<AppProps> = React.memo(({ ctx, version }) => {
           entityId={view.entityId}
           data={data}
           scrollOffset={nav.scrollOffsets[view.entityType]}
+          animFrame={animFrame}
         />
       )}
       <Footer viewKind={view.kind} />

@@ -18,6 +18,7 @@ interface DetailViewProps {
   readonly entityId: string;
   readonly data: DashboardData | null;
   readonly scrollOffset: number;
+  readonly animFrame: number;
 }
 
 /**
@@ -44,7 +45,7 @@ function findEntity(
   }
 }
 
-export const DetailView: React.FC<DetailViewProps> = React.memo(({ entityType, entityId, data, scrollOffset }) => {
+export const DetailView: React.FC<DetailViewProps> = React.memo(({ entityType, entityId, data, scrollOffset, animFrame }) => {
   const entity = findEntity(data, entityType, entityId);
 
   if (entity === undefined) {
@@ -57,13 +58,13 @@ export const DetailView: React.FC<DetailViewProps> = React.memo(({ entityType, e
 
   switch (entityType) {
     case 'loops':
-      return <LoopDetail loop={entity as Loop} iterations={data?.iterations} scrollOffset={scrollOffset} />;
+      return <LoopDetail loop={entity as Loop} iterations={data?.iterations} scrollOffset={scrollOffset} animFrame={animFrame} />;
     case 'tasks':
-      return <TaskDetail task={entity as Task} />;
+      return <TaskDetail task={entity as Task} animFrame={animFrame} />;
     case 'schedules':
-      return <ScheduleDetail schedule={entity as Schedule} executions={data?.executions} scrollOffset={scrollOffset} />;
+      return <ScheduleDetail schedule={entity as Schedule} executions={data?.executions} scrollOffset={scrollOffset} animFrame={animFrame} />;
     case 'orchestrations':
-      return <OrchestrationDetail orchestration={entity as Orchestration} />;
+      return <OrchestrationDetail orchestration={entity as Orchestration} animFrame={animFrame} />;
   }
 });
 

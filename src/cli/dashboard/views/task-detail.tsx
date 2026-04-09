@@ -13,9 +13,10 @@ import { formatElapsed, relativeTime, truncateCell } from '../format.js';
 
 interface TaskDetailProps {
   readonly task: Task;
+  readonly animFrame: number;
 }
 
-export const TaskDetail: React.FC<TaskDetailProps> = React.memo(({ task }) => {
+export const TaskDetail: React.FC<TaskDetailProps> = React.memo(({ task, animFrame }) => {
   // Compute elapsed for running tasks
   const elapsedDisplay =
     task.status === 'running' && task.startedAt !== undefined ? formatElapsed(task.startedAt) : undefined;
@@ -31,7 +32,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = React.memo(({ task }) => {
 
       <Field label="ID">{truncateCell(task.id, 60)}</Field>
       <StatusField>
-        <StatusBadge status={task.status} />
+        <StatusBadge status={task.status} animFrame={animFrame} />
       </StatusField>
       <Field label="Priority">{task.priority}</Field>
       {task.agent ? <Field label="Agent">{task.agent}</Field> : null}

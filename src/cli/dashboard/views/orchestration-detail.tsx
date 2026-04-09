@@ -13,9 +13,10 @@ import { relativeTime, truncateCell } from '../format.js';
 
 interface OrchestrationDetailProps {
   readonly orchestration: Orchestration;
+  readonly animFrame: number;
 }
 
-export const OrchestrationDetail: React.FC<OrchestrationDetailProps> = React.memo(({ orchestration }) => {
+export const OrchestrationDetail: React.FC<OrchestrationDetailProps> = React.memo(({ orchestration, animFrame }) => {
   return (
     <Box flexDirection="column" paddingLeft={1} paddingRight={1}>
       {/* Header */}
@@ -25,7 +26,7 @@ export const OrchestrationDetail: React.FC<OrchestrationDetailProps> = React.mem
 
       <Field label="ID">{truncateCell(orchestration.id, 60)}</Field>
       <StatusField>
-        <StatusBadge status={orchestration.status} />
+        <StatusBadge status={orchestration.status} animFrame={animFrame} />
       </StatusField>
 
       {/* Goal (full, wrapped) */}
