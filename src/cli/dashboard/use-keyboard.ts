@@ -6,6 +6,7 @@
 
 import { useInput } from 'ink';
 import type React from 'react';
+import { useRef } from 'react';
 import type { LoopId, OrchestratorId, ScheduleId, TaskId } from '../../core/domain.js';
 import type { DashboardData, NavState, PanelId, ViewState } from './types.js';
 
@@ -93,6 +94,11 @@ function clamp(value: number, min: number, max: number): number {
  * Routes keys to handlers based on current view (main or detail).
  */
 export function useKeyboard({ view, nav, data, setView, setNav, refreshNow, exit }: UseKeyboardParams): void {
+  // Keep a ref to the latest data so setNav functional updaters always see
+  // current data, not stale closure data from the render that registered useInput.
+  const dataRef = useRef(data);
+  dataRef.current = data;
+
   useInput((input, key) => {
     // Global keys
     if (input === 'q') {
@@ -191,7 +197,7 @@ export function useKeyboard({ view, nav, data, setView, setNav, refreshNow, exit
     if (key.downArrow || input === 'j') {
       setNav((prev) => {
         const panel = prev.focusedPanel;
-        const length = filteredLength(panel, data, prev.filters[panel]);
+        const length = filteredLength(panel, dataRef.current, prev.filters[panel]);
         const maxIndex = Math.max(0, length - 1);
         const current = prev.selectedIndices[panel];
         const next = clamp(current + 1, 0, maxIndex);
@@ -245,8 +251,8 @@ export function useKeyboard({ view, nav, data, setView, setNav, refreshNow, exit
         const nextIdx = (currentIdx + 1) % FILTER_CYCLE.length;
         const nextFilter = FILTER_CYCLE[nextIdx] ?? null;
 
-        // Clamp selectedIndex to new filtered length
-        const newLength = filteredLength(panel, data, nextFilter);
+        // Clamp selectedIndex to new filtered length (use ref for freshness)
+        const newLength = filteredLength(panel, dataRef.current, nextFilter);
         const clampedIndex = clamp(prev.selectedIndices[panel], 0, Math.max(0, newLength - 1));
 
         return {
