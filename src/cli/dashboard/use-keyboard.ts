@@ -43,7 +43,16 @@ interface UseKeyboardParams {
   readonly setNav: React.Dispatch<React.SetStateAction<NavState>>;
   readonly refreshNow: () => void;
   readonly exit: () => void;
+  /**
+   * Maximum number of scrollable rows in the currently rendered detail view.
+   * When provided, down-arrow scroll is clamped to prevent scrolling into empty space.
+   * Defaults to a conservative upper bound (200) when omitted.
+   */
+  readonly detailContentLength?: number;
 }
+
+/** Conservative upper bound for detail scroll when caller does not provide content length */
+const DETAIL_SCROLL_MAX_DEFAULT = 200;
 
 /**
  * Bundled dependencies passed to per-view key handler functions.
@@ -57,6 +66,7 @@ interface KeyHandlerParams {
   readonly dataRef: React.MutableRefObject<DashboardData | null>;
   readonly setView: (v: ViewState) => void;
   readonly setNav: React.Dispatch<React.SetStateAction<NavState>>;
+  readonly detailContentLength: number;
 }
 
 /**
@@ -112,7 +122,7 @@ function handleDetailKeys(
   key: Parameters<Parameters<typeof useInput>[0]>[1],
   params: KeyHandlerParams,
 ): boolean {
-  const { view, setView, setNav } = params;
+  const { view, setView, setNav, detailContentLength } = params;
   if (view.kind !== 'detail') return false;
 
   if (key.escape || key.backspace) {
@@ -132,11 +142,13 @@ function handleDetailKeys(
   }
 
   if (key.downArrow || input === 'j') {
+    // Clamp to detailContentLength - 1 so the user cannot scroll into empty space
+    const maxScroll = Math.max(0, detailContentLength - 1);
     setNav((prev) => ({
       ...prev,
       scrollOffsets: {
         ...prev.scrollOffsets,
-        [view.entityType]: prev.scrollOffsets[view.entityType] + 1,
+        [view.entityType]: Math.min(maxScroll, prev.scrollOffsets[view.entityType] + 1),
       },
     }));
     return true;
@@ -286,7 +298,16 @@ function handleMainKeys(
  * Custom hook wrapping Ink's useInput.
  * Routes keys to handlers based on current view (main or detail).
  */
-export function useKeyboard({ view, nav, data, setView, setNav, refreshNow, exit }: UseKeyboardParams): void {
+export function useKeyboard({
+  view,
+  nav,
+  data,
+  setView,
+  setNav,
+  refreshNow,
+  exit,
+  detailContentLength,
+}: UseKeyboardParams): void {
   // Keep a ref to the latest data so setNav functional updaters always see
   // current data, not stale closure data from the render that registered useInput.
   const dataRef = useRef(data);
@@ -303,7 +324,15 @@ export function useKeyboard({ view, nav, data, setView, setNav, refreshNow, exit
       return;
     }
 
-    const params: KeyHandlerParams = { view, nav, data, dataRef, setView, setNav };
+    const params: KeyHandlerParams = {
+      view,
+      nav,
+      data,
+      dataRef,
+      setView,
+      setNav,
+      detailContentLength: detailContentLength ?? DETAIL_SCROLL_MAX_DEFAULT,
+    };
 
     if (view.kind === 'detail') {
       handleDetailKeys(input, key, params);
