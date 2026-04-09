@@ -6,7 +6,17 @@
 
 import { useInput } from 'ink';
 import type React from 'react';
+import type { LoopId, OrchestratorId, ScheduleId, TaskId } from '../../core/domain.js';
 import type { DashboardData, NavState, PanelId, ViewState } from './types.js';
+
+/**
+ * Minimal shape required for navigation — id and status are the only fields
+ * the keyboard hook needs to operate on any entity list.
+ */
+interface Identifiable {
+  readonly id: string;
+  readonly status: string;
+}
 
 /** Ordered panel cycle for Tab navigation */
 const PANEL_ORDER: readonly PanelId[] = ['loops', 'tasks', 'schedules', 'orchestrations'];
@@ -34,17 +44,28 @@ interface UseKeyboardParams {
   readonly exit: () => void;
 }
 
-/** Return the raw item array for the given panel id. */
-function getPanelItems(panelId: PanelId, data: DashboardData): readonly { id: string; status: string }[] {
+/**
+ * Map a domain entity array to Identifiable items.
+ * Explicit mapping avoids type assertions — status enum values are coerced to
+ * string via String() so the result is safely assignable to Identifiable[].
+ */
+function toIdentifiables(
+  items: ReadonlyArray<{ id: string; status: { toString(): string } }>,
+): readonly Identifiable[] {
+  return items.map((item) => ({ id: item.id, status: item.status.toString() }));
+}
+
+/** Return a navigation-friendly item list for the given panel. */
+function getPanelItems(panelId: PanelId, data: DashboardData): readonly Identifiable[] {
   switch (panelId) {
     case 'loops':
-      return data.loops as readonly { id: string; status: string }[];
+      return toIdentifiables(data.loops);
     case 'tasks':
-      return data.tasks as readonly { id: string; status: string }[];
+      return toIdentifiables(data.tasks);
     case 'schedules':
-      return data.schedules as readonly { id: string; status: string }[];
+      return toIdentifiables(data.schedules);
     case 'orchestrations':
-      return data.orchestrations as readonly { id: string; status: string }[];
+      return toIdentifiables(data.orchestrations);
   }
 }
 
@@ -196,7 +217,22 @@ export function useKeyboard({ view, nav, data, setView, setNav, refreshNow, exit
       const filteredItems = filter !== null ? allItems.filter((item) => item.status === filter) : allItems;
       const selectedItem = filteredItems[nav.selectedIndices[panel]];
       if (selectedItem === undefined) return;
-      setView({ kind: 'detail', entityType: panel, entityId: selectedItem.id });
+      // Cast id back to the branded type for the discriminated ViewState union.
+      // The id originates from the domain entity — the cast is safe at this boundary.
+      switch (panel) {
+        case 'loops':
+          setView({ kind: 'detail', entityType: 'loops', entityId: selectedItem.id as LoopId });
+          break;
+        case 'tasks':
+          setView({ kind: 'detail', entityType: 'tasks', entityId: selectedItem.id as TaskId });
+          break;
+        case 'schedules':
+          setView({ kind: 'detail', entityType: 'schedules', entityId: selectedItem.id as ScheduleId });
+          break;
+        case 'orchestrations':
+          setView({ kind: 'detail', entityType: 'orchestrations', entityId: selectedItem.id as OrchestratorId });
+          break;
+      }
       return;
     }
 
