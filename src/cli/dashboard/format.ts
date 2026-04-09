@@ -193,6 +193,37 @@ export function formatElapsed(startedAt: number): string {
 }
 
 // ============================================================================
+// Duration formatting
+// ============================================================================
+
+/**
+ * Format the duration between two epoch ms timestamps (start → end).
+ * Returns "—" if either timestamp is undefined.
+ * Examples: "45s", "2m 30s", "1h 5m"
+ */
+export function formatDuration(startedAt: number | undefined, completedAt: number | undefined): string {
+  if (startedAt === undefined || completedAt === undefined) {
+    return '—';
+  }
+  const ms = completedAt - startedAt;
+  const totalSeconds = Math.floor(ms / 1_000);
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const totalHours = Math.floor(totalMinutes / 60);
+
+  if (totalHours > 0) {
+    const remainingMinutes = totalMinutes % 60;
+    return remainingMinutes > 0 ? `${totalHours}h ${remainingMinutes}m` : `${totalHours}h`;
+  }
+
+  if (totalMinutes > 0) {
+    const remainingSeconds = totalSeconds % 60;
+    return remainingSeconds > 0 ? `${totalMinutes}m ${remainingSeconds}s` : `${totalMinutes}m`;
+  }
+
+  return `${totalSeconds}s`;
+}
+
+// ============================================================================
 // Panel status summary
 // ============================================================================
 
