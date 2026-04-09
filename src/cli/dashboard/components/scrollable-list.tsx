@@ -34,7 +34,7 @@ function ScrollableListInner<T>({
 }: ScrollableListProps<T>): React.ReactElement {
   const hasScrollUp = scrollOffset > 0;
   const hasScrollDown = scrollOffset + viewportHeight < items.length;
-  const hasTruncation = truncationNotice != null && truncationNotice.length > 0;
+  const hasTruncation = truncationNotice != null;
 
   // Effective viewport adjusted for scroll indicators.
   // The bottom slot is consumed by either the down-scroll indicator, the truncation notice, or both merged.
@@ -45,15 +45,16 @@ function ScrollableListInner<T>({
 
   // Build the bottom indicator line:
   //   - viewport overflow + truncation: "↓ N more · showing X of Y [status]"
-  //   - viewport overflow only:         "↓ more"
+  //   - viewport overflow only:         "↓ N more"
   //   - truncation only (no overflow):  "showing X of Y [status]" (right-aligned dim)
   //   - neither:                        nothing
+  const belowCount = items.length - (scrollOffset + effectiveHeight);
   const renderBottomIndicator = (): React.ReactNode => {
     if (hasScrollDown && hasTruncation) {
-      return <Text dimColor>{`  ↓ more · ${truncationNotice}`}</Text>;
+      return <Text dimColor>{`  ↓ ${belowCount} more · ${truncationNotice}`}</Text>;
     }
     if (hasScrollDown) {
-      return <Text dimColor>{'  ↓ more'}</Text>;
+      return <Text dimColor>{`  ↓ ${belowCount} more`}</Text>;
     }
     if (hasTruncation) {
       return <Text dimColor>{`  ${truncationNotice}`}</Text>;

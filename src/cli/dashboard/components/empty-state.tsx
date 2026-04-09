@@ -23,13 +23,14 @@ interface EmptyStateProps {
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = React.memo(({ entityName, filterStatus, totalForFilter }) => {
-  const isSmartMessage = filterStatus !== null && totalForFilter !== undefined && totalForFilter > 0;
-
-  const message = isSmartMessage
-    ? `${totalForFilter} ${filterStatus} ${entityName} exist — not in current view`
-    : filterStatus !== null
-      ? `No ${filterStatus} ${entityName} found`
-      : `No ${entityName} found`;
+  let message: string;
+  if (filterStatus !== null && totalForFilter !== undefined && totalForFilter > 0) {
+    message = `${totalForFilter} ${filterStatus} ${entityName} exist — not in current view`;
+  } else if (filterStatus !== null) {
+    message = `No ${filterStatus} ${entityName} found`;
+  } else {
+    message = `No ${entityName} found`;
+  }
 
   return (
     <Box paddingX={1}>
