@@ -17,6 +17,7 @@ interface ScheduleDetailProps {
   readonly schedule: Schedule;
   readonly executions: readonly ScheduleExecution[] | undefined;
   readonly scrollOffset: number;
+  readonly animFrame: number;
 }
 
 /** Render a single execution row */
@@ -36,7 +37,7 @@ function renderExecutionRow(exec: ScheduleExecution, index: number, isSelected: 
         : undefined;
 
   return (
-    <Box key={exec.id} flexDirection="row" backgroundColor={bg}>
+    <Box flexDirection="row" backgroundColor={bg}>
       <Text bold={isSelected} color={isSelected ? 'white' : undefined}>
         {String(index + 1).padStart(3, ' ')}
       </Text>
@@ -62,7 +63,7 @@ function renderExecutionRow(exec: ScheduleExecution, index: number, isSelected: 
 
 const EXECUTION_VIEWPORT_HEIGHT = 12;
 
-export const ScheduleDetail: React.FC<ScheduleDetailProps> = React.memo(({ schedule, executions, scrollOffset }) => {
+export const ScheduleDetail: React.FC<ScheduleDetailProps> = React.memo(({ schedule, executions, scrollOffset, animFrame }) => {
   const runsProgress = formatRunProgress(schedule.runCount, schedule.maxRuns);
 
   return (
@@ -74,7 +75,7 @@ export const ScheduleDetail: React.FC<ScheduleDetailProps> = React.memo(({ sched
 
       <Field label="ID">{truncateCell(schedule.id, 60)}</Field>
       <StatusField>
-        <StatusBadge status={schedule.status} />
+        <StatusBadge status={schedule.status} animFrame={animFrame} />
       </StatusField>
       <Field label="Schedule Type">{schedule.scheduleType}</Field>
       {schedule.cronExpression ? <Field label="Cron Expression">{schedule.cronExpression}</Field> : null}
@@ -112,6 +113,7 @@ export const ScheduleDetail: React.FC<ScheduleDetailProps> = React.memo(({ sched
           scrollOffset={scrollOffset}
           viewportHeight={EXECUTION_VIEWPORT_HEIGHT}
           renderItem={renderExecutionRow}
+          keyExtractor={(item) => String(item.id)}
         />
       )}
     </Box>

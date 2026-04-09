@@ -16,6 +16,7 @@ interface LoopDetailProps {
   readonly loop: Loop;
   readonly iterations: readonly LoopIteration[] | undefined;
   readonly scrollOffset: number;
+  readonly animFrame: number;
 }
 
 /** Render a single iteration row for the scrollable table */
@@ -37,7 +38,7 @@ function renderIterationRow(iter: LoopIteration, _index: number, isSelected: boo
 
   const bg = isSelected ? 'blue' : undefined;
   return (
-    <Box key={iter.id} flexDirection="row" backgroundColor={bg}>
+    <Box flexDirection="row" backgroundColor={bg}>
       <Text bold={isSelected} color={isSelected ? 'white' : undefined}>
         {String(iter.iterationNumber).padStart(3, ' ')}
       </Text>
@@ -69,7 +70,7 @@ function renderIterationRow(iter: LoopIteration, _index: number, isSelected: boo
 
 const ITERATION_VIEWPORT_HEIGHT = 12;
 
-export const LoopDetail: React.FC<LoopDetailProps> = React.memo(({ loop, iterations, scrollOffset }) => {
+export const LoopDetail: React.FC<LoopDetailProps> = React.memo(({ loop, iterations, scrollOffset, animFrame }) => {
   const iterProgress = formatRunProgress(loop.currentIteration, loop.maxIterations);
   const bestScore = loop.bestScore !== undefined ? loop.bestScore.toFixed(2) : '—';
   const bestIterationId = loop.bestIterationId !== undefined ? String(loop.bestIterationId) : '—';
@@ -83,7 +84,7 @@ export const LoopDetail: React.FC<LoopDetailProps> = React.memo(({ loop, iterati
 
       <Field label="ID">{truncateCell(loop.id, 60)}</Field>
       <StatusField>
-        <StatusBadge status={loop.status} />
+        <StatusBadge status={loop.status} animFrame={animFrame} />
       </StatusField>
       <Field label="Strategy">{loop.strategy}</Field>
       <Field label="Eval Mode">{loop.evalMode}</Field>
@@ -126,6 +127,7 @@ export const LoopDetail: React.FC<LoopDetailProps> = React.memo(({ loop, iterati
           scrollOffset={scrollOffset}
           viewportHeight={ITERATION_VIEWPORT_HEIGHT}
           renderItem={renderIterationRow}
+          keyExtractor={(item) => String(item.id)}
         />
       )}
     </Box>

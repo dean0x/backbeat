@@ -43,7 +43,7 @@ function renderLoopRow(loop: Loop, _index: number, isSelected: boolean): React.R
   const prompt = loop.taskTemplate.prompt;
 
   return (
-    <Box key={loop.id} flexDirection="column">
+    <Box flexDirection="column">
       <TableRow
         selected={isSelected}
         cells={[
@@ -71,7 +71,7 @@ function renderTaskRow(task: Task, _index: number, isSelected: boolean): React.R
   const errorText = task.error instanceof Error ? task.error.message : undefined;
 
   return (
-    <Box key={task.id} flexDirection="column">
+    <Box flexDirection="column">
       <TableRow
         selected={isSelected}
         cells={[
@@ -98,7 +98,6 @@ function renderScheduleRow(schedule: Schedule, _index: number, isSelected: boole
 
   return (
     <TableRow
-      key={schedule.id}
       selected={isSelected}
       cells={[
         { text: schedule.status, width: 12 },
@@ -116,7 +115,6 @@ function renderOrchestrationRow(orch: Orchestration, _index: number, isSelected:
 
   return (
     <TableRow
-      key={orch.id}
       selected={isSelected}
       cells={[
         { text: orch.status, width: 12 },
@@ -161,6 +159,7 @@ export const MainView: React.FC<MainViewProps> = React.memo(({ data, nav }) => {
               scrollOffset={nav.scrollOffsets.loops}
               viewportHeight={PANEL_VIEWPORT_HEIGHT}
               renderItem={renderLoopRow}
+              keyExtractor={(item) => item.id}
             />
           )}
         </Panel>
@@ -180,6 +179,7 @@ export const MainView: React.FC<MainViewProps> = React.memo(({ data, nav }) => {
               scrollOffset={nav.scrollOffsets.tasks}
               viewportHeight={PANEL_VIEWPORT_HEIGHT}
               renderItem={renderTaskRow}
+              keyExtractor={(item) => item.id}
             />
           )}
         </Panel>
@@ -202,6 +202,7 @@ export const MainView: React.FC<MainViewProps> = React.memo(({ data, nav }) => {
               scrollOffset={nav.scrollOffsets.schedules}
               viewportHeight={PANEL_VIEWPORT_HEIGHT}
               renderItem={renderScheduleRow}
+              keyExtractor={(item) => item.id}
             />
           )}
         </Panel>
@@ -221,6 +222,7 @@ export const MainView: React.FC<MainViewProps> = React.memo(({ data, nav }) => {
               scrollOffset={nav.scrollOffsets.orchestrations}
               viewportHeight={PANEL_VIEWPORT_HEIGHT}
               renderItem={renderOrchestrationRow}
+              keyExtractor={(item) => item.id}
             />
           )}
         </Panel>

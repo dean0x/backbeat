@@ -12,6 +12,8 @@ interface ScrollableListProps<T> {
   readonly scrollOffset: number;
   readonly viewportHeight: number;
   readonly renderItem: (item: T, index: number, isSelected: boolean) => React.ReactNode;
+  /** Optional stable key extractor — prevents remount when scroll offset shifts */
+  readonly keyExtractor?: (item: T, index: number) => string;
 }
 
 // Generic component with forwardRef pattern — use a typed wrapper instead
@@ -21,6 +23,7 @@ function ScrollableListInner<T>({
   scrollOffset,
   viewportHeight,
   renderItem,
+  keyExtractor,
 }: ScrollableListProps<T>): React.ReactElement {
   const hasScrollUp = scrollOffset > 0;
   const hasScrollDown = scrollOffset + viewportHeight < items.length;
@@ -38,7 +41,7 @@ function ScrollableListInner<T>({
         const absoluteIndex = scrollOffset + idx;
         const isSelected = absoluteIndex === selectedIndex;
         return (
-          <Box key={absoluteIndex} flexDirection="row">
+          <Box key={keyExtractor ? keyExtractor(item, absoluteIndex) : absoluteIndex} flexDirection="row">
             {renderItem(item, absoluteIndex, isSelected)}
           </Box>
         );
