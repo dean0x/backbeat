@@ -73,7 +73,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({ version, data, refres
         <Box paddingX={1}>
           <Text color="yellow" dimColor>
             {'⚠ DB error: '}
-            {error}
+            {error.length > 80 ? `${error.slice(0, 77)}...` : error}
             {', showing cached data'}
           </Text>
         </Box>
