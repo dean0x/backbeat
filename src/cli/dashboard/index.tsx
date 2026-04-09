@@ -4,11 +4,17 @@
  * Renders to stderr (process.stderr) so stdout remains usable for piping
  */
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import ansiEscapes from 'ansi-escapes';
 import { render } from 'ink';
 import React from 'react';
 import { createReadOnlyContext } from '../read-only-context.js';
 import { App } from './app.js';
+
+const MIN_COLS = 80;
+const MIN_ROWS = 20;
 
 /**
  * Start the interactive terminal dashboard.
@@ -20,6 +26,19 @@ export async function startDashboard(): Promise<void> {
     process.stderr.write('Error: beat dashboard requires an interactive terminal (TTY)\n');
     process.exit(1);
   }
+
+  // Terminal size guard — 4-panel grid needs reasonable dimensions
+  const cols = process.stderr.columns ?? 0;
+  const rows = process.stderr.rows ?? 0;
+  if (cols < MIN_COLS || rows < MIN_ROWS) {
+    process.stderr.write(`Error: Terminal too small (need ${MIN_COLS}×${MIN_ROWS}, have ${cols}×${rows})\n`);
+    process.exit(1);
+  }
+
+  // Read version from package.json
+  const dirname = path.dirname(fileURLToPath(import.meta.url));
+  const pkg = JSON.parse(readFileSync(path.join(dirname, '..', '..', '..', 'package.json'), 'utf-8'));
+  const version: string = (pkg as { version?: string }).version ?? '0.0.0';
 
   const ctxResult = createReadOnlyContext();
   if (!ctxResult.ok) {
@@ -68,7 +87,7 @@ export async function startDashboard(): Promise<void> {
     process.exit(1);
   });
 
-  const instance = render(<App ctx={ctx} />, {
+  const instance = render(<App ctx={ctx} version={version} />, {
     stdout: process.stderr,
     patchConsole: false,
   });

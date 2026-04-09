@@ -17,6 +17,7 @@ import { MainView } from './views/main-view.js';
 
 interface AppProps {
   readonly ctx: ReadOnlyContext;
+  readonly version: string;
 }
 
 /** Initial navigation state — focus on loops panel, no selection, no filters */
@@ -31,7 +32,7 @@ const INITIAL_NAV: NavState = {
  * Root dashboard component.
  * Renders to stderr via the render() call in index.tsx.
  */
-export const App: React.FC<AppProps> = React.memo(({ ctx }) => {
+export const App: React.FC<AppProps> = React.memo(({ ctx, version }) => {
   const { exit } = useApp();
 
   const [view, setView] = useState<ViewState>({ kind: 'main' });
@@ -51,7 +52,7 @@ export const App: React.FC<AppProps> = React.memo(({ ctx }) => {
 
   return (
     <Box flexDirection="column" width="100%">
-      <Header data={data} refreshedAt={refreshedAt} error={error} />
+      <Header version={version} data={data} refreshedAt={refreshedAt} error={error} />
       {view.kind === 'main' ? (
         <MainView data={data} nav={nav} />
       ) : (

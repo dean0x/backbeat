@@ -8,6 +8,7 @@ import React from 'react';
 import type { DashboardData } from '../types.js';
 
 interface HeaderProps {
+  readonly version: string;
   readonly data: DashboardData | null;
   readonly refreshedAt: Date | null;
   readonly error: string | null;
@@ -51,7 +52,7 @@ function formatTime(date: Date): string {
   return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
-export const Header: React.FC<HeaderProps> = React.memo(({ data, refreshedAt, error }) => {
+export const Header: React.FC<HeaderProps> = React.memo(({ version, data, refreshedAt, error }) => {
   const healthSummary = data !== null ? buildHealthSummary(data) : '—';
   const timestamp = refreshedAt !== null ? formatTime(refreshedAt) : '—';
 
@@ -59,7 +60,8 @@ export const Header: React.FC<HeaderProps> = React.memo(({ data, refreshedAt, er
     <Box flexDirection="column">
       <Box flexDirection="row" justifyContent="space-between" paddingX={1}>
         <Text color="cyan" bold>
-          Autobeat
+          {'Autobeat v'}
+          {version}
         </Text>
         <Text>{healthSummary}</Text>
         <Box flexDirection="row" gap={2}>
