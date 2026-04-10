@@ -278,6 +278,17 @@ export class InMemoryEventBus implements EventBus {
   }
 
   /**
+   * DECISION (2026-04-10): Public read-only introspection of subscription counts.
+   * Supports the bootstrap defensive guard and handler-wiring integration test.
+   *
+   * Returns the number of direct subscribers for a specific event type.
+   * Does NOT count global (subscribeAll) handlers — only type-specific ones.
+   */
+  getSubscriberCount(type: string): number {
+    return this.handlers.get(type)?.length ?? 0;
+  }
+
+  /**
    * Get current subscription statistics
    */
   getStats(): { eventTypes: number; totalHandlers: number; globalHandlers: number } {

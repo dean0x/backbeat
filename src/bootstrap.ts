@@ -37,6 +37,10 @@ import { err, ok, Result } from './core/result.js';
  * - 'server': All subsystems (MCP daemon — recovery, executor, monitoring)
  * - 'cli': Skip executor + recovery (mutation commands: cancel, retry, schedule ops)
  * - 'run': Skip executor + monitoring (single-task `beat run` with crash recovery)
+ *
+ * DECISION (2026-04-10): Handler subscription is mode-independent. Event handlers
+ * are subscribed at bootstrap time regardless of which service is resolved by the
+ * caller. All modes (server, cli, run) get the same handler wiring.
  */
 export type BootstrapMode = 'server' | 'cli' | 'run';
 
@@ -385,10 +389,57 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
     });
   });
 
-  // Register task manager
-  container.registerSingleton('taskManager', async () => {
+  // ============================================================================
+  // DECISION (2026-04-10): Eager subscription. Handler setup MUST run at bootstrap
+  // time, not as a side effect of resolving taskManager. Otherwise CLI commands
+  // resolving non-taskManager services (e.g., orchestrationService from
+  // `beat orchestrate --foreground`) leave the EventBus with zero subscribers,
+  // causing emit-based persistence to silently fail (LoopCreated → FK constraint).
+  // See bootstrap-handler-wiring.test.ts.
+  // ============================================================================
+  const depsResult = extractHandlerDependencies(container);
+  if (!depsResult.ok) return depsResult;
+
+  const setupResult = await setupEventHandlers(depsResult.value);
+  if (!setupResult.ok) return setupResult;
+
+  // Register handlers in container for shutdown/lifecycle access
+  container.registerValue('handlerRegistry', setupResult.value.registry);
+  container.registerValue('dependencyHandler', setupResult.value.dependencyHandler);
+  container.registerValue('scheduleHandler', setupResult.value.scheduleHandler);
+  container.registerValue('checkpointHandler', setupResult.value.checkpointHandler);
+  container.registerValue('loopHandler', setupResult.value.loopHandler);
+  // orchestrationHandler was previously returned from setupEventHandlers but never
+  // registered — included here to fix the pre-existing oversight.
+  if (setupResult.value.orchestrationHandler) {
+    container.registerValue('orchestrationHandler', setupResult.value.orchestrationHandler);
+  }
+
+  // Defensive sanity check: assert critical event subscriptions exist.
+  // If this fails, the handler wiring code is broken — surface immediately.
+  {
+    const eventBusResult = container.get<InMemoryEventBus>('eventBus');
+    if (eventBusResult.ok) {
+      const eventBus = eventBusResult.value;
+      const criticalEvents: Array<string> = ['LoopCreated', 'TaskQueued', 'LoopCompleted'];
+      for (const eventType of criticalEvents) {
+        if (eventBus.getSubscriberCount(eventType) === 0) {
+          return err(
+            new AutobeatError(
+              ErrorCode.SYSTEM_ERROR,
+              `Bootstrap sanity check failed: no subscribers for ${eventType}. Event handler setup is likely broken.`,
+              { eventType },
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  // Register task manager (synchronous construction only — handlers already wired above)
+  container.registerSingleton('taskManager', () => {
     // ARCHITECTURE: Hybrid TaskManager - commands via events, queries via direct repo
-    const taskManager = new TaskManagerService({
+    return new TaskManagerService({
       eventBus: getFromContainer<EventBus>(container, 'eventBus'),
       logger: getFromContainer<Logger>(container, 'logger').child({ module: 'TaskManager' }),
       config, // Pass complete config - no partial objects needed
@@ -397,31 +448,13 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
       outputRepository: getFromContainer<OutputRepository>(container, 'outputRepository'),
       checkpointRepo: getFromContainer<CheckpointRepository>(container, 'checkpointRepository'),
     });
-
-    // Wire up event handlers using centralized handler setup
-    // ARCHITECTURE: Handler creation extracted to handler-setup.ts for maintainability
-    // This enables easy addition of new handlers in v0.4.0 (Task Resumption, Scheduling)
-    const depsResult = extractHandlerDependencies(container);
-    if (!depsResult.ok) return depsResult;
-
-    const setupResult = await setupEventHandlers(depsResult.value);
-    if (!setupResult.ok) return setupResult;
-
-    // Store registry and handlers for shutdown access
-    container.registerValue('handlerRegistry', setupResult.value.registry);
-    container.registerValue('dependencyHandler', setupResult.value.dependencyHandler);
-    container.registerValue('scheduleHandler', setupResult.value.scheduleHandler);
-    container.registerValue('checkpointHandler', setupResult.value.checkpointHandler);
-    container.registerValue('loopHandler', setupResult.value.loopHandler);
-
-    return taskManager;
   });
 
   // Register MCP adapter
-  container.registerSingleton('mcpAdapter', async () => {
-    const taskManagerResult = await container.resolve<TaskManager>('taskManager');
+  container.registerSingleton('mcpAdapter', () => {
+    const taskManagerResult = container.get<TaskManager>('taskManager');
     if (!taskManagerResult.ok) {
-      throw new Error(`Failed to resolve taskManager for MCPAdapter: ${taskManagerResult.error.message}`);
+      throw new Error(`Failed to get taskManager for MCPAdapter: ${taskManagerResult.error.message}`);
     }
 
     return new MCPAdapter({
