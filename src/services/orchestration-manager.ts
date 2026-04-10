@@ -5,12 +5,14 @@
  * Rationale: Enables orchestration operations from MCP, CLI, or any future adapter
  */
 
-import { mkdirSync } from 'fs';
+import { mkdirSync, unlinkSync } from 'fs';
+import os from 'os';
 import path from 'path';
 import { resolveDefaultAgent } from '../core/agents.js';
 import type { Configuration } from '../core/configuration.js';
 import {
   createOrchestration,
+  LoopId,
   LoopStrategy,
   type Orchestration,
   type OrchestratorCreateRequest,
@@ -56,6 +58,14 @@ export class OrchestrationManagerService implements OrchestrationService {
   }
 
   async createOrchestration(request: OrchestratorCreateRequest): Promise<Result<Orchestration>> {
+    // ========================================================================
+    // DECISION (2026-04-10): Compensation pattern (keep original 3-step order,
+    // mark FAILED on error) instead of inverted ordering. Inverted ordering had
+    // a race where the loop's first iteration could complete before the orch row
+    // was saved, leaving OrchestrationHandler.handleLoopCompleted unable to find
+    // the row via findByLoopId.
+    // ========================================================================
+
     // ========================================================================
     // Input validation
     // ========================================================================
@@ -121,20 +131,76 @@ export class OrchestrationManagerService implements OrchestrationService {
       );
     }
 
+    // Path-validated file cleanup helper — prevents traversal attacks
+    // (pattern reused from orchestration-repository.ts:cleanupOldOrchestrations)
+    const expectedDir = path.resolve(path.join(os.homedir(), '.autobeat', 'orchestrator-state'));
+    const isWithinStateDir = (filePath: string): boolean => {
+      const resolved = path.resolve(filePath);
+      return resolved.startsWith(expectedDir + path.sep);
+    };
+    const cleanupFiles = (): void => {
+      for (const filePath of [stateFilePath, exitConditionScript]) {
+        if (isWithinStateDir(filePath)) {
+          try {
+            unlinkSync(filePath);
+          } catch {
+            // Best-effort — orphan files are harmless
+          }
+        }
+      }
+    };
+
     // ========================================================================
-    // Create orchestration domain object
+    // Create orchestration domain object (PLANNING, loopId=undefined)
     // ========================================================================
 
     const orchestration = createOrchestration({ ...request, agent }, stateFilePath, validatedWorkingDirectory);
 
-    // Persist orchestration
+    // Persist orchestration row
     const saveResult = await this.orchestrationRepo.save(orchestration);
     if (!saveResult.ok) {
       this.logger.error('Failed to save orchestration', saveResult.error, {
         orchestratorId: orchestration.id,
       });
+      cleanupFiles();
       return err(saveResult.error);
     }
+
+    // ========================================================================
+    // Compensation helper: soft-delete (mark FAILED) for failures after the orch row exists.
+    //
+    // DECISION (2026-04-10): SOFT delete (mark FAILED) instead of hard delete.
+    // Preserves audit trail in dashboard so users see what failed and can use
+    // the manual cleanup keybindings (c/d) to remove rows when ready.
+    // ========================================================================
+    const compensate = async (reason: string, loopIdToCancel?: LoopId): Promise<void> => {
+      this.logger.warn('Compensating failed orchestration create', {
+        orchestratorId: orchestration.id,
+        reason,
+      });
+      if (loopIdToCancel) {
+        const cancelResult = await this.loopService.cancelLoop(loopIdToCancel, reason, true);
+        if (!cancelResult.ok) {
+          this.logger.warn('Compensation cancelLoop failed (loop will surface as zombie in recovery)', {
+            loopId: loopIdToCancel,
+            error: cancelResult.error.message,
+          });
+        }
+      }
+      // Soft delete: mark FAILED rather than removing the row.
+      const failed = updateOrchestration(orchestration, {
+        status: OrchestratorStatus.FAILED,
+        completedAt: Date.now(),
+      });
+      const updateResult = await this.orchestrationRepo.update(failed);
+      if (!updateResult.ok) {
+        this.logger.warn('Compensation update failed', {
+          orchestratorId: orchestration.id,
+          error: updateResult.error.message,
+        });
+      }
+      cleanupFiles();
+    };
 
     // ========================================================================
     // Build prompt and create loop
@@ -146,6 +212,8 @@ export class OrchestrationManagerService implements OrchestrationService {
       workingDirectory: validatedWorkingDirectory,
       maxDepth: orchestration.maxDepth,
       maxWorkers: orchestration.maxWorkers,
+      agent,
+      model: orchestration.model,
     });
 
     const loopResult = await this.loopService.createLoop({
@@ -164,11 +232,16 @@ export class OrchestrationManagerService implements OrchestrationService {
       this.logger.error('Failed to create orchestrator loop', loopResult.error, {
         orchestratorId: orchestration.id,
       });
+      await compensate('loop creation failed');
       return err(loopResult.error);
     }
 
     // ========================================================================
-    // Update orchestration with loop ID and set to RUNNING
+    // Update orchestration with loop ID and set to RUNNING (conditional)
+    //
+    // DECISION (2026-04-10): Conditional UPDATE (status='planning' clause) prevents
+    // a race where a fast user could cancel via the dashboard between save and update,
+    // having their CANCELLED clobbered with RUNNING.
     // ========================================================================
 
     const updatedOrchestration = updateOrchestration(orchestration, {
@@ -176,13 +249,28 @@ export class OrchestrationManagerService implements OrchestrationService {
       status: OrchestratorStatus.RUNNING,
     });
 
-    const updateResult = await this.orchestrationRepo.update(updatedOrchestration);
+    const updateResult = await this.orchestrationRepo.updateIfStatus(updatedOrchestration, OrchestratorStatus.PLANNING);
     if (!updateResult.ok) {
       this.logger.error('Failed to update orchestration with loop ID', updateResult.error, {
         orchestratorId: orchestration.id,
         loopId: loopResult.value.id,
       });
+      await compensate('orchestration update failed', loopResult.value.id);
       return err(updateResult.error);
+    }
+    if (!updateResult.value) {
+      // Status changed out from under us (user cancelled via dashboard between save and update)
+      this.logger.info('Orchestration was cancelled during create flow — cleaning up loop', {
+        orchestratorId: orchestration.id,
+        loopId: loopResult.value.id,
+      });
+      await this.loopService.cancelLoop(loopResult.value.id, 'Orchestration cancelled during create', true);
+      cleanupFiles();
+      return err(
+        new AutobeatError(ErrorCode.INVALID_OPERATION, 'Orchestration was cancelled before create completed', {
+          orchestratorId: orchestration.id,
+        }),
+      );
     }
 
     // Emit event

@@ -71,6 +71,7 @@ export class SQLiteOrchestrationRepository implements OrchestrationRepository, S
   private readonly findAllPaginatedStmt: SQLite.Statement;
   private readonly findByStatusPaginatedStmt: SQLite.Statement;
   private readonly findByLoopIdStmt: SQLite.Statement;
+  private readonly updateIfStatusStmt: SQLite.Statement;
   private readonly deleteStmt: SQLite.Statement;
   private readonly cleanupStmt: SQLite.Statement;
   private readonly countByStatusStmt: SQLite.Statement;
@@ -123,6 +124,23 @@ export class SQLiteOrchestrationRepository implements OrchestrationRepository, S
       SELECT * FROM orchestrations WHERE loop_id = ?
     `);
 
+    this.updateIfStatusStmt = this.db.prepare(`
+      UPDATE orchestrations SET
+        goal = @goal,
+        loop_id = @loopId,
+        state_file_path = @stateFilePath,
+        working_directory = @workingDirectory,
+        agent = @agent,
+        model = @model,
+        max_depth = @maxDepth,
+        max_workers = @maxWorkers,
+        max_iterations = @maxIterations,
+        status = @status,
+        updated_at = @updatedAt,
+        completed_at = @completedAt
+      WHERE id = @id AND status = @expectedStatus
+    `);
+
     this.deleteStmt = this.db.prepare(`
       DELETE FROM orchestrations WHERE id = ?
     `);
@@ -157,6 +175,23 @@ export class SQLiteOrchestrationRepository implements OrchestrationRepository, S
         this.updateStmt.run(this.toRow(orchestration));
       },
       operationErrorHandler('update orchestration', { orchestratorId: orchestration.id }),
+    );
+  }
+
+  /**
+   * DECISION (2026-04-10): Conditional UPDATE used by createOrchestration to prevent
+   * a race where dashboard cancellation and the in-flight create flow's
+   * PLANNING→RUNNING transition could clobber each other.
+   * Returns ok(true) if the row was updated, ok(false) if the status no longer matches.
+   */
+  async updateIfStatus(orchestration: Orchestration, expectedStatus: OrchestratorStatus): Promise<Result<boolean>> {
+    return tryCatchAsync(
+      async () => {
+        const row = { ...this.toRow(orchestration), expectedStatus };
+        const info = this.updateIfStatusStmt.run(row);
+        return info.changes > 0;
+      },
+      operationErrorHandler('updateIfStatus orchestration', { orchestratorId: orchestration.id }),
     );
   }
 

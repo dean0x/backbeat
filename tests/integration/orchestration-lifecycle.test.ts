@@ -146,6 +146,64 @@ describe('Orchestration Lifecycle - Integration Tests', () => {
     });
   });
 
+  describe('Compensation on createOrchestration failure', () => {
+    it('happy path: orch ends RUNNING with loopId set and loop persisted', async () => {
+      const result = await orchService.createOrchestration({
+        goal: 'Happy path test',
+        maxWorkers: 2,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const orch = result.value;
+      expect(orch.status).toBe(OrchestratorStatus.RUNNING);
+      expect(orch.loopId).toBeDefined();
+
+      // Loop should be persisted
+      const loopResult = await loopRepo.findById(orch.loopId!);
+      expect(loopResult.ok).toBe(true);
+      if (!loopResult.ok) return;
+      expect(loopResult.value).not.toBeNull();
+
+      // State file should exist
+      expect(existsSync(orch.stateFilePath)).toBe(true);
+      if (orch.stateFilePath) createdStateFiles.push(orch.stateFilePath);
+    });
+
+    it('loop creation fails: orch row marked FAILED, state file removed', async () => {
+      // Make loopService.createLoop fail by making the eventBus fail on LoopCreated
+      // Remove the LoopCreated subscriber from the TestEventBus (it was added in beforeEach)
+      // and replace with one that returns err
+      eventBus.setEmitFailure('LoopCreated', true);
+
+      const result = await orchService.createOrchestration({
+        goal: 'Will fail during loop creation',
+      });
+
+      // Should fail
+      expect(result.ok).toBe(false);
+
+      // Orch row should exist with FAILED status (compensation preserved the row)
+      // Find by listing all orchestrations (no direct query by goal here)
+      // We need to find it somehow — check if there's any orchestration in FAILED state
+      const failedResult = await orchRepo.findByStatus(OrchestratorStatus.FAILED);
+      expect(failedResult.ok).toBe(true);
+      if (!failedResult.ok) return;
+      expect(failedResult.value.length).toBeGreaterThan(0);
+
+      const failedOrch = failedResult.value[0];
+      expect(failedOrch).toBeDefined();
+      if (!failedOrch) return;
+
+      // State file should NOT exist (compensation cleaned it up)
+      expect(existsSync(failedOrch.stateFilePath)).toBe(false);
+
+      // Reset for cleanup
+      eventBus.setEmitFailure('LoopCreated', false);
+    });
+  });
+
   describe('Cleanup old orchestrations', () => {
     it('should cleanup terminal orchestrations older than retention', async () => {
       // Create and complete an orchestration

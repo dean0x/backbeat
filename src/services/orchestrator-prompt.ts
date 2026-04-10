@@ -4,12 +4,22 @@
  * Pattern: No side effects, fully parameterized — easy to test
  */
 
+/**
+ * DECISION (2026-04-10): The prompt receives agent and model so it can tell the
+ * orchestrator to delegate workers with the SAME --agent and --model flags. Without
+ * this, the orchestrator's workers spawn under the system default, causing inconsistent
+ * behavior across the orchestration tree (e.g., orchestrator on codex, workers on claude).
+ */
 export interface OrchestratorPromptParams {
   readonly goal: string;
   readonly stateFilePath: string;
   readonly workingDirectory: string;
   readonly maxDepth: number;
   readonly maxWorkers: number;
+  /** Agent provider to thread through to worker delegation commands */
+  readonly agent?: string;
+  /** Model to thread through to worker delegation commands */
+  readonly model?: string;
 }
 
 /**

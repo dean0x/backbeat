@@ -730,6 +730,13 @@ export interface ExitConditionEvaluator {
 export interface OrchestrationRepository {
   save(orchestration: Orchestration): Promise<Result<void>>;
   update(orchestration: Orchestration): Promise<Result<void>>;
+  /**
+   * DECISION (2026-04-10): Conditional UPDATE used by createOrchestration to prevent
+   * a race where dashboard cancellation and the in-flight create flow's
+   * PLANNING→RUNNING transition could clobber each other.
+   * Returns ok(true) if the row was updated, ok(false) if the status no longer matches.
+   */
+  updateIfStatus(orchestration: Orchestration, expectedStatus: OrchestratorStatus): Promise<Result<boolean>>;
   findById(id: OrchestratorId): Promise<Result<Orchestration | null>>;
   findAll(limit?: number, offset?: number): Promise<Result<readonly Orchestration[]>>;
   findByStatus(status: OrchestratorStatus, limit?: number, offset?: number): Promise<Result<readonly Orchestration[]>>;
