@@ -3,8 +3,8 @@
  * Tests behavior: viewport clipping, scroll indicators, selection state.
  */
 
-import { render } from 'ink-testing-library';
 import { Text } from 'ink';
+import { render } from 'ink-testing-library';
 import React from 'react';
 import { describe, expect, it } from 'vitest';
 import { ScrollableList } from '../../../../src/cli/dashboard/components/scrollable-list.js';
@@ -34,9 +34,7 @@ function renderList(options: {
       scrollOffset={scrollOffset}
       viewportHeight={viewportHeight}
       truncationNotice={truncationNotice}
-      renderItem={(item, _index, isSelected) => (
-        <Text>{isSelected ? `> ${item.label}` : `  ${item.label}`}</Text>
-      )}
+      renderItem={(item, _index, isSelected) => <Text>{isSelected ? `> ${item.label}` : `  ${item.label}`}</Text>}
     />,
   );
   return lastFrame() ?? '';
@@ -186,7 +184,12 @@ describe('ScrollableList truncation notice', () => {
     // 10 items overflow viewport of 5, AND truncationNotice signals DB has more
     // effectiveHeight = 4 (1 slot for indicator), 6 items below viewport
     const items = makeItems(10);
-    const frame = renderList({ items, viewportHeight: 5, scrollOffset: 0, truncationNotice: 'showing 5 of 15 running' });
+    const frame = renderList({
+      items,
+      viewportHeight: 5,
+      scrollOffset: 0,
+      truncationNotice: 'showing 5 of 15 running',
+    });
     expect(frame).toContain('↓ 6 more · showing 5 of 15 running');
   });
 

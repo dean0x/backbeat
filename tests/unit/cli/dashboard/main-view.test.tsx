@@ -281,7 +281,11 @@ describe('MainView', () => {
   describe('truncation notice', () => {
     it('shows "showing N of M" when loop items count is less than total', () => {
       // 3 loops fetched, but total is 75 — truncation should be visible
-      const loops = [makeLoop({ id: 'loop-1' as Loop['id'] }), makeLoop({ id: 'loop-2' as Loop['id'] }), makeLoop({ id: 'loop-3' as Loop['id'] })];
+      const loops = [
+        makeLoop({ id: 'loop-1' as Loop['id'] }),
+        makeLoop({ id: 'loop-2' as Loop['id'] }),
+        makeLoop({ id: 'loop-3' as Loop['id'] }),
+      ];
       const data = makeDashboardData({
         loops,
         loopCounts: { total: 75, byStatus: { running: 75 } },

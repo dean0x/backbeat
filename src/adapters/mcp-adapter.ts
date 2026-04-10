@@ -62,7 +62,12 @@ const DelegateTaskSchema = z.object({
     .enum(AGENT_PROVIDERS_TUPLE)
     .optional()
     .describe('AI agent to execute the task (uses configured default if omitted)'),
-  model: z.string().min(1).max(200).optional().describe('Model override for this task (overrides agent-config default)'),
+  model: z
+    .string()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe('Model override for this task (overrides agent-config default)'),
 });
 
 const TaskStatusSchema = z.object({
@@ -108,7 +113,12 @@ const ScheduleTaskSchema = z.object({
     .enum(AGENT_PROVIDERS_TUPLE)
     .optional()
     .describe('AI agent to execute the task (uses configured default if omitted)'),
-  model: z.string().min(1).max(200).optional().describe('Model override for this task (overrides agent-config default)'),
+  model: z
+    .string()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe('Model override for this task (overrides agent-config default)'),
 });
 
 const ListSchedulesSchema = z.object({
@@ -167,12 +177,7 @@ const CreatePipelineSchema = z.object({
     .enum(AGENT_PROVIDERS_TUPLE)
     .optional()
     .describe('Default agent for all steps (individual steps can override)'),
-  model: z
-    .string()
-    .min(1)
-    .max(200)
-    .optional()
-    .describe('Default model for all steps (individual steps can override)'),
+  model: z.string().min(1).max(200).optional().describe('Default model for all steps (individual steps can override)'),
 });
 
 const SchedulePipelineSchema = z.object({
@@ -206,12 +211,7 @@ const SchedulePipelineSchema = z.object({
     .enum(AGENT_PROVIDERS_TUPLE)
     .optional()
     .describe('Default agent for all steps (individual steps can override)'),
-  model: z
-    .string()
-    .min(1)
-    .max(200)
-    .optional()
-    .describe('Default model for all steps (individual steps can override)'),
+  model: z.string().min(1).max(200).optional().describe('Default model for all steps (individual steps can override)'),
 });
 
 // Orchestrator-related Zod schemas (v0.9.0 Orchestrator Mode)
@@ -219,7 +219,12 @@ const CreateOrchestratorSchema = z.object({
   goal: z.string().min(1).max(8000).describe('High-level goal for the orchestrator to achieve'),
   workingDirectory: z.string().optional().describe('Working directory for workers (absolute path)'),
   agent: z.enum(AGENT_PROVIDERS_TUPLE).optional().describe('AI agent for the orchestrator loop'),
-  model: z.string().min(1).max(200).optional().describe('Model override for the orchestrator (overrides agent-config default)'),
+  model: z
+    .string()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe('Model override for the orchestrator (overrides agent-config default)'),
   maxDepth: z.number().min(1).max(10).optional().default(3).describe('Max delegation depth'),
   maxWorkers: z.number().min(1).max(20).optional().default(5).describe('Max concurrent workers'),
   maxIterations: z.number().min(1).max(200).optional().default(50).describe('Max orchestrator iterations'),
@@ -297,7 +302,12 @@ const CreateLoopSchema = z.object({
     .describe('Pipeline step prompts (creates pipeline loop)'),
   priority: z.enum(['P0', 'P1', 'P2']).optional().describe('Task priority'),
   agent: z.enum(AGENT_PROVIDERS_TUPLE).optional().describe('Agent provider'),
-  model: z.string().min(1).max(200).optional().describe('Model override for each iteration task (overrides agent-config default)'),
+  model: z
+    .string()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe('Model override for each iteration task (overrides agent-config default)'),
   gitBranch: z.string().optional().describe('Git branch name for loop iteration work'),
 });
 
@@ -359,7 +369,12 @@ const ScheduleLoopSchema = z.object({
   gitBranch: z.string().optional().describe('Git branch name for loop iteration work'),
   priority: z.enum(['P0', 'P1', 'P2']).optional().describe('Task priority'),
   agent: z.enum(AGENT_PROVIDERS_TUPLE).optional().describe('Agent provider'),
-  model: z.string().min(1).max(200).optional().describe('Model override for each iteration task (overrides agent-config default)'),
+  model: z
+    .string()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe('Model override for each iteration task (overrides agent-config default)'),
   // Schedule fields
   scheduleType: z.enum(['cron', 'one_time']).describe('Schedule type'),
   cronExpression: z.string().optional().describe('Cron expression (5-field) for recurring loops'),
@@ -1266,7 +1281,12 @@ export class MCPAdapter {
                   gitBranch: { type: 'string', description: 'Git branch name for loop iteration work' },
                   priority: { type: 'string', enum: ['P0', 'P1', 'P2'] },
                   agent: { type: 'string', enum: [...AGENT_PROVIDERS] },
-                  model: { type: 'string', description: 'Model override for each iteration task (overrides agent-config default)', minLength: 1, maxLength: 200 },
+                  model: {
+                    type: 'string',
+                    description: 'Model override for each iteration task (overrides agent-config default)',
+                    minLength: 1,
+                    maxLength: 200,
+                  },
                   scheduleType: { type: 'string', enum: ['cron', 'one_time'] },
                   cronExpression: { type: 'string', description: 'Cron expression (5-field)' },
                   scheduledAt: { type: 'string', description: 'ISO 8601 datetime for one-time loops' },
@@ -2942,7 +2962,11 @@ export class MCPAdapter {
    * Login-based auth does not work with a custom baseUrl, so the setting will be silently
    * ignored. Returns undefined for all other providers or when the condition is not met.
    */
-  private getClaudeBaseUrlWarning(provider: string, baseUrl: string | undefined, apiKey: string | undefined): string | undefined {
+  private getClaudeBaseUrlWarning(
+    provider: string,
+    baseUrl: string | undefined,
+    apiKey: string | undefined,
+  ): string | undefined {
     if (provider === 'claude' && baseUrl && !apiKey) {
       return 'Warning: Claude requires an API key when using a custom baseUrl. The base URL will be ignored with login-based auth.';
     }
@@ -3036,17 +3060,32 @@ export class MCPAdapter {
 
         if (apiKey) {
           const result = saveAgentConfig(agent, 'apiKey', apiKey);
-          attempts.push({ key: 'apiKey', label: `API key stored (${maskApiKey(apiKey)})`, ok: result.ok, error: result.ok ? undefined : result.error });
+          attempts.push({
+            key: 'apiKey',
+            label: `API key stored (${maskApiKey(apiKey)})`,
+            ok: result.ok,
+            error: result.ok ? undefined : result.error,
+          });
         }
 
         if (baseUrl !== undefined) {
           const result = saveAgentConfig(agent, 'baseUrl', baseUrl);
-          attempts.push({ key: 'baseUrl', label: `baseUrl set to ${baseUrl}`, ok: result.ok, error: result.ok ? undefined : result.error });
+          attempts.push({
+            key: 'baseUrl',
+            label: `baseUrl set to ${baseUrl}`,
+            ok: result.ok,
+            error: result.ok ? undefined : result.error,
+          });
         }
 
         if (model !== undefined) {
           const result = saveAgentConfig(agent, 'model', model);
-          attempts.push({ key: 'model', label: `model set to ${model}`, ok: result.ok, error: result.ok ? undefined : result.error });
+          attempts.push({
+            key: 'model',
+            label: `model set to ${model}`,
+            ok: result.ok,
+            error: result.ok ? undefined : result.error,
+          });
         }
 
         const failed = attempts.filter((a) => !a.ok);

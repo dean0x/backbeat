@@ -35,8 +35,7 @@ interface MainViewProps {
 
 function renderLoopRow(loop: Loop, _index: number, isSelected: boolean): React.ReactNode {
   const iterProgress = formatRunProgress(loop.currentIteration, loop.maxIterations);
-  const scoreDisplay =
-    loop.bestScore !== undefined ? `${loop.bestScore.toFixed(2)} →` : '—';
+  const scoreDisplay = loop.bestScore !== undefined ? `${loop.bestScore.toFixed(2)} →` : '—';
   const prompt = loop.taskTemplate.prompt;
 
   return (
@@ -142,8 +141,7 @@ function computeTruncation(
   counts: EntityCounts | undefined,
   filterStatus: string | null,
 ): string | null {
-  const total =
-    filterStatus !== null ? (counts?.byStatus[filterStatus] ?? 0) : (counts?.total ?? 0);
+  const total = filterStatus !== null ? (counts?.byStatus[filterStatus] ?? 0) : (counts?.total ?? 0);
   return truncationNotice(displayedItems.length, total, filterStatus);
 }
 
@@ -168,9 +166,7 @@ export const MainView: React.FC<MainViewProps> = React.memo(({ data, nav }) => {
               entityName="loops"
               filterStatus={nav.filters.loops}
               totalForFilter={
-                nav.filters.loops !== null
-                  ? (data?.loopCounts.byStatus[nav.filters.loops] ?? 0)
-                  : undefined
+                nav.filters.loops !== null ? (data?.loopCounts.byStatus[nav.filters.loops] ?? 0) : undefined
               }
             />
           ) : (
@@ -197,9 +193,7 @@ export const MainView: React.FC<MainViewProps> = React.memo(({ data, nav }) => {
               entityName="tasks"
               filterStatus={nav.filters.tasks}
               totalForFilter={
-                nav.filters.tasks !== null
-                  ? (data?.taskCounts.byStatus[nav.filters.tasks] ?? 0)
-                  : undefined
+                nav.filters.tasks !== null ? (data?.taskCounts.byStatus[nav.filters.tasks] ?? 0) : undefined
               }
             />
           ) : (
@@ -229,9 +223,7 @@ export const MainView: React.FC<MainViewProps> = React.memo(({ data, nav }) => {
               entityName="schedules"
               filterStatus={nav.filters.schedules}
               totalForFilter={
-                nav.filters.schedules !== null
-                  ? (data?.scheduleCounts.byStatus[nav.filters.schedules] ?? 0)
-                  : undefined
+                nav.filters.schedules !== null ? (data?.scheduleCounts.byStatus[nav.filters.schedules] ?? 0) : undefined
               }
             />
           ) : (
@@ -271,7 +263,11 @@ export const MainView: React.FC<MainViewProps> = React.memo(({ data, nav }) => {
               viewportHeight={PANEL_VIEWPORT_HEIGHT}
               renderItem={renderOrchestrationRow}
               keyExtractor={(item) => item.id}
-              truncationNotice={computeTruncation(orchestrations, data?.orchestrationCounts, nav.filters.orchestrations)}
+              truncationNotice={computeTruncation(
+                orchestrations,
+                data?.orchestrationCounts,
+                nav.filters.orchestrations,
+              )}
             />
           )}
         </Panel>

@@ -74,36 +74,117 @@ See `docs/TASK-DEPENDENCIES.md` for usage patterns.
 
 ## Release Process
 
-### Pre-Release Checklist
+A mechanical, execution-ready recipe for cutting a release. Follow top-to-bottom.
 
-1. **Update version** in `package.json`:
-   ```bash
-   npm version patch --no-git-tag-version  # 0.3.0 → 0.3.1
-   npm version minor --no-git-tag-version  # 0.3.0 → 0.4.0
-   npm version major --no-git-tag-version  # 0.3.0 → 1.0.0
-   ```
+### 1. Version Decision Matrix
 
-2. **Create release notes** (REQUIRED):
-   ```bash
-   # Must match version in package.json
-   touch docs/releases/RELEASE_NOTES_v0.3.1.md
+| Bump | Example | When |
+|------|---------|------|
+| `patch` | 1.2.0 → 1.2.1 | Bug fixes only, no new user-facing behavior |
+| `minor` | 1.2.0 → 1.3.0 | Additive features, no breaking changes |
+| `major` | 1.2.0 → 2.0.0 | Breaking changes to APIs, CLI, config, or data format |
 
-   # Include: features, bug fixes, breaking changes, migration notes
-   ```
+### 2. Files to Update
 
-3. **Test everything**:
-   ```bash
-   npm run build
-   npm run test:all
-   ```
+| File | Required? | Note |
+|------|-----------|------|
+| `package.json` + `package-lock.json` | ✅ | Use `npm version <bump> --no-git-tag-version` (updates both atomically) |
+| `docs/releases/RELEASE_NOTES_v<version>.md` | ✅ | Release workflow hard-fails without it |
+| `CHANGELOG.md` | ✅ | Add `## [<version>] - <date>` entry under `[Unreleased]` (keep `[Unreleased]` as empty placeholder per Keep-a-Changelog) |
+| `docs/releases/RELEASE_NOTES.md` | ✅ | Update latest/previous lists |
+| `docs/FEATURES.md` | If new user-facing feature | Add `## ✅ <Feature> (v<version>)` section, update "Last Updated" header |
+| `docs/ROADMAP.md` | If feature advances roadmap | Update current status, add to Released Versions, remove delivered items from upcoming sections |
+| `README.md` | Only if pinned version references change | `grep 'autobeat@' README.md` first |
+| `CLAUDE.md` MCP tools list | Only if new MCP tools added | Check `src/adapters/mcp-adapter.ts` — existing tools with new params don't require updates |
+| `skills/autobeat/` | Only if skill files change | Rarely updated per release |
 
-### Release Workflow
+### 3. Release Notes Template
 
-1. **Merge version bump + release notes to main** via normal PR
-2. **Trigger release manually** from GitHub Actions → Release → Run workflow
-   - The workflow validates version is unpublished, checks release notes exist, runs tests, publishes to npm, creates git tag, and creates GitHub release
+Use `docs/releases/RELEASE_NOTES_v1.1.0.md` or `RELEASE_NOTES_v1.2.0.md` as canonical examples. Required sections:
 
-**Publishing is never automatic.** Merging a version bump to main does NOT publish. You must explicitly trigger the Release workflow.
+1. **Title**: `# Autobeat v<version> — <tagline>`
+2. **Feature sections** with code examples (CLI, MCP, config)
+3. **Architecture** notes (new modules, data flow)
+4. **Database** section listing any migrations
+5. **What's Changed Since v<prev>**: bulleted PR list with `#123` links
+6. **Migration Notes**: breaking changes, auto-applied migrations, user actions
+7. **Installation**: `npm install -g autobeat@<version>` + npx MCP snippet
+8. **Links**: npm, docs, issues
+
+### 4. Pre-Release Validation (Claude Code-safe)
+
+```bash
+npm run typecheck && npm run check && npm run build
+# Grouped tests — SAFE in Claude Code (npm test is BLOCKED by safeguard):
+npm run test:core && npm run test:handlers && npm run test:services && \
+  npm run test:repositories && npm run test:adapters && \
+  npm run test:implementations && npm run test:cli && \
+  npm run test:dashboard && npm run test:scheduling && \
+  npm run test:checkpoints && npm run test:error-scenarios && \
+  npm run test:orchestration && npm run test:integration
+```
+
+CI runs the full `npm run test:all` in the release workflow — do not attempt it from Claude Code.
+
+### 5. Snyk Scan (best-effort)
+
+Run `mcp__Snyk__snyk_code_scan` on `src/` with `severity_threshold: medium`.
+
+- **Quota / auth / rate-limit failure**: log and continue — do not block release
+- **High/Critical findings introduced by new code**: stop, fix, re-scan
+- **Medium/Low findings**: note in PR description; do not block
+
+Pre-existing findings in unchanged code paths are not regressions — continue.
+
+### 6. Commit / PR / Merge
+
+```bash
+git checkout -b release/v<version>
+# make all file edits above
+git add package.json package-lock.json CHANGELOG.md \
+        docs/releases/RELEASE_NOTES_v<version>.md \
+        docs/releases/RELEASE_NOTES.md \
+        docs/FEATURES.md docs/ROADMAP.md CLAUDE.md
+
+git commit -m "chore: release v<version> — <tagline>"
+git push -u origin release/v<version>
+
+gh pr create --title "chore: release v<version>" --body "..."
+```
+
+Merge: `gh pr merge --squash` (use `--admin` if branch protection blocks and no reviewer is available for a release PR).
+
+### 7. Trigger Release Workflow
+
+```bash
+git checkout main && git pull origin main
+gh workflow run release.yml --ref main
+
+# Poll for completion
+gh run watch $(gh run list --workflow=release.yml --branch=main --limit=1 --json databaseId --jq '.[0].databaseId')
+```
+
+### 8. Post-Release Verification
+
+```bash
+npm view autobeat version                    # must print <version>
+gh release view v<version>                   # must exist with notes
+git fetch --tags && git tag -l v<version>    # must exist locally
+gh run list --workflow=release.yml --limit=1 # must show status: completed/success
+```
+
+### 9. Gotchas
+
+- **Release workflow is `workflow_dispatch` only.** Merging to main does NOT publish. Publishing requires an explicit `gh workflow run release.yml --ref main`.
+- **`package.json` version must be bumped BEFORE triggering the workflow.** The workflow hard-fails if `npm view autobeat version` equals `package.json` version.
+- **Release notes file must exist** with exact name `RELEASE_NOTES_v<version>.md` in `docs/releases/` before triggering the workflow.
+- **`npm test` is BLOCKED in Claude Code** by a safeguard script. Use grouped suites (`test:core`, `test:handlers`, etc.). Full `test:all` runs in CI and the release workflow.
+- **Orphan published version recovery**: If the workflow fails between `npm publish` and `git tag` push, the npm version exists but the tag and GitHub release do not. Manual recovery:
+  ```bash
+  git tag v<version> && git push origin v<version>
+  gh release create v<version> --notes-file docs/releases/RELEASE_NOTES_v<version>.md
+  ```
+- **Branch protection on `main`**: Release PRs may require `gh pr merge --squash --admin` if no reviewer is available. Use sparingly and only for release chores.
 
 ## Project-Specific Guidelines
 

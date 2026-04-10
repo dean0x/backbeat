@@ -18,10 +18,13 @@
  * component re-renders before asserting.
  */
 
-import { render } from 'ink-testing-library';
 import { Box, Text } from 'ink';
+import { render } from 'ink-testing-library';
 import React, { useCallback, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import type { DashboardData, NavState, ViewState } from '../../../../src/cli/dashboard/types.js';
+import { useKeyboard } from '../../../../src/cli/dashboard/use-keyboard.js';
+import type { Loop, Orchestration, Schedule, Task } from '../../../../src/core/domain.js';
 import {
   LoopStatus,
   LoopStrategy,
@@ -30,9 +33,6 @@ import {
   ScheduleType,
   TaskStatus,
 } from '../../../../src/core/domain.js';
-import type { Loop, Orchestration, Schedule, Task } from '../../../../src/core/domain.js';
-import { useKeyboard } from '../../../../src/cli/dashboard/use-keyboard.js';
-import type { DashboardData, NavState, ViewState } from '../../../../src/cli/dashboard/types.js';
 
 // ============================================================================
 // Fixtures
@@ -127,7 +127,9 @@ function KeyboardWrapper({
     <Box flexDirection="column">
       <Text>view:{view.kind}</Text>
       {view.kind === 'detail' && (
-        <Text>detail-type:{view.entityType} detail-id:{view.entityId}</Text>
+        <Text>
+          detail-type:{view.entityType} detail-id:{view.entityId}
+        </Text>
       )}
       <Text>panel:{nav.focusedPanel}</Text>
       <Text>sel-loops:{nav.selectedIndices.loops}</Text>
@@ -148,12 +150,22 @@ function KeyboardWrapper({
  *
  * Ink dispatches state updates from useInput via React's scheduler (microtask
  * queue). We need to flush those updates before asserting on the rendered frame.
+ *
+ * CI-safe strategy: flush microtasks, then wait for a macrotask, then flush
+ * microtasks again. This ensures React's commit phase and ink's effect-based
+ * re-registration of useInput both complete before the next press. A 10ms
+ * timer is generous enough to cover ink's internal escape-sequence debounce
+ * on Linux CI runners while still keeping tests fast.
  */
 async function press(stdin: { write: (s: string) => void }, key: string): Promise<void> {
   stdin.write(key);
-  // Flush React scheduler's microtask queue, then give the reconciler one more
-  // tick to commit the work and trigger onRender.
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  // Flush microtasks (React scheduler)
+  await Promise.resolve();
+  // Macrotask — allows useEffect and ink's internal scheduling to run.
+  // 10ms covers ink's escape-sequence debounce on Linux CI runners.
+  await new Promise<void>((resolve) => setTimeout(resolve, 10));
+  // Flush any microtasks queued during the macrotask
+  await Promise.resolve();
 }
 
 // ============================================================================
@@ -210,9 +222,7 @@ describe('useKeyboard — panel jump keys', () => {
   });
 
   it('pressing "1" jumps to loops panel', async () => {
-    const { lastFrame, stdin } = render(
-      <KeyboardWrapper initialNav={{ ...INITIAL_NAV, focusedPanel: 'tasks' }} />,
-    );
+    const { lastFrame, stdin } = render(<KeyboardWrapper initialNav={{ ...INITIAL_NAV, focusedPanel: 'tasks' }} />);
     await press(stdin, '1');
     expect(lastFrame()).toContain('panel:loops');
   });
@@ -324,10 +334,7 @@ describe('useKeyboard — Enter drill-in', () => {
     const task = makeTask('task-xyz');
     const data = makeDashboardData({ tasks: [task] });
     const { lastFrame, stdin } = render(
-      <KeyboardWrapper
-        initialData={data}
-        initialNav={{ ...INITIAL_NAV, focusedPanel: 'tasks' }}
-      />,
+      <KeyboardWrapper initialData={data} initialNav={{ ...INITIAL_NAV, focusedPanel: 'tasks' }} />,
     );
     await press(stdin, '\r');
     expect(lastFrame()).toContain('view:detail');

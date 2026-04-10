@@ -14,6 +14,7 @@
 import { afterAll, beforeAll } from 'vitest';
 import { InMemoryEventBus } from '../src/core/events/event-bus';
 import type { Database } from '../src/implementations/database';
+
 // Define types for resources that need cleanup
 interface TestResources {
   eventBuses: Set<InMemoryEventBus>;
@@ -178,10 +179,7 @@ afterAll(() => {
 });
 
 // Export helper to register resources for cleanup
-export function registerForCleanup(
-  resource: InMemoryEventBus | Database,
-  type: 'eventBus' | 'database',
-): void {
+export function registerForCleanup(resource: InMemoryEventBus | Database, type: 'eventBus' | 'database'): void {
   switch (type) {
     case 'eventBus':
       activeResources.eventBuses.add(resource as InMemoryEventBus);

@@ -24,9 +24,9 @@ const PANEL_ORDER: readonly PanelId[] = ['loops', 'tasks', 'schedules', 'orchest
 
 /** Per-panel filter cycles — each panel only includes its valid statuses */
 const FILTER_CYCLES: Record<PanelId, readonly (string | null)[]> = {
-  loops:          [null, 'running', 'paused', 'completed', 'failed', 'cancelled'],
-  tasks:          [null, 'queued', 'running', 'completed', 'failed', 'cancelled'],
-  schedules:      [null, 'active', 'paused', 'completed', 'cancelled', 'expired'],
+  loops: [null, 'running', 'paused', 'completed', 'failed', 'cancelled'],
+  tasks: [null, 'queued', 'running', 'completed', 'failed', 'cancelled'],
+  schedules: [null, 'active', 'paused', 'completed', 'cancelled', 'expired'],
   orchestrations: [null, 'planning', 'running', 'completed', 'failed', 'cancelled'],
 };
 

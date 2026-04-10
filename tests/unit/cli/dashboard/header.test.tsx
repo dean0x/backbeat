@@ -34,27 +34,21 @@ function makeData(overrides: Partial<DashboardData> = {}): DashboardData {
 describe('Header', () => {
   describe('version display', () => {
     it('renders the app name and version', () => {
-      const { lastFrame } = render(
-        <Header version="1.2.3" data={null} refreshedAt={null} error={null} />,
-      );
+      const { lastFrame } = render(<Header version="1.2.3" data={null} refreshedAt={null} error={null} />);
       expect(lastFrame()).toContain('Autobeat v1.2.3');
     });
   });
 
   describe('timestamp display', () => {
     it('shows "—" when refreshedAt is null', () => {
-      const { lastFrame } = render(
-        <Header version="0.0.1" data={null} refreshedAt={null} error={null} />,
-      );
+      const { lastFrame } = render(<Header version="0.0.1" data={null} refreshedAt={null} error={null} />);
       expect(lastFrame()).toContain('—');
     });
 
     it('shows HH:MM timestamp when refreshedAt is set', () => {
       // Date with known hours/minutes: 14:30 UTC
       const refreshedAt = new Date('2024-01-15T14:30:00.000Z');
-      const { lastFrame } = render(
-        <Header version="0.0.1" data={null} refreshedAt={refreshedAt} error={null} />,
-      );
+      const { lastFrame } = render(<Header version="0.0.1" data={null} refreshedAt={refreshedAt} error={null} />);
       // Matches "HH:MM" pattern — exact value depends on locale, so just check digits are present
       expect(lastFrame()).toMatch(/\d{2}:\d{2}/);
     });
@@ -62,18 +56,14 @@ describe('Header', () => {
 
   describe('quit hint', () => {
     it('always shows quit hint', () => {
-      const { lastFrame } = render(
-        <Header version="0.0.1" data={null} refreshedAt={null} error={null} />,
-      );
+      const { lastFrame } = render(<Header version="0.0.1" data={null} refreshedAt={null} error={null} />);
       expect(lastFrame()).toContain('q=quit');
     });
   });
 
   describe('error display', () => {
     it('shows nothing extra when error is null', () => {
-      const { lastFrame } = render(
-        <Header version="0.0.1" data={null} refreshedAt={null} error={null} />,
-      );
+      const { lastFrame } = render(<Header version="0.0.1" data={null} refreshedAt={null} error={null} />);
       expect(lastFrame()).not.toContain('DB error');
     });
 
@@ -87,9 +77,7 @@ describe('Header', () => {
 
     it('truncates error messages longer than 80 characters', () => {
       const longError = 'x'.repeat(100);
-      const { lastFrame } = render(
-        <Header version="0.0.1" data={null} refreshedAt={null} error={longError} />,
-      );
+      const { lastFrame } = render(<Header version="0.0.1" data={null} refreshedAt={null} error={longError} />);
       const frame = lastFrame() ?? '';
       expect(frame).toContain('...');
       // Should not contain the full 100-char string
@@ -99,9 +87,7 @@ describe('Header', () => {
 
   describe('health summary — null data', () => {
     it('shows "—" when data is null', () => {
-      const { lastFrame } = render(
-        <Header version="0.0.1" data={null} refreshedAt={null} error={null} />,
-      );
+      const { lastFrame } = render(<Header version="0.0.1" data={null} refreshedAt={null} error={null} />);
       expect(lastFrame()).toContain('—');
     });
   });
@@ -113,9 +99,7 @@ describe('Header', () => {
 
 describe('buildHealthSummary (via Header)', () => {
   function renderSummary(data: DashboardData): string {
-    const { lastFrame } = render(
-      <Header version="0.0.1" data={data} refreshedAt={null} error={null} />,
-    );
+    const { lastFrame } = render(<Header version="0.0.1" data={data} refreshedAt={null} error={null} />);
     return lastFrame() ?? '';
   }
 
@@ -125,9 +109,7 @@ describe('buildHealthSummary (via Header)', () => {
   });
 
   it('shows running count for running tasks', () => {
-    const frame = renderSummary(
-      makeData({ taskCounts: { total: 2, byStatus: { running: 2 } } }),
-    );
+    const frame = renderSummary(makeData({ taskCounts: { total: 2, byStatus: { running: 2 } } }));
     expect(frame).toContain('●2 run');
   });
 
@@ -162,30 +144,22 @@ describe('buildHealthSummary (via Header)', () => {
   });
 
   it('shows queued count for queued tasks', () => {
-    const frame = renderSummary(
-      makeData({ taskCounts: { total: 3, byStatus: { queued: 3 } } }),
-    );
+    const frame = renderSummary(makeData({ taskCounts: { total: 3, byStatus: { queued: 3 } } }));
     expect(frame).toContain('○3 queue');
   });
 
   it('treats paused loops as queued', () => {
-    const frame = renderSummary(
-      makeData({ loopCounts: { total: 1, byStatus: { paused: 1 } } }),
-    );
+    const frame = renderSummary(makeData({ loopCounts: { total: 1, byStatus: { paused: 1 } } }));
     expect(frame).toContain('○1 queue');
   });
 
   it('treats paused schedules as queued', () => {
-    const frame = renderSummary(
-      makeData({ scheduleCounts: { total: 1, byStatus: { paused: 1 } } }),
-    );
+    const frame = renderSummary(makeData({ scheduleCounts: { total: 1, byStatus: { paused: 1 } } }));
     expect(frame).toContain('○1 queue');
   });
 
   it('shows failed count for failed tasks', () => {
-    const frame = renderSummary(
-      makeData({ taskCounts: { total: 1, byStatus: { failed: 1 } } }),
-    );
+    const frame = renderSummary(makeData({ taskCounts: { total: 1, byStatus: { failed: 1 } } }));
     expect(frame).toContain('✗1 fail');
   });
 
@@ -214,9 +188,7 @@ describe('buildHealthSummary (via Header)', () => {
 
   it('omits categories with zero count', () => {
     // Only running — no queued or failed
-    const frame = renderSummary(
-      makeData({ taskCounts: { total: 1, byStatus: { running: 1 } } }),
-    );
+    const frame = renderSummary(makeData({ taskCounts: { total: 1, byStatus: { running: 1 } } }));
     expect(frame).not.toContain('queue');
     expect(frame).not.toContain('fail');
   });

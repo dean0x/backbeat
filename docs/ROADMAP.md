@@ -1,12 +1,17 @@
 # Autobeat Development Roadmap
 
-## Current Status: v1.1.0 RELEASED (2026-04-01)
+## Current Status: v1.2.0 RELEASED (2026-04-10)
 
-Agent eval mode, skill system, and skill installer. Built on top of v1.0.0's autonomous orchestration.
+Interactive terminal dashboard (`beat dashboard`) with 4 panels and detail views, plus per-agent baseUrl/model configuration for custom API endpoints and model selection across Claude, Codex, and Gemini.
 
 ---
 
 ## Released Versions
+
+### v1.2.0 - Terminal Dashboard & Agent Config ✅
+**Status**: **RELEASED** (2026-04-10)
+
+Interactive terminal dashboard (`beat dashboard`) with 4 panels, keyboard navigation, and detail views. Per-agent baseUrl/model configuration for custom API endpoints and model selection across Claude, Codex, and Gemini.
 
 ### v0.8.2 - Package Rename ✅
 **Status**: **RELEASED** (2026-03-26)
@@ -114,7 +119,7 @@ Automatic agent switching on rate limits, intelligent task routing based on comp
 Reusable YAML/JSON workflow specifications with variable substitution, conditional logic, and a recipe registry.
 
 ### Monitoring & REST API
-TUI dashboard, REST API alongside MCP, metrics, Slack/webhook notifications, audit logging.
+REST API alongside MCP, metrics, Slack/webhook notifications, audit logging.
 
 ### Distributed Processing
 Multi-server support, shared state (Redis backend), fault tolerance, task affinity.
@@ -144,6 +149,7 @@ Multi-server support, shared state (Redis backend), fault tolerance, task affini
 | v0.8.0–v0.8.2 | ✅ Released | Loop Enhancements, Git Integration, Rename |
 | **v1.0.0** | ✅ Released | **Autonomous Orchestration** |
 | **v1.1.0** | ✅ Released | **Agent Eval Mode & Skill System** |
+| **v1.2.0** | ✅ Released | **Terminal Dashboard & Agent Config** |
 
 ---
 

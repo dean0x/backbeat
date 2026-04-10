@@ -17,8 +17,7 @@ const ANIMATED_STATUSES = new Set(['running', 'active', 'planning']);
  * Reduced-motion preference: set AUTOBEAT_REDUCE_MOTION=1 or NO_MOTION=1
  * to disable cycling animation for motion-sensitive users.
  */
-const REDUCE_MOTION =
-  process.env['AUTOBEAT_REDUCE_MOTION'] === '1' || process.env['NO_MOTION'] === '1';
+const REDUCE_MOTION = process.env['AUTOBEAT_REDUCE_MOTION'] === '1' || process.env['NO_MOTION'] === '1';
 
 interface StatusBadgeProps {
   readonly status: string;

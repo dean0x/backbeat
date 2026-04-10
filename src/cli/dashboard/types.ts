@@ -4,7 +4,17 @@
  * All types are immutable (readonly)
  */
 
-import type { Loop, LoopId, LoopIteration, Orchestration, OrchestratorId, Schedule, ScheduleId, Task, TaskId } from '../../core/domain.js';
+import type {
+  Loop,
+  LoopId,
+  LoopIteration,
+  Orchestration,
+  OrchestratorId,
+  Schedule,
+  ScheduleId,
+  Task,
+  TaskId,
+} from '../../core/domain.js';
 import type { ScheduleExecution } from '../../core/interfaces.js';
 
 export type PanelId = 'loops' | 'tasks' | 'schedules' | 'orchestrations';

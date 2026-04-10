@@ -26,29 +26,40 @@ const NotFound: React.FC<{ entityType: PanelId; entityId: string }> = ({ entityT
   </Box>
 );
 
-export const DetailView: React.FC<DetailViewProps> = React.memo(({ entityType, entityId, data, scrollOffset, animFrame }) => {
-  switch (entityType) {
-    case 'loops': {
-      const loop = data?.loops.find((l) => l.id === entityId);
-      if (loop === undefined) return <NotFound entityType={entityType} entityId={entityId} />;
-      return <LoopDetail loop={loop} iterations={data?.iterations} scrollOffset={scrollOffset} animFrame={animFrame} />;
+export const DetailView: React.FC<DetailViewProps> = React.memo(
+  ({ entityType, entityId, data, scrollOffset, animFrame }) => {
+    switch (entityType) {
+      case 'loops': {
+        const loop = data?.loops.find((l) => l.id === entityId);
+        if (loop === undefined) return <NotFound entityType={entityType} entityId={entityId} />;
+        return (
+          <LoopDetail loop={loop} iterations={data?.iterations} scrollOffset={scrollOffset} animFrame={animFrame} />
+        );
+      }
+      case 'tasks': {
+        const task = data?.tasks.find((t) => t.id === entityId);
+        if (task === undefined) return <NotFound entityType={entityType} entityId={entityId} />;
+        return <TaskDetail task={task} animFrame={animFrame} />;
+      }
+      case 'schedules': {
+        const schedule = data?.schedules.find((s) => s.id === entityId);
+        if (schedule === undefined) return <NotFound entityType={entityType} entityId={entityId} />;
+        return (
+          <ScheduleDetail
+            schedule={schedule}
+            executions={data?.executions}
+            scrollOffset={scrollOffset}
+            animFrame={animFrame}
+          />
+        );
+      }
+      case 'orchestrations': {
+        const orchestration = data?.orchestrations.find((o) => o.id === entityId);
+        if (orchestration === undefined) return <NotFound entityType={entityType} entityId={entityId} />;
+        return <OrchestrationDetail orchestration={orchestration} animFrame={animFrame} />;
+      }
     }
-    case 'tasks': {
-      const task = data?.tasks.find((t) => t.id === entityId);
-      if (task === undefined) return <NotFound entityType={entityType} entityId={entityId} />;
-      return <TaskDetail task={task} animFrame={animFrame} />;
-    }
-    case 'schedules': {
-      const schedule = data?.schedules.find((s) => s.id === entityId);
-      if (schedule === undefined) return <NotFound entityType={entityType} entityId={entityId} />;
-      return <ScheduleDetail schedule={schedule} executions={data?.executions} scrollOffset={scrollOffset} animFrame={animFrame} />;
-    }
-    case 'orchestrations': {
-      const orchestration = data?.orchestrations.find((o) => o.id === entityId);
-      if (orchestration === undefined) return <NotFound entityType={entityType} entityId={entityId} />;
-      return <OrchestrationDetail orchestration={orchestration} animFrame={animFrame} />;
-    }
-  }
-});
+  },
+);
 
 DetailView.displayName = 'DetailView';

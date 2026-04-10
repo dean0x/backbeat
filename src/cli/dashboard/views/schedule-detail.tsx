@@ -59,61 +59,63 @@ function renderExecutionRow(exec: ScheduleExecution, index: number, isSelected: 
 
 const EXECUTION_VIEWPORT_HEIGHT = 12;
 
-export const ScheduleDetail: React.FC<ScheduleDetailProps> = React.memo(({ schedule, executions, scrollOffset, animFrame }) => {
-  const runsProgress = formatRunProgress(schedule.runCount, schedule.maxRuns);
+export const ScheduleDetail: React.FC<ScheduleDetailProps> = React.memo(
+  ({ schedule, executions, scrollOffset, animFrame }) => {
+    const runsProgress = formatRunProgress(schedule.runCount, schedule.maxRuns);
 
-  return (
-    <Box flexDirection="column" paddingLeft={1} paddingRight={1}>
-      {/* Header */}
-      <Box marginBottom={1}>
-        <Text bold>Schedule Detail</Text>
+    return (
+      <Box flexDirection="column" paddingLeft={1} paddingRight={1}>
+        {/* Header */}
+        <Box marginBottom={1}>
+          <Text bold>Schedule Detail</Text>
+        </Box>
+
+        <Field label="ID">{truncateCell(schedule.id, 60)}</Field>
+        <StatusField>
+          <StatusBadge status={schedule.status} animFrame={animFrame} />
+        </StatusField>
+        <Field label="Schedule Type">{schedule.scheduleType}</Field>
+        {schedule.cronExpression ? <Field label="Cron Expression">{schedule.cronExpression}</Field> : null}
+        {schedule.scheduledAt !== undefined ? (
+          <Field label="Scheduled At">{relativeTime(schedule.scheduledAt)}</Field>
+        ) : null}
+        <Field label="Timezone">{schedule.timezone}</Field>
+        {schedule.nextRunAt !== undefined ? <Field label="Next Run">{relativeTime(schedule.nextRunAt)}</Field> : null}
+        {schedule.lastRunAt !== undefined ? <Field label="Last Run">{relativeTime(schedule.lastRunAt)}</Field> : null}
+        <Field label="Runs">{runsProgress}</Field>
+        <Field label="Missed Run Policy">{schedule.missedRunPolicy}</Field>
+        {schedule.expiresAt !== undefined ? <Field label="Expires At">{relativeTime(schedule.expiresAt)}</Field> : null}
+        <Field label="Created">{relativeTime(schedule.createdAt)}</Field>
+        <Field label="Updated">{relativeTime(schedule.updatedAt)}</Field>
+
+        {/* Execution history */}
+        <Box marginTop={1} marginBottom={0}>
+          <Text bold>Execution History</Text>
+          <Text dimColor>{` (${executions?.length ?? 0} total)`}</Text>
+        </Box>
+
+        {/* Table header */}
+        <Box flexDirection="row">
+          <Text dimColor bold>
+            {'  # STATUS     SCHEDULED    EXECUTED     TASK ID       LOOP ID       ERROR'}
+          </Text>
+        </Box>
+
+        {executions === undefined || executions.length === 0 ? (
+          <Text dimColor>No executions yet</Text>
+        ) : (
+          <ScrollableList
+            items={executions}
+            selectedIndex={-1}
+            scrollOffset={scrollOffset}
+            viewportHeight={EXECUTION_VIEWPORT_HEIGHT}
+            renderItem={renderExecutionRow}
+            keyExtractor={(item) => String(item.id)}
+          />
+        )}
       </Box>
-
-      <Field label="ID">{truncateCell(schedule.id, 60)}</Field>
-      <StatusField>
-        <StatusBadge status={schedule.status} animFrame={animFrame} />
-      </StatusField>
-      <Field label="Schedule Type">{schedule.scheduleType}</Field>
-      {schedule.cronExpression ? <Field label="Cron Expression">{schedule.cronExpression}</Field> : null}
-      {schedule.scheduledAt !== undefined ? (
-        <Field label="Scheduled At">{relativeTime(schedule.scheduledAt)}</Field>
-      ) : null}
-      <Field label="Timezone">{schedule.timezone}</Field>
-      {schedule.nextRunAt !== undefined ? <Field label="Next Run">{relativeTime(schedule.nextRunAt)}</Field> : null}
-      {schedule.lastRunAt !== undefined ? <Field label="Last Run">{relativeTime(schedule.lastRunAt)}</Field> : null}
-      <Field label="Runs">{runsProgress}</Field>
-      <Field label="Missed Run Policy">{schedule.missedRunPolicy}</Field>
-      {schedule.expiresAt !== undefined ? <Field label="Expires At">{relativeTime(schedule.expiresAt)}</Field> : null}
-      <Field label="Created">{relativeTime(schedule.createdAt)}</Field>
-      <Field label="Updated">{relativeTime(schedule.updatedAt)}</Field>
-
-      {/* Execution history */}
-      <Box marginTop={1} marginBottom={0}>
-        <Text bold>Execution History</Text>
-        <Text dimColor>{` (${executions?.length ?? 0} total)`}</Text>
-      </Box>
-
-      {/* Table header */}
-      <Box flexDirection="row">
-        <Text dimColor bold>
-          {'  # STATUS     SCHEDULED    EXECUTED     TASK ID       LOOP ID       ERROR'}
-        </Text>
-      </Box>
-
-      {executions === undefined || executions.length === 0 ? (
-        <Text dimColor>No executions yet</Text>
-      ) : (
-        <ScrollableList
-          items={executions}
-          selectedIndex={-1}
-          scrollOffset={scrollOffset}
-          viewportHeight={EXECUTION_VIEWPORT_HEIGHT}
-          renderItem={renderExecutionRow}
-          keyExtractor={(item) => String(item.id)}
-        />
-      )}
-    </Box>
-  );
-});
+    );
+  },
+);
 
 ScheduleDetail.displayName = 'ScheduleDetail';

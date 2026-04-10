@@ -4,6 +4,30 @@ This document lists all features that are **currently implemented and working** 
 
 Last Updated: April 2026
 
+## ✅ Terminal Dashboard & Agent Config (v1.2.0)
+
+### Terminal Dashboard
+- `beat dashboard` / `beat dash`: Interactive terminal UI (requires TTY)
+- 4 panels: Loops, Tasks, Schedules, Orchestrations
+- Keyboard navigation: Tab/Shift+Tab (cycle panels), 1-4 (jump), j/k or ↑/↓ (move selection), Enter (drill-in), Esc (back), f (cycle filter), q (quit), r (refresh)
+- Per-panel filter cycles — each panel cycles only its valid statuses
+- Detail views with entity-specific field rendering (task, loop, schedule, orchestration)
+- Truncation indicators when lists exceed panel capacity
+- Smart EmptyState with true counts when filters hide items
+- Built with [Ink](https://github.com/vadimdemedes/ink) (React for terminal UIs)
+
+### Agent BaseUrl & Model
+- Per-agent `baseUrl` and `model` in `~/.autobeat/config.json`
+- `--model` / `-m` flag on `beat run` and `beat orchestrate`
+- Provider env var injection at spawn: `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`, `GEMINI_BASE_URL`
+- User env vars take precedence over injected values
+- Claude: experimental-betas auto-disabled when custom `baseUrl` is set (prevents proxy failures)
+- Warning printed when `baseUrl` is set on Claude without a detected API key
+- Extended MCP tools: `ConfigureAgent` and `ListAgents` support `baseUrl`/`model`
+
+### Database
+- **Migration 16**: Adds `model` column to `tasks` and `orchestrations` tables
+
 ## ✅ Agent Eval Mode & Skill System (v1.1.0)
 
 ### Agent Eval Mode
@@ -409,7 +433,7 @@ Last Updated: April 2026
 
 ## ❌ NOT Implemented
 - **Distributed Processing**: Single-server only
-- **Web UI**: No dashboard interface
+- **Web UI**: No web-based UI (TUI dashboard available via `beat dashboard`)
 - **Workflow Templates**: No preset YAML/JSON workflow specifications (post-v1 roadmap item)
 - **Multi-User Support**: Single-user focused
 - **REST API**: MCP protocol only

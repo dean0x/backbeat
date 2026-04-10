@@ -13,7 +13,14 @@
  */
 
 import { ChildProcess, spawn } from 'child_process';
-import { AGENT_AUTH, AGENT_BASE_URL_ENV, AgentAdapter, AgentAuthConfig, AgentProvider, isCommandInPath } from '../core/agents.js';
+import {
+  AGENT_AUTH,
+  AGENT_BASE_URL_ENV,
+  AgentAdapter,
+  AgentAuthConfig,
+  AgentProvider,
+  isCommandInPath,
+} from '../core/agents.js';
 import { AgentConfig, Configuration, loadAgentConfig } from '../core/configuration.js';
 import { AutobeatError, agentMisconfigured, ErrorCode, processSpawnFailed } from '../core/errors.js';
 import { err, ok, Result, tryCatch } from '../core/result.js';

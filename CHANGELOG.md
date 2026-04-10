@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [1.2.0] - 2026-04-10
+
+### Added
+- **Terminal Dashboard** (`beat dashboard` / `beat dash`): Rich Ink-based terminal UI with 4 panels (loops, tasks, schedules, orchestrations), keyboard navigation (Tab/Shift+Tab, 1-4, j/k, Enter, Esc, f, q, r), detail views per entity, per-panel filter cycles, truncation indicators, and smart EmptyState with true counts (#131)
+- **Agent baseUrl & model passthrough**: Per-agent `baseUrl` and `model` configuration in `~/.autobeat/config.json`; `--model`/`-m` CLI flag on `beat run` and `beat orchestrate`; provider env var injection (`ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`, `GEMINI_BASE_URL`); Claude experimental-betas auto-disable on custom `baseUrl`; extended `ConfigureAgent`/`ListAgents` MCP tools with `baseUrl`/`model` support (#130)
+
+### 🗄️ Database
+- **Migration 16**: Adds `model` column to `tasks` and `orchestrations` tables
+
+---
+
 ## [1.1.0] - 2026-04-01
 
 ### Added
