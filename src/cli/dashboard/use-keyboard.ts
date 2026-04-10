@@ -346,17 +346,35 @@ function handleMainKeys(
       const filteredItems = filter !== null ? allItems.filter((item) => item.status === filter) : allItems;
       const selectedItem = filteredItems[nav.selectedIndices[panel]];
       if (selectedItem) {
-        const { orchestrationRepo } = params.mutations;
+        const { orchestrationRepo, loopRepo, taskRepo, scheduleRepo } = params.mutations;
 
         void (async () => {
-          if (
-            panel === 'orchestrations' &&
-            TERMINAL_STATUSES.orchestrations.includes(selectedItem.status as OrchestratorStatus)
-          ) {
-            await orchestrationRepo.delete(selectedItem.id as OrchestratorId);
-            params.refreshNow();
+          switch (panel) {
+            case 'orchestrations':
+              if (TERMINAL_STATUSES.orchestrations.includes(selectedItem.status as OrchestratorStatus)) {
+                await orchestrationRepo.delete(selectedItem.id as OrchestratorId);
+                params.refreshNow();
+              }
+              break;
+            case 'loops':
+              if (TERMINAL_STATUSES.loops.includes(selectedItem.status as LoopStatus)) {
+                await loopRepo.delete(selectedItem.id as LoopId);
+                params.refreshNow();
+              }
+              break;
+            case 'tasks':
+              if (TERMINAL_STATUSES.tasks.includes(selectedItem.status as TaskStatus)) {
+                await taskRepo.delete(selectedItem.id as TaskId);
+                params.refreshNow();
+              }
+              break;
+            case 'schedules':
+              if (TERMINAL_STATUSES.schedules.includes(selectedItem.status as ScheduleStatus)) {
+                await scheduleRepo.delete(selectedItem.id as ScheduleId);
+                params.refreshNow();
+              }
+              break;
           }
-          // NOTE: loop, task, schedule delete would go here when those repos are added to mutations context
         })();
       }
     }

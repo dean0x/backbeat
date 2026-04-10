@@ -36,6 +36,11 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = Object.freeze(AGENT_PRO
  * Resolution order: explicit task agent → config default → error.
  * Returns an actionable error when neither is set so the user
  * knows exactly how to fix it.
+ *
+ * DECISION (2026-04-10): Error hint is command-agnostic — does NOT reference
+ * `beat run` specifically, because the same error surfaces when the user
+ * invoked `beat orchestrate`. Pointing them at `beat run` when they ran
+ * `beat orchestrate` is confusing.
  */
 export function resolveDefaultAgent(
   taskAgent: AgentProvider | undefined,
@@ -51,8 +56,7 @@ export function resolveDefaultAgent(
         '  Quick setup: beat init',
         '  Or set directly: beat config set defaultAgent <agent>',
         `  Available agents: ${AGENT_PROVIDERS.join(', ')}`,
-        '  Or specify per-command: beat run --agent <agent> "prompt"',
-        '                         beat orchestrate --agent <agent> "<goal>"',
+        '  Or pass --agent <agent> on the command',
       ].join('\n'),
       { field: 'agent' },
     ),

@@ -16,12 +16,15 @@ import type {
   TaskId,
 } from '../../core/domain.js';
 import type {
+  LoopRepository,
   LoopService,
   OrchestrationRepository,
   OrchestrationService,
   ScheduleExecution,
+  ScheduleRepository,
   ScheduleService,
   TaskManager,
+  TaskRepository,
 } from '../../core/interfaces.js';
 import type { Liveness } from '../../services/orchestration-liveness.js';
 
@@ -37,6 +40,9 @@ export interface DashboardMutationContext {
   readonly scheduleService: ScheduleService;
   readonly taskManager: TaskManager;
   readonly orchestrationRepo: OrchestrationRepository;
+  readonly loopRepo: LoopRepository;
+  readonly taskRepo: TaskRepository;
+  readonly scheduleRepo: ScheduleRepository;
 }
 
 export type PanelId = 'loops' | 'tasks' | 'schedules' | 'orchestrations';

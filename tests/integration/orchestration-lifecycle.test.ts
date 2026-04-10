@@ -14,7 +14,7 @@ vi.mock('../../src/utils/git-state.js', () => ({
 }));
 
 import { existsSync, unlinkSync } from 'fs';
-import { OrchestratorId, OrchestratorStatus } from '../../src/core/domain.js';
+import { LoopId, LoopStatus, OrchestratorId, OrchestratorStatus, updateLoop } from '../../src/core/domain.js';
 import { readStateFile } from '../../src/core/orchestrator-state.js';
 import { Database } from '../../src/implementations/database.js';
 import { SQLiteLoopRepository } from '../../src/implementations/loop-repository.js';
@@ -57,6 +57,17 @@ describe('Orchestration Lifecycle - Integration Tests', () => {
       const loop = (event as { loop: Parameters<typeof loopRepo.save>[0] }).loop;
       if (loop) {
         await loopRepo.save(loop);
+      }
+    });
+
+    // Simulate LoopHandler: update loop status to CANCELLED on LoopCancelled event
+    eventBus.subscribe('LoopCancelled', async (event: Record<string, unknown>) => {
+      const { loopId } = event as { loopId: LoopId };
+      if (!loopId) return;
+      const result = await loopRepo.findById(loopId);
+      if (result.ok && result.value) {
+        const cancelled = updateLoop(result.value, { status: LoopStatus.CANCELLED, completedAt: Date.now() });
+        await loopRepo.update(cancelled);
       }
     });
 
@@ -201,6 +212,46 @@ describe('Orchestration Lifecycle - Integration Tests', () => {
 
       // Reset for cleanup
       eventBus.setEmitFailure('LoopCreated', false);
+    });
+
+    it('orchestration update fails: loop cancelled, orch row marked FAILED, state file removed', async () => {
+      // Arrange: replace updateIfStatus on orchRepo to return a DB error Result.
+      // This simulates the conditional update failing (e.g. DB constraint or connection error).
+      vi.spyOn(orchRepo, 'updateIfStatus').mockResolvedValueOnce({
+        ok: false,
+        error: new Error('Simulated DB error on updateIfStatus'),
+      });
+
+      const result = await orchService.createOrchestration({
+        goal: 'Will fail during orchestration update',
+      });
+
+      // Should return err (compensation ran but flow still fails)
+      expect(result.ok).toBe(false);
+
+      // Orch row should exist with FAILED status (compensation soft-deletes it)
+      const failedResult = await orchRepo.findByStatus(OrchestratorStatus.FAILED);
+      expect(failedResult.ok).toBe(true);
+      if (!failedResult.ok) return;
+      expect(failedResult.value.length).toBeGreaterThan(0);
+
+      const failedOrch = failedResult.value[0];
+      expect(failedOrch).toBeDefined();
+      if (!failedOrch) return;
+
+      // State file should NOT exist (compensation cleaned it up)
+      expect(existsSync(failedOrch.stateFilePath)).toBe(false);
+
+      // The loop that was created must now be CANCELLED.
+      // Compensation called cancelLoop(loopId) which emits LoopCancelled;
+      // our beforeEach LoopCancelled subscriber updates the loop row to CANCELLED.
+      const cancelledLoops = await loopRepo.findByStatus(LoopStatus.CANCELLED);
+      expect(cancelledLoops.ok).toBe(true);
+      if (!cancelledLoops.ok) return;
+      expect(cancelledLoops.value.length).toBe(1);
+      expect(cancelledLoops.value[0]?.status).toBe(LoopStatus.CANCELLED);
+
+      vi.restoreAllMocks();
     });
   });
 

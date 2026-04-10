@@ -488,12 +488,18 @@ function makeMutations(): {
   cancelTask: ReturnType<typeof vi.fn>;
   cancelSchedule: ReturnType<typeof vi.fn>;
   deleteOrchestration: ReturnType<typeof vi.fn>;
+  deleteLoop: ReturnType<typeof vi.fn>;
+  deleteTask: ReturnType<typeof vi.fn>;
+  deleteSchedule: ReturnType<typeof vi.fn>;
 } {
   const cancelOrchestration = vi.fn().mockResolvedValue({ ok: true, value: undefined });
   const cancelLoop = vi.fn().mockResolvedValue({ ok: true, value: undefined });
   const cancelTask = vi.fn().mockResolvedValue({ ok: true, value: undefined });
   const cancelSchedule = vi.fn().mockResolvedValue({ ok: true, value: undefined });
   const deleteOrchestration = vi.fn().mockResolvedValue({ ok: true, value: undefined });
+  const deleteLoop = vi.fn().mockResolvedValue({ ok: true, value: undefined });
+  const deleteTask = vi.fn().mockResolvedValue({ ok: true, value: undefined });
+  const deleteSchedule = vi.fn().mockResolvedValue({ ok: true, value: undefined });
 
   const mutations: DashboardMutationContext = {
     orchestrationService: {
@@ -511,9 +517,28 @@ function makeMutations(): {
     orchestrationRepo: {
       delete: deleteOrchestration,
     } as unknown as DashboardMutationContext['orchestrationRepo'],
+    loopRepo: {
+      delete: deleteLoop,
+    } as unknown as DashboardMutationContext['loopRepo'],
+    taskRepo: {
+      delete: deleteTask,
+    } as unknown as DashboardMutationContext['taskRepo'],
+    scheduleRepo: {
+      delete: deleteSchedule,
+    } as unknown as DashboardMutationContext['scheduleRepo'],
   };
 
-  return { mutations, cancelOrchestration, cancelLoop, cancelTask, cancelSchedule, deleteOrchestration };
+  return {
+    mutations,
+    cancelOrchestration,
+    cancelLoop,
+    cancelTask,
+    cancelSchedule,
+    deleteOrchestration,
+    deleteLoop,
+    deleteTask,
+    deleteSchedule,
+  };
 }
 
 describe('useKeyboard — c: cancel keybinding', () => {
@@ -641,6 +666,54 @@ describe('useKeyboard — d: delete terminal entity keybinding', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 20));
 
     expect(deleteOrchestration).not.toHaveBeenCalled();
+  });
+
+  it('"d" deletes a terminal loop row', async () => {
+    const loop = makeLoop('loop-done', LoopStatus.COMPLETED);
+    const data = makeDashboardData({
+      loops: [loop],
+      loopCounts: { total: 1, byStatus: { completed: 1 } },
+    });
+    // loops panel is default focused
+    const { mutations, deleteLoop } = makeMutations();
+    const { stdin } = render(<KeyboardWrapper initialData={data} mutations={mutations} />);
+
+    await press(stdin, 'd');
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+    expect(deleteLoop).toHaveBeenCalledWith('loop-done');
+  });
+
+  it('"d" deletes a terminal task row', async () => {
+    const task = makeTask('task-done', TaskStatus.COMPLETED);
+    const data = makeDashboardData({
+      tasks: [task],
+      taskCounts: { total: 1, byStatus: { completed: 1 } },
+    });
+    const nav: NavState = { ...INITIAL_NAV, focusedPanel: 'tasks' };
+    const { mutations, deleteTask } = makeMutations();
+    const { stdin } = render(<KeyboardWrapper initialData={data} initialNav={nav} mutations={mutations} />);
+
+    await press(stdin, 'd');
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+    expect(deleteTask).toHaveBeenCalledWith('task-done');
+  });
+
+  it('"d" deletes a terminal schedule row', async () => {
+    const schedule = makeSchedule('sched-done', ScheduleStatus.COMPLETED);
+    const data = makeDashboardData({
+      schedules: [schedule],
+      scheduleCounts: { total: 1, byStatus: { completed: 1 } },
+    });
+    const nav: NavState = { ...INITIAL_NAV, focusedPanel: 'schedules' };
+    const { mutations, deleteSchedule } = makeMutations();
+    const { stdin } = render(<KeyboardWrapper initialData={data} initialNav={nav} mutations={mutations} />);
+
+    await press(stdin, 'd');
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+    expect(deleteSchedule).toHaveBeenCalledWith('sched-done');
   });
 });
 

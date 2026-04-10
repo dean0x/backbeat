@@ -53,7 +53,7 @@ describe('Agent Types (v0.5.0)', () => {
         expect(result.error.message).toContain('No agent specified');
         expect(result.error.message).toContain('beat init');
         expect(result.error.message).toContain('beat config set defaultAgent');
-        expect(result.error.message).toContain('beat run --agent');
+        expect(result.error.message).toContain('--agent <agent> on the command');
       }
     });
 

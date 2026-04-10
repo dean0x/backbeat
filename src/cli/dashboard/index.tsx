@@ -124,6 +124,9 @@ export async function startDashboard(): Promise<void> {
           scheduleService: scheduleServiceResult.value,
           taskManager: taskManagerResult.value,
           orchestrationRepo: orchestrationRepository.value,
+          loopRepo: loopRepository.value,
+          taskRepo: taskRepository.value,
+          scheduleRepo: scheduleRepository.value,
         }
       : undefined;
 
