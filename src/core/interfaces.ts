@@ -798,16 +798,25 @@ export interface OrchestrationRepository {
   countByStatus(): Promise<Result<Record<string, number>>>;
 
   /**
-   * Get all child tasks attributed to an orchestration (v1.3.0)
+   * Get child tasks attributed to an orchestration (v1.3.0)
    * Unions direct attribution (tasks.orchestrator_id) and loop iteration chain.
    * Application-layer deduplication: iteration kind preferred when both match.
    * @param orchestrationId - Orchestration to query
-   * @param limit - Maximum tasks to return, ordered by updated_at DESC
+   * @param limit - Maximum tasks to return per page, ordered by updated_at DESC
+   * @param offset - Zero-based row offset for pagination (default: 0)
    */
   getOrchestratorChildren(
     orchestrationId: OrchestratorId,
     limit: number,
+    offset?: number,
   ): Promise<Result<readonly OrchestratorChild[]>>;
+
+  /**
+   * Count all child tasks attributed to an orchestration (v1.3.0)
+   * Deduped on task_id — same semantics as getOrchestratorChildren.
+   * Used for pagination footer ("Page N of M").
+   */
+  countOrchestratorChildren(orchestrationId: OrchestratorId): Promise<Result<number>>;
 
   /**
    * Find orchestrations updated since a given timestamp (v1.3.0)

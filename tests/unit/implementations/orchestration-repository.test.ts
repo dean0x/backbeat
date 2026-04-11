@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   createLoop,
   createOrchestration,
+  createTask,
   LoopId,
   LoopStrategy,
   type Orchestration,
@@ -18,16 +19,19 @@ import {
 import { Database } from '../../../src/implementations/database.js';
 import { SQLiteLoopRepository } from '../../../src/implementations/loop-repository.js';
 import { SQLiteOrchestrationRepository } from '../../../src/implementations/orchestration-repository.js';
+import { SQLiteTaskRepository } from '../../../src/implementations/task-repository.js';
 
 describe('SQLiteOrchestrationRepository - Unit Tests', () => {
   let db: Database;
   let repo: SQLiteOrchestrationRepository;
   let loopRepo: SQLiteLoopRepository;
+  let taskRepo: SQLiteTaskRepository;
 
   beforeEach(() => {
     db = new Database(':memory:');
     repo = new SQLiteOrchestrationRepository(db);
     loopRepo = new SQLiteLoopRepository(db);
+    taskRepo = new SQLiteTaskRepository(db);
   });
 
   afterEach(() => {
@@ -238,6 +242,193 @@ describe('SQLiteOrchestrationRepository - Unit Tests', () => {
       const found = repo.findByLoopIdSync(loop.id);
       expect(found).not.toBeNull();
       expect(found?.id).toBe(orch.id);
+    });
+  });
+
+  // ===========================================================================
+  // Paginated getOrchestratorChildren + countOrchestratorChildren (v1.3.0)
+  // ===========================================================================
+
+  describe('getOrchestratorChildren — pagination (v1.3.0)', () => {
+    it('returns first page of children with limit=5, offset=0', async () => {
+      const orch = createTestOrchestration();
+      await repo.save(orch);
+
+      // Seed 12 tasks attributed to this orchestration
+      for (let i = 0; i < 12; i++) {
+        const task = createTask({ prompt: `task ${i}`, orchestratorId: orch.id as OrchestratorId });
+        await taskRepo.save(task);
+      }
+
+      const result = await repo.getOrchestratorChildren(orch.id, 5, 0);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toHaveLength(5);
+    });
+
+    it('returns second page of children with limit=5, offset=5', async () => {
+      const orch = createTestOrchestration();
+      await repo.save(orch);
+
+      for (let i = 0; i < 12; i++) {
+        const task = createTask({ prompt: `task ${i}`, orchestratorId: orch.id as OrchestratorId });
+        await taskRepo.save(task);
+      }
+
+      const page0 = await repo.getOrchestratorChildren(orch.id, 5, 0);
+      const page1 = await repo.getOrchestratorChildren(orch.id, 5, 5);
+      expect(page0.ok && page1.ok).toBe(true);
+      if (!page0.ok || !page1.ok) return;
+
+      const page0Ids = new Set(page0.value.map((c) => c.taskId));
+      const page1Ids = new Set(page1.value.map((c) => c.taskId));
+
+      // Pages must be disjoint
+      for (const id of page1Ids) {
+        expect(page0Ids.has(id)).toBe(false);
+      }
+      expect(page1.value).toHaveLength(5);
+    });
+
+    it('returns last partial page correctly', async () => {
+      const orch = createTestOrchestration();
+      await repo.save(orch);
+
+      for (let i = 0; i < 7; i++) {
+        const task = createTask({ prompt: `task ${i}`, orchestratorId: orch.id as OrchestratorId });
+        await taskRepo.save(task);
+      }
+
+      const result = await repo.getOrchestratorChildren(orch.id, 5, 5);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toHaveLength(2);
+    });
+
+    it('offset defaults to 0 for backward compatibility (2-arg call)', async () => {
+      const orch = createTestOrchestration();
+      await repo.save(orch);
+
+      for (let i = 0; i < 3; i++) {
+        const task = createTask({ prompt: `task ${i}`, orchestratorId: orch.id as OrchestratorId });
+        await taskRepo.save(task);
+      }
+
+      const result = await repo.getOrchestratorChildren(orch.id, 10);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toHaveLength(3);
+    });
+
+    it('ordering is stable across pages — no overlap, no gaps', async () => {
+      const orch = createTestOrchestration();
+      await repo.save(orch);
+
+      for (let i = 0; i < 10; i++) {
+        const task = createTask({ prompt: `task ${i}`, orchestratorId: orch.id as OrchestratorId });
+        await taskRepo.save(task);
+      }
+
+      const page0 = await repo.getOrchestratorChildren(orch.id, 5, 0);
+      const page1 = await repo.getOrchestratorChildren(orch.id, 5, 5);
+      expect(page0.ok && page1.ok).toBe(true);
+      if (!page0.ok || !page1.ok) return;
+
+      const allIds = [...page0.value.map((c) => c.taskId), ...page1.value.map((c) => c.taskId)];
+      const unique = new Set(allIds);
+      expect(unique.size).toBe(10); // No duplicates, no gaps
+    });
+
+    it('handles empty orchestration gracefully', async () => {
+      const orch = createTestOrchestration();
+      await repo.save(orch);
+
+      const result = await repo.getOrchestratorChildren(orch.id, 10, 0);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toHaveLength(0);
+    });
+  });
+
+  describe('countOrchestratorChildren (v1.3.0)', () => {
+    it('returns 0 for orchestration with no children', async () => {
+      const orch = createTestOrchestration();
+      await repo.save(orch);
+
+      const result = await repo.countOrchestratorChildren(orch.id);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBe(0);
+    });
+
+    it('returns total count matching non-paginated fetch length', async () => {
+      const orch = createTestOrchestration();
+      await repo.save(orch);
+
+      for (let i = 0; i < 8; i++) {
+        const task = createTask({ prompt: `task ${i}`, orchestratorId: orch.id as OrchestratorId });
+        await taskRepo.save(task);
+      }
+
+      const countResult = await repo.countOrchestratorChildren(orch.id);
+      const fetchResult = await repo.getOrchestratorChildren(orch.id, 100);
+      expect(countResult.ok && fetchResult.ok).toBe(true);
+      if (!countResult.ok || !fetchResult.ok) return;
+      expect(countResult.value).toBe(fetchResult.value.length);
+    });
+
+    it('count matches sum of paginated fetches', async () => {
+      const orch = createTestOrchestration();
+      await repo.save(orch);
+
+      for (let i = 0; i < 12; i++) {
+        const task = createTask({ prompt: `task ${i}`, orchestratorId: orch.id as OrchestratorId });
+        await taskRepo.save(task);
+      }
+
+      const countResult = await repo.countOrchestratorChildren(orch.id);
+      const page0 = await repo.getOrchestratorChildren(orch.id, 5, 0);
+      const page1 = await repo.getOrchestratorChildren(orch.id, 5, 5);
+      const page2 = await repo.getOrchestratorChildren(orch.id, 5, 10);
+
+      expect(countResult.ok && page0.ok && page1.ok && page2.ok).toBe(true);
+      if (!countResult.ok || !page0.ok || !page1.ok || !page2.ok) return;
+
+      const totalFetched = page0.value.length + page1.value.length + page2.value.length;
+      expect(countResult.value).toBe(12);
+      expect(totalFetched).toBe(12);
+    });
+
+    it('does not double-count a task that appears in both direct and loop_chain attribution', async () => {
+      const orch = createTestOrchestration();
+      await repo.save(orch);
+
+      // Create a loop attributed to this orchestration
+      const loop = createLoop({ prompt: 'loop task', strategy: LoopStrategy.RETRY, exitCondition: 'true' }, '/tmp');
+      await loopRepo.save(loop);
+      const orchWithLoop = updateOrchestration(orch, { loopId: loop.id });
+      await repo.update(orchWithLoop);
+
+      // Create a task attributed directly to the orchestration
+      const task = createTask({ prompt: 'direct task', orchestratorId: orch.id as OrchestratorId });
+      await taskRepo.save(task);
+
+      // Also record a loop_iteration row for the SAME task (simulating dual attribution)
+      const iteration = {
+        id: 0, // Autoincrement — set to 0, ignored on insert
+        loopId: loop.id,
+        iterationNumber: 1,
+        taskId: task.id,
+        status: 'running' as const,
+        startedAt: Date.now(),
+      };
+      await loopRepo.recordIteration(iteration);
+
+      // Count should be 1, not 2 (dedup by task_id)
+      const countResult = await repo.countOrchestratorChildren(orchWithLoop.id);
+      expect(countResult.ok).toBe(true);
+      if (!countResult.ok) return;
+      expect(countResult.value).toBe(1);
     });
   });
 });

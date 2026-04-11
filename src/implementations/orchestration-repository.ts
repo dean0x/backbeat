@@ -406,43 +406,56 @@ export class SQLiteOrchestrationRepository implements OrchestrationRepository, S
   // ============================================================================
 
   /**
-   * Get all tasks attributed to an orchestration.
+   * Get child tasks attributed to an orchestration, with pagination (v1.3.0).
    * Unions direct attribution (tasks.orchestrator_id) and loop iteration chain.
-   * Application-layer deduplication: iteration kind preferred when both match.
-   * Ordered by updated_at DESC, created_at DESC (newest activity first).
+   * Deduplication happens INSIDE the CTE via ROW_NUMBER — 'iteration' is preferred
+   * when a task appears in both chains. LIMIT/OFFSET applied AFTER dedup so
+   * pagination is correct even when duplicates cross page boundaries.
+   * @param orchestrationId - Orchestration to query
+   * @param limit - Maximum tasks to return per page
+   * @param offset - Zero-based row offset for pagination (default: 0)
    */
   async getOrchestratorChildren(
     orchestrationId: OrchestratorId,
     limit: number,
+    offset = 0,
   ): Promise<Result<readonly OrchestratorChild[]>> {
     return tryCatchAsync(
       async () => {
+        // CRITICAL: Dedup must happen INSIDE the CTE via ROW_NUMBER, not after LIMIT/OFFSET.
+        // Using priority: 0 for iteration, 1 for direct — ROW_NUMBER picks the best row per task.
         const stmt = this.db.prepare(`
-          WITH direct_attribution AS (
-            SELECT 'direct' AS kind, t.id, NULL AS iteration_id,
+          WITH all_attributed AS (
+            SELECT 'direct' AS kind, t.id AS task_id, NULL AS iteration_id,
                    t.status, t.created_at, t.prompt, t.agent,
-                   COALESCE(t.completed_at, t.started_at, t.created_at) AS updated_at
+                   COALESCE(t.completed_at, t.started_at, t.created_at) AS updated_at,
+                   1 AS kind_priority
             FROM tasks t
             WHERE t.orchestrator_id = :orchId
-          ),
-          loop_chain AS (
-            SELECT 'iteration' AS kind, t.id, li.id AS iteration_id,
+            UNION ALL
+            SELECT 'iteration' AS kind, t.id AS task_id, li.id AS iteration_id,
                    t.status, t.created_at, t.prompt, t.agent,
-                   COALESCE(t.completed_at, t.started_at, t.created_at) AS updated_at
+                   COALESCE(t.completed_at, t.started_at, t.created_at) AS updated_at,
+                   0 AS kind_priority
             FROM loop_iterations li
             JOIN tasks t ON t.id = li.task_id
             WHERE li.loop_id = (SELECT loop_id FROM orchestrations WHERE id = :orchId)
+          ),
+          deduped AS (
+            SELECT kind, task_id, iteration_id, status, created_at, prompt, agent, updated_at,
+                   ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY kind_priority ASC) AS rn
+            FROM all_attributed
           )
-          SELECT * FROM direct_attribution
-          UNION
-          SELECT * FROM loop_chain
+          SELECT kind, task_id, iteration_id, status, created_at, prompt, agent, updated_at
+          FROM deduped
+          WHERE rn = 1
           ORDER BY updated_at DESC, created_at DESC
-          LIMIT :limit
+          LIMIT :limit OFFSET :offset
         `);
 
-        const rows = stmt.all({ orchId: orchestrationId, limit }) as Array<{
+        const rows = stmt.all({ orchId: orchestrationId, limit, offset }) as Array<{
           kind: string;
-          id: string;
+          task_id: string;
           iteration_id: number | null;
           status: string;
           created_at: number;
@@ -451,27 +464,47 @@ export class SQLiteOrchestrationRepository implements OrchestrationRepository, S
           updated_at: number;
         }>;
 
-        // Application-layer dedup: prefer 'iteration' over 'direct' for same task_id
-        const seen = new Map<string, OrchestratorChild>();
-        for (const row of rows) {
-          const existing = seen.get(row.id);
-          const child: OrchestratorChild = {
-            taskId: row.id as TaskId,
-            kind: row.kind as 'direct' | 'iteration',
-            iterationId: row.iteration_id ?? undefined,
-            status: row.status as TaskStatus,
-            createdAt: row.created_at,
-            updatedAt: row.updated_at,
-            prompt: row.prompt,
-            agent: row.agent as OrchestratorChild['agent'],
-          };
-          if (!existing || child.kind === 'iteration') {
-            seen.set(row.id, child);
-          }
-        }
-        return Array.from(seen.values());
+        return rows.map((row) => ({
+          taskId: row.task_id as TaskId,
+          kind: row.kind as 'direct' | 'iteration',
+          iterationId: row.iteration_id ?? undefined,
+          status: row.status as TaskStatus,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+          prompt: row.prompt,
+          agent: row.agent as OrchestratorChild['agent'],
+        }));
       },
       operationErrorHandler('get orchestrator children', { orchestratorId: orchestrationId }),
+    );
+  }
+
+  /**
+   * Count all child tasks attributed to an orchestration (v1.3.0).
+   * Uses the same UNION CTE as getOrchestratorChildren, deduped on task_id.
+   * Used for pagination footer ("Page N of M").
+   */
+  async countOrchestratorChildren(orchestrationId: OrchestratorId): Promise<Result<number>> {
+    return tryCatchAsync(
+      async () => {
+        const stmt = this.db.prepare(`
+          WITH all_attributed AS (
+            SELECT t.id AS task_id
+            FROM tasks t
+            WHERE t.orchestrator_id = :orchId
+            UNION ALL
+            SELECT t.id AS task_id
+            FROM loop_iterations li
+            JOIN tasks t ON t.id = li.task_id
+            WHERE li.loop_id = (SELECT loop_id FROM orchestrations WHERE id = :orchId)
+          )
+          SELECT COUNT(DISTINCT task_id) AS cnt FROM all_attributed
+        `);
+
+        const row = stmt.get({ orchId: orchestrationId }) as { cnt: number } | undefined;
+        return row?.cnt ?? 0;
+      },
+      operationErrorHandler('count orchestrator children', { orchestratorId: orchestrationId }),
     );
   }
 
