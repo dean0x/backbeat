@@ -128,7 +128,7 @@ describe('SQLiteUsageRepository', () => {
   // Zod validation — boundary parse behaviour
   // ============================================================================
 
-  describe('Zod validation (parse-don\'t-validate boundary)', () => {
+  describe("Zod validation (parse-don't-validate boundary)", () => {
     it('get() returns null (not an error) for a missing row — schema not invoked', async () => {
       // Verifies the null-guard runs before Zod parse on the get() path
       const result = await repo.get(TaskId('task-does-not-exist'));
