@@ -190,8 +190,14 @@ export async function runTask(
         if (orchResult.ok && orchResult.value) {
           orchestratorId = OrchestratorId(envOrchId);
         } else {
-          // Stale env var from a prior shell / process — drop silently
-          process.stderr.write(`[autobeat] AUTOBEAT_ORCHESTRATOR_ID '${envOrchId}' not found in DB, ignoring\n`);
+          // Stale env var from a prior shell / process — drop silently.
+          // SECURITY: Strip control chars (prevents log injection / ANSI escapes) and cap
+          // display length before writing to stderr. The actual env var is not modified.
+          const sanitized = envOrchId.replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 200);
+          const lengthNote = envOrchId.length > 200 ? ` (truncated from ${envOrchId.length} chars)` : '';
+          process.stderr.write(
+            `[autobeat] AUTOBEAT_ORCHESTRATOR_ID '${sanitized}'${lengthNote} not found in DB, ignoring\n`,
+          );
         }
       }
     }
