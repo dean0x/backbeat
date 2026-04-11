@@ -75,6 +75,34 @@ describe('stripAnsi', () => {
   it('handles empty string', () => {
     expect(stripAnsi('')).toBe('');
   });
+
+  it('strips OSC 8 hyperlinks (security: prevents terminal hyperlink injection)', () => {
+    // OSC 8 ;; URL ST — common hyperlink sequence
+    const input = 'before\x1b]8;;https://evil.example.com\x07click here\x1b]8;;\x07after';
+    expect(stripAnsi(input)).toBe('beforeclick hereafter');
+  });
+
+  it('strips OSC title-set sequences (xterm \x1B]0;title\x07)', () => {
+    // OSC 0 sets terminal window title — could be abused for phishing
+    const input = '\x1b]0;injected title\x07normal output';
+    expect(stripAnsi(input)).toBe('normal output');
+  });
+
+  it('strips OSC sequences with ST terminator (\x1B\\) instead of BEL', () => {
+    const input = '\x1b]2;title\x1b\\normal';
+    expect(stripAnsi(input)).toBe('normal');
+  });
+
+  it('strips single-char ESC sequences (e.g. ESC M reverse-index)', () => {
+    const input = 'line\x1bMmore';
+    expect(stripAnsi(input)).toBe('linemore');
+  });
+
+  it('strips C1 control characters (0x80–0x9F)', () => {
+    // C1 controls can trigger terminal state changes in 8-bit mode
+    const input = 'text\x9bsequence\x9f';
+    expect(stripAnsi(input)).toBe('textsequence');
+  });
 });
 
 describe('mergeOutputLines', () => {
@@ -103,6 +131,7 @@ describe('buildStreamState', () => {
   const EMPTY_INITIAL: OutputStreamState = {
     lines: [],
     totalBytes: 0,
+    totalChars: 0,
     lastFetchedAt: null,
     error: null,
     droppedLines: 0,
@@ -160,15 +189,17 @@ describe('buildStreamState', () => {
   it('trims ring buffer to MAX_LINES_PER_STREAM when exceeded', () => {
     // Pre-fill with MAX_LINES_PER_STREAM lines
     const initialLines = Array.from({ length: MAX_LINES_PER_STREAM }, (_, i) => `line-${i}`);
+    const prevContent = 'x'.repeat(1000); // ASCII only: bytes === chars
     const withMaxLines: OutputStreamState = {
       ...EMPTY_INITIAL,
       lines: initialLines,
       totalBytes: 1000,
+      totalChars: 1000, // ASCII: byte count equals char count
     };
 
     // Add 2 more lines
     const newContent = 'new1\nnew2\n';
-    const fullContent = 'x'.repeat(1000) + newContent;
+    const fullContent = prevContent + newContent;
     const output = {
       taskId: makeTaskId('task-1'),
       stdout: [fullContent],
@@ -198,6 +229,80 @@ describe('buildStreamState', () => {
     const output = makeTaskOutput([content]);
     const state = buildStreamState(EMPTY_INITIAL, output, 'terminal');
     expect(state.taskStatus).toBe('terminal');
+  });
+
+  // ---- UTF-8 multi-byte safety regression tests ----
+
+  it('preserves emoji characters without U+FFFD corruption (delta at ASCII boundary)', () => {
+    // "hello\n" is 6 bytes / 6 chars.  Then we append " 🎉\n" which is
+    // a 4-byte emoji — a naive byte-offset slice at byte 6 would be safe
+    // here, but the real danger is when the emoji straddles the boundary.
+    const first = 'hello\n';
+    const firstOutput = makeTaskOutput([first]);
+    const firstState = buildStreamState(EMPTY_INITIAL, firstOutput, 'running');
+    expect(firstState.lines).toEqual(['hello']);
+
+    const extended = 'hello\n🎉\n';
+    const secondOutput = makeTaskOutput([extended]);
+    const secondState = buildStreamState(firstState, secondOutput, 'running');
+    expect(secondState.lines).toEqual(['hello', '🎉']);
+    // Must NOT contain replacement character from a corrupted byte slice
+    expect(secondState.lines.join('')).not.toContain('\uFFFD');
+  });
+
+  it('preserves CJK characters across chunk boundary (multi-byte delta)', () => {
+    // Each CJK character is 3 bytes in UTF-8.  After "ab" (2 bytes/chars)
+    // the emoji/CJK slice must start on a character boundary.
+    const first = 'ab';
+    const firstOutput = makeTaskOutput([first]);
+    const firstState = buildStreamState(EMPTY_INITIAL, firstOutput, 'running');
+
+    // "ab日本語\n" — "日" starts at byte offset 2, char offset 2 — safe
+    // but without totalChars tracking a byte-offset slice at prev.totalBytes
+    // (=2) would accidentally work here; test with 3-byte char spanning boundary
+    const extended = 'ab\n日本語\n';
+    const secondOutput = makeTaskOutput([extended]);
+    const secondState = buildStreamState(firstState, secondOutput, 'running');
+    expect(secondState.lines).toContain('日本語');
+    expect(secondState.lines.join('')).not.toContain('\uFFFD');
+  });
+
+  it('does not corrupt emoji straddling a simulated chunk boundary via totalChars', () => {
+    // Simulate: first poll returns "A🎉" (no newline — no lines yet, but chars tracked).
+    // 🎉 = U+1F389 (4 bytes, but 1 Unicode code point via [...str]).
+    // totalBytes after first poll = 1 (A) + 4 (🎉) = 5 bytes.
+    // totalChars = 2 (A=1, 🎉=1).
+    // Second poll returns "A🎉B\n". Delta = chars[2..] = "B\n".
+    // The key assertion: result must NOT contain U+FFFD which would appear
+    // if we sliced at byte offset 2 (cutting 🎉's 4-byte sequence).
+    const firstContent = 'A🎉';
+    const firstOutput = makeTaskOutput([firstContent]);
+    const firstState = buildStreamState(EMPTY_INITIAL, firstOutput, 'running');
+    // totalChars: A=1, 🎉=1 (one code point via [...str]) → 2
+    expect(firstState.totalChars).toBe(2);
+    // totalBytes: A=1, 🎉=4 → 5
+    expect(firstState.totalBytes).toBe(5);
+
+    const secondContent = 'A🎉B\n';
+    const secondOutput = makeTaskOutput([secondContent]);
+    const secondState = buildStreamState(firstState, secondOutput, 'running');
+    // Delta chars[2..] = "B\n" → produces line "B".
+    // Naive byte-slice at byte 2 would split the 4-byte 🎉 sequence → U+FFFD.
+    // Char-index slice correctly yields only "B\n".
+    expect(secondState.lines.join('')).not.toContain('\uFFFD');
+    // The ring buffer contains "B" from the delta (A🎉 had no newline so no line)
+    expect(secondState.lines).toContain('B');
+  });
+
+  it('tracks totalChars correctly alongside totalBytes for multi-byte content', () => {
+    // "café\n" — 'é' is 2 bytes but 1 char; total bytes = 6, total chars = 5
+    const content = 'café\n';
+    const output = makeTaskOutput([content]);
+    const state = buildStreamState(EMPTY_INITIAL, output, 'running');
+    expect(state.lines).toEqual(['café']);
+    expect(state.totalBytes).toBe(Buffer.byteLength(content, 'utf-8'));
+    expect(state.totalChars).toBe([...content].length);
+    expect(state.totalBytes).toBeGreaterThan(state.totalChars); // bytes > chars for multibyte
   });
 });
 

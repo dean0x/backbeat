@@ -26,6 +26,17 @@ export interface OutputStreamState {
   /** Tail buffer, capped at MAX_LINES_PER_STREAM */
   readonly lines: readonly string[];
   readonly totalBytes: number;
+  /**
+   * Character (code-point) count corresponding to totalBytes.
+   * Used for UTF-8-safe delta slicing: we slice by char index, not byte offset,
+   * so multi-byte characters (emoji, CJK, accented) are never split mid-sequence.
+   *
+   * Defaults to 0 when absent (backward-compatible with callers that construct
+   * a literal OutputStreamState without this field, e.g. TaskPanel.EMPTY_STREAM).
+   * The delta logic reads `prev.totalChars ?? 0`, so an absent field is equivalent
+   * to a fresh start — the first poll will read the full content from char 0.
+   */
+  readonly totalChars?: number;
   readonly lastFetchedAt: Date | null;
   readonly error: string | null;
   /** Number of lines trimmed from front due to ring buffer overflow */
@@ -39,8 +50,22 @@ export interface OutputStreamState {
 
 export const MAX_LINES_PER_STREAM = 500;
 
-/** ANSI escape sequence regex — permissive for colors/cursor/clear sequences */
-const ANSI_REGEX = /\x1b\[[0-?]*[ -/]*[@-~]/g;
+/**
+ * Comprehensive ANSI / terminal escape sequence regex.
+ *
+ * Covers:
+ *  - CSI sequences:       \x1B[ ... final-byte (colors, cursor, SGR)
+ *  - OSC sequences:       \x1B] ... \x07  OR  \x1B] ... \x1B\\ (hyperlinks, title-set)
+ *  - DCS / PM / APC / SOS: \x1BP ... \x1B\\  (device control, rarely seen)
+ *  - Single-char ESC:     \x1B followed by any char in 0x40–0x5F (e.g. \x1BM for RI)
+ *  - C1 controls (8-bit): U+0080–U+009F (often emitted by terminal emulators)
+ *
+ * Reference: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html
+ * The pattern is intentionally broad to prevent malicious task output from
+ * rewriting the terminal title, injecting OSC 8 hyperlinks, or altering state.
+ */
+const ANSI_REGEX =
+  /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[P_\]^X][^\x1b]*\x1b\\|\x1b[@-_]|[\x80-\x9f]/g;
 
 /** Number of ticks between polls for non-running tasks */
 const SLOW_POLL_INTERVAL = 5;
@@ -94,7 +119,10 @@ export function shouldPollThisTick(status: TaskStreamStatus, tick: number): bool
  *
  * Algorithm:
  * 1. If output is null, return updated-status copy of prev state.
- * 2. Delta-parse: recompute only bytes beyond prev.totalBytes.
+ * 2. Delta-parse: extract only the characters beyond prev.totalChars.
+ *    We slice by character index (not byte offset) so multi-byte codepoints
+ *    (emoji, CJK, accented characters) are never split across chunk boundaries,
+ *    which would produce U+FFFD replacement characters in the ring buffer.
  * 3. ANSI-strip the new suffix.
  * 4. Merge new lines into ring buffer, trim from front if over MAX_LINES_PER_STREAM.
  */
@@ -123,19 +151,24 @@ export function buildStreamState(
 
   // Reconstruct full stdout content (all chunks concatenated)
   const fullContent = output.stdout.join('');
+  const fullChars = [...fullContent].length; // spread to count Unicode code points
 
-  // Delta: only the bytes after what we've already processed
+  // prevTotalChars defaults to 0 if the caller constructed the state literal
+  // without the totalChars field (backward-compatible — treats as fresh start).
+  const prevTotalChars = prev.totalChars ?? 0;
+
+  // Delta: extract only the characters (code points) beyond what we've already processed.
+  // Using character-index slicing is UTF-8-safe: it never splits a surrogate pair or
+  // multi-byte sequence the way a raw byte-offset slice would.
   let newContent: string;
-  if (prev.totalBytes > 0 && prev.totalBytes < Buffer.byteLength(fullContent, 'utf-8')) {
-    // Extract the suffix beyond what was previously consumed
-    // We work in byte offsets — convert byte offset to char offset
-    const buf = Buffer.from(fullContent, 'utf-8');
-    const suffix = buf.slice(prev.totalBytes).toString('utf-8');
-    newContent = suffix;
-  } else if (prev.totalBytes === 0) {
+  if (prevTotalChars > 0 && prevTotalChars < fullChars) {
+    // String.prototype.slice uses UTF-16 code-unit indices; spreading and slicing
+    // handles multi-byte characters correctly across all BMP + astral-plane chars.
+    newContent = [...fullContent].slice(prevTotalChars).join('');
+  } else if (prevTotalChars === 0) {
     newContent = fullContent;
   } else {
-    // No new bytes
+    // No new characters
     return {
       ...prev,
       taskStatus: nextStatus,
@@ -151,6 +184,7 @@ export function buildStreamState(
     return {
       ...prev,
       totalBytes: newTotalBytes,
+      totalChars: fullChars,
       taskStatus: nextStatus,
       lastFetchedAt: new Date(),
     };
@@ -169,6 +203,7 @@ export function buildStreamState(
   return {
     lines: combined,
     totalBytes: newTotalBytes,
+    totalChars: fullChars,
     lastFetchedAt: new Date(),
     error: null,
     droppedLines,
@@ -183,6 +218,7 @@ export function buildStreamState(
 const INITIAL_STREAM_STATE: OutputStreamState = {
   lines: [],
   totalBytes: 0,
+  totalChars: 0,
   lastFetchedAt: null,
   error: null,
   droppedLines: 0,
@@ -216,6 +252,12 @@ function classifyStatus(rawStatus: string): TaskStreamStatus {
  *
  * On taskIds prop change: entries for removed tasks are purged; new entries
  * start as pending.
+ *
+ * Polling cadence stability: taskIds and taskStatuses are stored in refs so
+ * doPoll's useCallback does NOT depend on them. This prevents the interval
+ * from being torn down and re-established on every render when the caller
+ * supplies fresh [] / new Map() references (e.g. from nullish-coalescing
+ * fallbacks like `data?.workspaceData?.childTaskIds ?? []`).
  */
 export function useTaskOutputStream(
   outputRepo: OutputRepository,
@@ -241,6 +283,16 @@ export function useTaskOutputStream(
   // Track previous task IDs to detect changes
   const prevTaskIdsRef = useRef<readonly TaskId[]>([]);
 
+  // Refs that hold the latest taskIds / taskStatuses so doPoll can read them
+  // without being included in doPoll's dependency array. This keeps the
+  // setInterval cadence stable even when callers pass fresh array/map references.
+  const taskIdsRef = useRef<readonly TaskId[]>(taskIds);
+  const taskStatusesRef = useRef<ReadonlyMap<TaskId, string>>(taskStatuses);
+
+  // Keep refs in sync on every render (before doPoll fires)
+  taskIdsRef.current = taskIds;
+  taskStatusesRef.current = taskStatuses;
+
   // Synchronize streamsRef when taskIds change
   const taskIdsKey = taskIds.join(',');
 
@@ -248,8 +300,9 @@ export function useTaskOutputStream(
   const terminalFetchedRef = useRef<Set<TaskId>>(new Set());
 
   useEffect(() => {
+    const currentTaskIds = taskIdsRef.current;
     const prevIds = new Set(prevTaskIdsRef.current);
-    const nextIds = new Set(taskIds);
+    const nextIds = new Set(currentTaskIds);
 
     // Purge removed tasks
     for (const [id] of streamsRef.current) {
@@ -260,16 +313,17 @@ export function useTaskOutputStream(
     }
 
     // Initialize new tasks
-    for (const id of taskIds) {
+    for (const id of currentTaskIds) {
       if (!prevIds.has(id)) {
         streamsRef.current.set(id, { ...INITIAL_STREAM_STATE });
       }
     }
 
-    prevTaskIdsRef.current = taskIds;
+    prevTaskIdsRef.current = currentTaskIds;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskIdsKey]);
 
+  // doPoll reads taskIds/taskStatuses via refs — stable identity across renders.
   const doPoll = useCallback(async (): Promise<void> => {
     if (fetchingRef.current || !enabled) return;
     fetchingRef.current = true;
@@ -277,12 +331,16 @@ export function useTaskOutputStream(
     const currentTick = tickRef.current;
     tickRef.current += 1;
 
+    // Snapshot the refs at poll time so all fetches in this batch use the same list
+    const currentTaskIds = taskIdsRef.current;
+    const currentTaskStatuses = taskStatusesRef.current;
+
     try {
       const fetches: Array<Promise<void>> = [];
 
-      for (const taskId of taskIds) {
+      for (const taskId of currentTaskIds) {
         const prev = streamsRef.current.get(taskId) ?? { ...INITIAL_STREAM_STATE };
-        const rawStatus = taskStatuses.get(taskId) ?? 'pending';
+        const rawStatus = currentTaskStatuses.get(taskId) ?? 'pending';
         const status = classifyStatus(rawStatus);
 
         // Terminal tasks: one final fetch, then stop
@@ -296,6 +354,13 @@ export function useTaskOutputStream(
 
         const fetchTask = async (): Promise<void> => {
           try {
+            // TODO(perf): OutputRepository.get() returns the entire stdout blob on every poll.
+            // Per-panel this is O(N·T) — N bytes × T ticks. The correct fix is to add
+            // OutputRepository.getSize(taskId): Promise<Result<number, Error>> for a cheap
+            // probe, and OutputRepository.getSince(taskId, byteOffset): Promise<Result<TaskOutput, Error>>
+            // for true incremental reads. Implement in src/implementations/output-repository.ts
+            // and src/core/interfaces.ts, then read taskIdsRef.current[taskId].totalBytes here
+            // to skip the full fetch when size is unchanged.
             const result = await outputRepo.get(taskId);
             if (closingRef.current) return;
 
@@ -340,7 +405,9 @@ export function useTaskOutputStream(
     } finally {
       fetchingRef.current = false;
     }
-  }, [outputRepo, taskIds, taskStatuses, enabled]);
+    // outputRepo and enabled are the only true dependencies — taskIds/taskStatuses
+    // are consumed via refs so they don't force interval recreation.
+  }, [outputRepo, enabled]);
 
   useEffect(() => {
     closingRef.current = false;
