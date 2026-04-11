@@ -56,6 +56,39 @@ function isProcessAlive(pid: number): boolean {
 }
 
 // ============================================================================
+// Liveness cache
+// ============================================================================
+
+/**
+ * Per-orchestration liveness cache entry.
+ * TTL: 4 seconds — processes don't die faster than the dashboard can react.
+ */
+interface LivenessCacheEntry {
+  readonly result: Liveness;
+  readonly timestamp: number;
+}
+
+const LIVENESS_CACHE_TTL_MS = 4_000;
+
+/**
+ * Unwrap an array of Results from a settled Promise.all call.
+ * Returns ok with the first failed label+message, or ok with all values.
+ * Designed for the parallel-fetch pattern in fetchAllData.
+ */
+function unwrapAll(
+  labels: readonly string[],
+  results: readonly Result<unknown, Error>[],
+): Result<readonly unknown[], string> {
+  const values: unknown[] = [];
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    if (!r.ok) return err(`${labels[i]} fetch failed: ${r.error.message}`);
+    values.push(r.value);
+  }
+  return ok(values);
+}
+
+// ============================================================================
 // Pure helper functions (exported for unit testing)
 // ============================================================================
 
@@ -69,41 +102,24 @@ export function buildEntityCounts(byStatus: Record<string, number>): EntityCount
 }
 
 /**
- * Unwrap a single labeled Result.
- * Returns the value directly or a string error tagged with the label.
- *
- * @example
- *   const tasks = unwrapOrErr('Tasks', tasksResult);
- *   if (!tasks.ok) return err(tasks.error);
- */
-function unwrapOrErr<T>(label: string, result: Result<T, Error>): Result<T, string> {
-  return result.ok ? ok(result.value) : err(`${label} fetch failed: ${result.error.message}`);
-}
-
-/**
  * Fetch all dashboard data in parallel.
  * Returns a Result<DashboardData> — on any repository error, returns the error message.
  * For detail extras (iterations, executions), errors are handled gracefully (undefined).
+ * @param ctx - Read-only repository context
+ * @param viewState - Current view to fetch extras for
  * @param childPage - 0-based page number for orchestration detail children (default: 0)
+ * @param livenessCache - Per-tick memoization map; callers pass a stable ref for caching
  */
 export async function fetchAllData(
   ctx: ReadOnlyContext,
   viewState: ViewState,
   childPage = 0,
+  livenessCache?: Map<string, LivenessCacheEntry>,
 ): Promise<Result<DashboardData, string>> {
   const { taskRepository, loopRepository, scheduleRepository, orchestrationRepository, workerRepository } = ctx;
 
   // Parallel fetch: entity lists + status counts
-  const [
-    tasksResult,
-    loopsResult,
-    schedulesResult,
-    orchestrationsResult,
-    taskCountsResult,
-    loopCountsResult,
-    scheduleCountsResult,
-    orchestrationCountsResult,
-  ] = await Promise.all([
+  const rawResults = await Promise.all([
     taskRepository.findAll(FETCH_LIMIT),
     loopRepository.findAll(FETCH_LIMIT),
     scheduleRepository.findAll(FETCH_LIMIT),
@@ -114,46 +130,75 @@ export async function fetchAllData(
     orchestrationRepository.countByStatus(),
   ]);
 
-  // Unwrap each result — any failure returns a labeled error string
-  const tasks = unwrapOrErr('Tasks', tasksResult);
-  if (!tasks.ok) return err(tasks.error);
-  const loops = unwrapOrErr('Loops', loopsResult);
-  if (!loops.ok) return err(loops.error);
-  const schedules = unwrapOrErr('Schedules', schedulesResult);
-  if (!schedules.ok) return err(schedules.error);
-  const orchestrations = unwrapOrErr('Orchestrations', orchestrationsResult);
-  if (!orchestrations.ok) return err(orchestrations.error);
-  const taskCounts = unwrapOrErr('Task counts', taskCountsResult);
-  if (!taskCounts.ok) return err(taskCounts.error);
-  const loopCounts = unwrapOrErr('Loop counts', loopCountsResult);
-  if (!loopCounts.ok) return err(loopCounts.error);
-  const scheduleCounts = unwrapOrErr('Schedule counts', scheduleCountsResult);
-  if (!scheduleCounts.ok) return err(scheduleCounts.error);
-  const orchestrationCounts = unwrapOrErr('Orchestration counts', orchestrationCountsResult);
-  if (!orchestrationCounts.ok) return err(orchestrationCounts.error);
+  // Unwrap all results — any failure returns a labeled error string
+  const unwrapped = unwrapAll(
+    [
+      'Tasks',
+      'Loops',
+      'Schedules',
+      'Orchestrations',
+      'Task counts',
+      'Loop counts',
+      'Schedule counts',
+      'Orchestration counts',
+    ],
+    rawResults,
+  );
+  if (!unwrapped.ok) return err(unwrapped.error);
+
+  // Cast from unknown[] — each position matches the Promise.all order above
+  type TaskList = Awaited<ReturnType<typeof taskRepository.findAll>> extends Result<infer V, Error> ? V : never;
+  type LoopList = Awaited<ReturnType<typeof loopRepository.findAll>> extends Result<infer V, Error> ? V : never;
+  type ScheduleList = Awaited<ReturnType<typeof scheduleRepository.findAll>> extends Result<infer V, Error> ? V : never;
+  type OrchList =
+    Awaited<ReturnType<typeof orchestrationRepository.findAll>> extends Result<infer V, Error> ? V : never;
+  type StatusMap = Record<string, number>;
+
+  const [tasks, loops, schedules, orchestrations, taskCounts, loopCounts, scheduleCounts, orchestrationCounts] =
+    unwrapped.value as [TaskList, LoopList, ScheduleList, OrchList, StatusMap, StatusMap, StatusMap, StatusMap];
 
   // Fetch detail extras if in detail view (best-effort — errors yield undefined)
   const detailExtra: DetailExtra = viewState.kind === 'detail' ? await fetchDetailExtra(ctx, viewState, childPage) : {};
 
-  // Compute liveness for RUNNING orchestrations (best-effort — errors yield 'unknown')
-  const orchestrationLiveness: Record<string, Liveness> = {};
-  for (const orch of orchestrations.value) {
-    if (orch.status === OrchestratorStatus.RUNNING) {
-      try {
-        const liveness = await checkOrchestrationLiveness(orch, {
-          loopRepo: loopRepository,
-          taskRepo: taskRepository,
-          workerRepo: workerRepository,
-          isProcessAlive,
-        });
-        orchestrationLiveness[orch.id] = liveness;
-      } catch {
-        orchestrationLiveness[orch.id] = 'unknown';
+  // Compute liveness for RUNNING orchestrations — parallel with TTL cache.
+  // Processes don't die faster than the dashboard reacts, so a 4-second cache
+  // avoids up to 150 sequential SQLite hits/s (50 orchestrations × 3 sub-queries).
+  const now = Date.now();
+  const cache = livenessCache ?? new Map<string, LivenessCacheEntry>();
+  const livenessDeps = {
+    loopRepo: loopRepository,
+    taskRepo: taskRepository,
+    workerRepo: workerRepository,
+    isProcessAlive,
+  };
+
+  const livenessEntries = await Promise.all(
+    orchestrations.map(async (orch) => {
+      if (orch.status === OrchestratorStatus.RUNNING) {
+        // Check TTL cache first
+        const cached = cache.get(orch.id);
+        if (cached && now - cached.timestamp < LIVENESS_CACHE_TTL_MS) {
+          return [orch.id, cached.result] as const;
+        }
+        try {
+          const result = await checkOrchestrationLiveness(orch, livenessDeps);
+          cache.set(orch.id, { result, timestamp: now });
+          return [orch.id, result] as const;
+        } catch {
+          return [orch.id, 'unknown' as Liveness] as const;
+        }
       }
-    } else if (orch.status === OrchestratorStatus.PLANNING && !orch.loopId) {
-      // PLANNING with no loopId — orphan indicator
-      orchestrationLiveness[orch.id] = 'unknown';
-    }
+      if (orch.status === OrchestratorStatus.PLANNING && !orch.loopId) {
+        // PLANNING with no loopId — orphan indicator
+        return [orch.id, 'unknown' as Liveness] as const;
+      }
+      return null;
+    }),
+  );
+
+  const orchestrationLiveness: Record<string, Liveness> = {};
+  for (const entry of livenessEntries) {
+    if (entry) orchestrationLiveness[entry[0]] = entry[1];
   }
 
   // Main-view metrics extras — fetched in parallel when viewing the metrics dashboard
@@ -170,18 +215,18 @@ export async function fetchAllData(
   let workspaceExtras: Pick<DashboardData, 'workspaceData'> = {};
 
   if (viewState.kind === 'workspace') {
-    workspaceExtras = await fetchWorkspaceExtras(ctx, viewState.orchestrationId, orchestrations.value);
+    workspaceExtras = await fetchWorkspaceExtras(ctx, viewState.orchestrationId, orchestrations);
   }
 
   return ok({
-    tasks: tasks.value,
-    loops: loops.value,
-    schedules: schedules.value,
-    orchestrations: orchestrations.value,
-    taskCounts: buildEntityCounts(taskCounts.value),
-    loopCounts: buildEntityCounts(loopCounts.value),
-    scheduleCounts: buildEntityCounts(scheduleCounts.value),
-    orchestrationCounts: buildEntityCounts(orchestrationCounts.value),
+    tasks,
+    loops,
+    schedules,
+    orchestrations,
+    taskCounts: buildEntityCounts(taskCounts),
+    loopCounts: buildEntityCounts(loopCounts),
+    scheduleCounts: buildEntityCounts(scheduleCounts),
+    orchestrationCounts: buildEntityCounts(orchestrationCounts),
     orchestrationLiveness,
     ...detailExtra,
     ...metricsExtras,
@@ -393,12 +438,16 @@ export function useDashboardData(
   // Guard against overlapping in-flight fetches caused by slow SQLite under load
   const fetching = useRef(false);
 
+  // Stable liveness cache — shared across ticks to avoid redundant sub-queries.
+  // TTL is enforced inside fetchAllData; the ref keeps the cache alive across renders.
+  const livenessCacheRef = useRef<Map<string, LivenessCacheEntry>>(new Map());
+
   // Stable fetch function — ctx is the only dep; viewState and childPage are read via refs
   const doFetch = useCallback(async (): Promise<void> => {
     if (fetching.current) return;
     fetching.current = true;
     try {
-      const result = await fetchAllData(ctx, viewStateRef.current, childPageRef.current);
+      const result = await fetchAllData(ctx, viewStateRef.current, childPageRef.current, livenessCacheRef.current);
 
       if (closing.current) return;
 

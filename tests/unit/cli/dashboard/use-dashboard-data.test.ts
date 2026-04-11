@@ -358,3 +358,103 @@ describe('fetchAllData', () => {
     expect(result.value.orchestrationChildrenTotal).toBe(42);
   });
 });
+
+// ============================================================================
+// Liveness cache — TTL-based memoization
+// ============================================================================
+
+describe('fetchAllData — orchestration liveness caching', () => {
+  it('calls liveness check once per orchestration when cache is empty', async () => {
+    const { OrchestratorStatus: Status } = await import('../../../../src/core/domain.js');
+    const orch = { id: 'orch-1', status: Status.RUNNING, loopId: undefined };
+
+    const orchestrationRepo = {
+      findAll: vi.fn().mockResolvedValue(ok([orch])),
+      countByStatus: vi.fn().mockResolvedValue(ok({})),
+      findUpdatedSince: vi.fn().mockResolvedValue(ok([])),
+      getOrchestratorChildren: vi.fn().mockResolvedValue(ok([])),
+      countOrchestratorChildren: vi.fn().mockResolvedValue(ok(0)),
+    };
+    const loopRepo = {
+      findAll: vi.fn().mockResolvedValue(ok([])),
+      countByStatus: vi.fn().mockResolvedValue(ok({})),
+      getIterations: vi.fn().mockResolvedValue(ok([])),
+      findUpdatedSince: vi.fn().mockResolvedValue(ok([])),
+    };
+    const ctx = makeCtx({
+      orchestrationRepository: orchestrationRepo as unknown as ReadOnlyContext['orchestrationRepository'],
+      loopRepository: loopRepo as unknown as ReadOnlyContext['loopRepository'],
+    });
+
+    const cache = new Map();
+    await fetchAllData(ctx, MAIN_VIEW, 0, cache);
+
+    // loopId is undefined — chain is broken so returns 'unknown' immediately without DB hits
+    // but the cache should still record the result
+    expect(cache.size).toBe(1);
+    expect(cache.get('orch-1')).toBeDefined();
+    expect(cache.get('orch-1').result).toBe('unknown');
+  });
+
+  it('serves cached liveness result without hitting repositories on second call within TTL', async () => {
+    const { OrchestratorStatus: Status } = await import('../../../../src/core/domain.js');
+    const orch = { id: 'orch-cache', status: Status.RUNNING, loopId: 'loop-1' };
+
+    const orchestrationRepo = {
+      findAll: vi.fn().mockResolvedValue(ok([orch])),
+      countByStatus: vi.fn().mockResolvedValue(ok({})),
+      findUpdatedSince: vi.fn().mockResolvedValue(ok([])),
+      getOrchestratorChildren: vi.fn().mockResolvedValue(ok([])),
+      countOrchestratorChildren: vi.fn().mockResolvedValue(ok(0)),
+    };
+    const loopRepo = {
+      findAll: vi.fn().mockResolvedValue(ok([])),
+      countByStatus: vi.fn().mockResolvedValue(ok({})),
+      getIterations: vi.fn().mockResolvedValue(ok([])),
+      findUpdatedSince: vi.fn().mockResolvedValue(ok([])),
+    };
+    const ctx = makeCtx({
+      orchestrationRepository: orchestrationRepo as unknown as ReadOnlyContext['orchestrationRepository'],
+      loopRepository: loopRepo as unknown as ReadOnlyContext['loopRepository'],
+    });
+
+    // Pre-populate the cache with a fresh entry — simulates a prior tick within TTL
+    const cache = new Map([['orch-cache', { result: 'live' as const, timestamp: Date.now() }]]);
+
+    const result = await fetchAllData(ctx, MAIN_VIEW, 0, cache);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    // Should return 'live' from cache — no loop repo hits for liveness
+    expect(result.value.orchestrationLiveness?.['orch-cache']).toBe('live');
+    // getIterations should NOT be called since liveness was served from cache
+    expect(loopRepo.getIterations).not.toHaveBeenCalled();
+  });
+
+  it('does not populate liveness for non-RUNNING orchestrations', async () => {
+    const { OrchestratorStatus: Status } = await import('../../../../src/core/domain.js');
+    const orch = { id: 'orch-done', status: Status.COMPLETED, loopId: 'loop-1' };
+
+    const orchestrationRepo = {
+      findAll: vi.fn().mockResolvedValue(ok([orch])),
+      countByStatus: vi.fn().mockResolvedValue(ok({})),
+      findUpdatedSince: vi.fn().mockResolvedValue(ok([])),
+      getOrchestratorChildren: vi.fn().mockResolvedValue(ok([])),
+      countOrchestratorChildren: vi.fn().mockResolvedValue(ok(0)),
+    };
+    const ctx = makeCtx({
+      orchestrationRepository: orchestrationRepo as unknown as ReadOnlyContext['orchestrationRepository'],
+    });
+
+    const cache = new Map();
+    const result = await fetchAllData(ctx, MAIN_VIEW, 0, cache);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // COMPLETED orchestration should have no liveness entry
+    expect(result.value.orchestrationLiveness?.['orch-done']).toBeUndefined();
+    // Cache should be empty — no liveness computed for completed orch
+    expect(cache.size).toBe(0);
+  });
+});
