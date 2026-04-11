@@ -209,6 +209,8 @@ gh run list --workflow=release.yml --limit=1 # must show status: completed/succe
 - `schedule_executions` table: execution history and audit trail
 - `loops` table: loop definitions, strategy, exit condition, iteration state (migration v10)
 - `loop_iterations` table: per-iteration execution records with scores and results (migration v10)
+- `tasks.orchestrator_id` column: nullable FK for sub-task attribution to an orchestration (migration v18)
+- `task_usage` table: one row per task with input/output/cache tokens and total_cost_usd (migration v19)
 
 ### Dependencies
 
@@ -220,6 +222,8 @@ When adding task dependencies:
 ### MCP Tools
 
 All tools use PascalCase: `DelegateTask`, `TaskStatus`, `TaskLogs`, `CancelTask`, `RetryTask`, `ResumeTask`, `CreatePipeline`, `CreateLoop`, `LoopStatus`, `ListLoops`, `CancelLoop`, `PauseLoop`, `ResumeLoop`, `ScheduleTask`, `SchedulePipeline`, `ScheduleLoop`, `ListSchedules`, `ScheduleStatus`, `PauseSchedule`, `ResumeSchedule`, `CancelSchedule`, `CreateOrchestrator`, `OrchestratorStatus`, `ListOrchestrators`, `CancelOrchestrator`, `ListAgents`, `ConfigureAgent`
+
+`DelegateTask` accepts an optional `metadata.orchestratorId` field for orchestrator attribution. Long-running MCP servers should pass this so sub-tasks are attributed to the calling orchestration even when the process ID changes across restarts.
 
 ## File Locations
 
@@ -250,6 +254,15 @@ Quick reference for common operations:
 | Composite exit condition evaluator | `src/services/composite-exit-condition-evaluator.ts` |
 | Migrate command | `src/cli/commands/migrate.ts` |
 | Agent skill content | `skills/autobeat/` |
+| Metrics view | `src/cli/dashboard/views/metrics-view.tsx` |
+| Workspace view | `src/cli/dashboard/views/workspace-view.tsx` |
+| Terminal size hook | `src/cli/dashboard/use-terminal-size.ts` |
+| Responsive layout | `src/cli/dashboard/layout.ts` |
+| Output streaming hook | `src/cli/dashboard/use-task-output-stream.ts` |
+| Activity feed helper | `src/cli/dashboard/activity-feed.ts` |
+| Usage repository | `src/implementations/usage-repository.ts` |
+| Usage parser | `src/services/usage-parser.ts` |
+| Usage capture handler | `src/services/handlers/usage-capture-handler.ts` |
 
 ## Documentation Structure
 

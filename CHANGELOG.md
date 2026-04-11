@@ -8,6 +8,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [1.3.0] - 2026-04-11
+
+### Added
+- **Dashboard Redesign**: Two-view dashboard — Metrics view (resources/cost/throughput tiles + activity feed) and Workspace view (per-orchestration live task grid with streaming output panels)
+- **Live agent output streaming**: 1-2s output latency in Workspace view via per-task polling with ring buffer and auto-tail
+- **Cost and token tracking**: `UsageCaptureHandler` + `UsageParser` capture Claude token usage and USD cost into new `task_usage` table; 24h aggregate shown in Metrics view cost tile
+- **Orchestrator_id propagation**: Sub-tasks attributed to their orchestration via `tasks.orchestrator_id`; propagated through CLI (`AUTOBEAT_ORCHESTRATOR_ID` env) and MCP (`metadata.orchestratorId`) spawn paths
+- **Cancel cascade for orchestrations**: `c` on an orchestration cancels it and all in-flight attributed child tasks
+- **Responsive layout**: Terminal size detection via `process.stderr`; adapts to narrow/full/too-small modes; recomputes on SIGWINCH
+- **Activity feed keyboard navigation**: Tab cycles into activity focus; ↑/↓ navigate rows; Enter opens detail view
+
+### Changed
+- `outputFlushIntervalMs` default: 5000ms → 1000ms (set `OUTPUT_FLUSH_INTERVAL_MS=5000` to opt out)
+- Metrics view replaces the old 4-panel grid as the default main view
+
+### Fixed
+- ActivityPanel Enter dispatch was ungated — now routed through activity focus mode
+- Zombie RUNNING orchestrations detected via worker liveness check on recovery
+- Orchestration creation failure now applies compensating soft-delete to prevent phantom rows
+
+### Breaking
+- `src/cli/dashboard/views/main-view.tsx` removed; consumers of dashboard internals must update imports to `metrics-view.tsx`
+- **Database**: Migrations v18 (`tasks.orchestrator_id`) and v19 (`task_usage`) auto-applied on first startup
+
+---
+
 ## [1.2.0] - 2026-04-10
 
 ### Added

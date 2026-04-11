@@ -1,12 +1,17 @@
 # Autobeat Development Roadmap
 
-## Current Status: v1.2.0 RELEASED (2026-04-10)
+## Current Status: v1.3.0 RELEASED (2026-04-11)
 
-Interactive terminal dashboard (`beat dashboard`) with 4 panels and detail views, plus per-agent baseUrl/model configuration for custom API endpoints and model selection across Claude, Codex, and Gemini.
+Dashboard redesign with two-view layout (Metrics + Workspace), live agent output streaming, cost and token tracking for Claude agents, orchestrator attribution propagation, cancel cascade, and responsive layout.
 
 ---
 
 ## Released Versions
+
+### v1.3.0 - Dashboard Redesign ✅
+**Status**: **RELEASED** (2026-04-11)
+
+Two-view dashboard (Metrics + Workspace), live agent output streaming in workspace panels, cost/token tracking for Claude agents, orchestrator_id propagation through CLI and MCP spawn paths, cancel cascade for orchestrations, and responsive terminal layout.
 
 ### v1.2.0 - Terminal Dashboard & Agent Config ✅
 **Status**: **RELEASED** (2026-04-10)
@@ -130,7 +135,7 @@ Multi-server support, shared state (Redis backend), fault tolerance, task affini
 
 - **Smart Task Splitting**: Break large tasks into smaller parallel units
 - **Result Aggregation**: Fan-out same task to multiple agents, compare results
-- **Cost Tracking**: Token usage and estimated cost across orchestrations
+- **Cost Tracking**: Claude agent cost tracking shipped in v1.3.0; Codex and Gemini cost capture pending
 - **Docker Sandboxing**: Containerized task execution for isolation
 - **Issue Tracker Integration**: Feed GitHub/Linear issues directly to orchestrator
 
