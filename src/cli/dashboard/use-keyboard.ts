@@ -627,8 +627,87 @@ function handleMainKeys(
       }
       return true;
     }
+
+    // c — cancel the entity on the focused Activity row (plan §9)
+    // Dispatches based on entry.kind — same 4-way mapping as workspace cancel.
+    // Orchestration cancel passes cancelAttributedTasks: true to trigger cascade.
+    if (input === 'c' && params.mutations) {
+      const feed = dataRef.current?.activityFeed;
+      if (feed && feed.length > 0) {
+        const entry = feed[nav.activitySelectedIndex];
+        if (entry) {
+          const { orchestrationService, loopService, taskManager, scheduleService } = params.mutations;
+          const reason = 'User cancelled via dashboard';
+          void (async () => {
+            switch (entry.kind) {
+              case 'orchestration':
+                await orchestrationService.cancelOrchestration(entry.entityId as OrchestratorId, reason, {
+                  cancelAttributedTasks: true,
+                });
+                params.refreshNow();
+                break;
+              case 'loop':
+                await loopService.cancelLoop(entry.entityId as LoopId, reason, true);
+                params.refreshNow();
+                break;
+              case 'task':
+                await taskManager.cancel(entry.entityId as TaskId, reason);
+                params.refreshNow();
+                break;
+              case 'schedule':
+                await scheduleService.cancelSchedule(entry.entityId as ScheduleId, reason);
+                params.refreshNow();
+                break;
+            }
+          })();
+        }
+      }
+      return true;
+    }
+
+    // d — delete the entity on the focused Activity row (terminal status only, plan §9)
+    // Non-terminal entities are silently ignored (cannot delete live work).
+    if (input === 'd' && params.mutations) {
+      const feed = dataRef.current?.activityFeed;
+      if (feed && feed.length > 0) {
+        const entry = feed[nav.activitySelectedIndex];
+        if (entry) {
+          const { orchestrationRepo, loopRepo, taskRepo, scheduleRepo } = params.mutations;
+          void (async () => {
+            switch (entry.kind) {
+              case 'orchestration':
+                if (TERMINAL_STATUSES.orchestrations.includes(entry.status as OrchestratorStatus)) {
+                  await orchestrationRepo.delete(entry.entityId as OrchestratorId);
+                  params.refreshNow();
+                }
+                break;
+              case 'loop':
+                if (TERMINAL_STATUSES.loops.includes(entry.status as LoopStatus)) {
+                  await loopRepo.delete(entry.entityId as LoopId);
+                  params.refreshNow();
+                }
+                break;
+              case 'task':
+                if (TERMINAL_STATUSES.tasks.includes(entry.status as TaskStatus)) {
+                  await taskRepo.delete(entry.entityId as TaskId);
+                  params.refreshNow();
+                }
+                break;
+              case 'schedule':
+                if (TERMINAL_STATUSES.schedules.includes(entry.status as ScheduleStatus)) {
+                  await scheduleRepo.delete(entry.entityId as ScheduleId);
+                  params.refreshNow();
+                }
+                break;
+            }
+          })();
+        }
+      }
+      return true;
+    }
+
     // Any other key while activity-focused: consume silently (no fallthrough to panel handlers)
-    return false;
+    return true;
   }
 
   // Up arrow / k — move selection up
@@ -874,14 +953,14 @@ export function useKeyboard({
       return;
     }
 
-    // m — jump to main from any view
-    if (input === 'm' && view.kind !== 'detail') {
+    // m — jump to main from any view (including detail — acts like Esc→m)
+    if (input === 'm') {
       setView({ kind: 'main' });
       return;
     }
 
-    // w — jump to workspace from any view
-    if (input === 'w' && view.kind !== 'detail') {
+    // w — jump to workspace from any view (including detail — acts like Esc→w)
+    if (input === 'w') {
       setView({ kind: 'workspace' });
       return;
     }

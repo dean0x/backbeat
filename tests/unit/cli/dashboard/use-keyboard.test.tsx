@@ -908,3 +908,151 @@ describe('useKeyboard — detail view scroll', () => {
     expect(lastFrame()).toContain('scroll-loops:0');
   });
 });
+
+// ============================================================================
+// D1 — m and w keys work from detail view (plan §2)
+// ============================================================================
+
+describe('useKeyboard — m/w global keys from detail view (D1)', () => {
+  it('"m" from detail view dispatches setView({ kind: "main" })', async () => {
+    const loop = makeLoop('loop-1');
+    const data = makeDashboardData({ loops: [loop] });
+    const { lastFrame, stdin } = render(<KeyboardWrapper initialData={data} />);
+    await press(stdin, '\r'); // enter detail
+    expect(lastFrame()).toContain('view:detail');
+    await press(stdin, 'm');
+    expect(lastFrame()).toContain('view:main');
+  });
+
+  it('"w" from detail view dispatches setView({ kind: "workspace" })', async () => {
+    const loop = makeLoop('loop-1');
+    const data = makeDashboardData({ loops: [loop] });
+    const { lastFrame, stdin } = render(<KeyboardWrapper initialData={data} />);
+    await press(stdin, '\r'); // enter detail
+    expect(lastFrame()).toContain('view:detail');
+    await press(stdin, 'w');
+    expect(lastFrame()).toContain('view:workspace');
+  });
+
+  it('"v" from detail view is still ignored (no state change)', async () => {
+    const loop = makeLoop('loop-1');
+    const data = makeDashboardData({ loops: [loop] });
+    const { lastFrame, stdin } = render(<KeyboardWrapper initialData={data} />);
+    await press(stdin, '\r'); // enter detail
+    expect(lastFrame()).toContain('view:detail');
+    await press(stdin, 'v');
+    // Must remain in detail — v is deliberately ignored from detail
+    expect(lastFrame()).toContain('view:detail');
+  });
+});
+
+// ============================================================================
+// D2 — Metrics view c/d target the Activity row when activityFocused (plan §9)
+// ============================================================================
+
+describe('useKeyboard — activity-row cancel/delete (D2)', () => {
+  function makeActivityEntry(id: string, kind: 'task' | 'loop' | 'orchestration' | 'schedule', status = 'running') {
+    return {
+      timestamp: new Date(),
+      kind,
+      entityId: id,
+      status,
+      action: 'running',
+    };
+  }
+
+  it('"c" on activity-focused task dispatches task cancel', async () => {
+    const entry = makeActivityEntry('task-act', 'task');
+    const data = makeDashboardData({ activityFeed: [entry] });
+    const nav: NavState = { ...INITIAL_NAV, activityFocused: true, activitySelectedIndex: 0 };
+    const { mutations, cancelTask } = makeMutations();
+    const { stdin } = render(<KeyboardWrapper initialData={data} initialNav={nav} mutations={mutations} />);
+
+    await press(stdin, 'c');
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+    expect(cancelTask).toHaveBeenCalledWith('task-act', 'User cancelled via dashboard');
+  });
+
+  it('"c" on activity-focused loop dispatches loop cancel', async () => {
+    const entry = makeActivityEntry('loop-act', 'loop');
+    const data = makeDashboardData({ activityFeed: [entry] });
+    const nav: NavState = { ...INITIAL_NAV, activityFocused: true, activitySelectedIndex: 0 };
+    const { mutations, cancelLoop } = makeMutations();
+    const { stdin } = render(<KeyboardWrapper initialData={data} initialNav={nav} mutations={mutations} />);
+
+    await press(stdin, 'c');
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+    expect(cancelLoop).toHaveBeenCalledWith('loop-act', 'User cancelled via dashboard', true);
+  });
+
+  it('"c" on activity-focused orchestration dispatches orchestration cancel WITH cancelAttributedTasks:true', async () => {
+    const entry = makeActivityEntry('orch-act', 'orchestration');
+    const data = makeDashboardData({ activityFeed: [entry] });
+    const nav: NavState = { ...INITIAL_NAV, activityFocused: true, activitySelectedIndex: 0 };
+    const { mutations, cancelOrchestration } = makeMutations();
+    const { stdin } = render(<KeyboardWrapper initialData={data} initialNav={nav} mutations={mutations} />);
+
+    await press(stdin, 'c');
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+    expect(cancelOrchestration).toHaveBeenCalledWith('orch-act', 'User cancelled via dashboard', {
+      cancelAttributedTasks: true,
+    });
+  });
+
+  it('"c" on activity-focused schedule dispatches schedule cancel', async () => {
+    const entry = makeActivityEntry('sched-act', 'schedule');
+    const data = makeDashboardData({ activityFeed: [entry] });
+    const nav: NavState = { ...INITIAL_NAV, activityFocused: true, activitySelectedIndex: 0 };
+    const { mutations, cancelSchedule } = makeMutations();
+    const { stdin } = render(<KeyboardWrapper initialData={data} initialNav={nav} mutations={mutations} />);
+
+    await press(stdin, 'c');
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+    expect(cancelSchedule).toHaveBeenCalledWith('sched-act', 'User cancelled via dashboard');
+  });
+
+  it('"c" when activityFocused is false does NOT dispatch any cancel (no-op)', async () => {
+    const entry = makeActivityEntry('task-noop', 'task');
+    const data = makeDashboardData({ activityFeed: [entry] });
+    // activityFocused: false — default state on metrics view open
+    const nav: NavState = { ...INITIAL_NAV, activityFocused: false };
+    const { mutations, cancelTask } = makeMutations();
+    const { stdin } = render(<KeyboardWrapper initialData={data} initialNav={nav} mutations={mutations} />);
+
+    await press(stdin, 'c');
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+    // Must NOT dispatch to activity entry — user has not tabbed to activity feed
+    expect(cancelTask).not.toHaveBeenCalled();
+  });
+
+  it('"d" on activity-focused terminal task dispatches task delete', async () => {
+    const entry = makeActivityEntry('task-done', 'task', 'completed');
+    const data = makeDashboardData({ activityFeed: [entry] });
+    const nav: NavState = { ...INITIAL_NAV, activityFocused: true, activitySelectedIndex: 0 };
+    const { mutations, deleteTask } = makeMutations();
+    const { stdin } = render(<KeyboardWrapper initialData={data} initialNav={nav} mutations={mutations} />);
+
+    await press(stdin, 'd');
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+    expect(deleteTask).toHaveBeenCalledWith('task-done');
+  });
+
+  it('"d" on activity-focused running task is no-op (cannot delete live entity)', async () => {
+    const entry = makeActivityEntry('task-live', 'task', 'running');
+    const data = makeDashboardData({ activityFeed: [entry] });
+    const nav: NavState = { ...INITIAL_NAV, activityFocused: true, activitySelectedIndex: 0 };
+    const { mutations, deleteTask } = makeMutations();
+    const { stdin } = render(<KeyboardWrapper initialData={data} initialNav={nav} mutations={mutations} />);
+
+    await press(stdin, 'd');
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+    expect(deleteTask).not.toHaveBeenCalled();
+  });
+});
