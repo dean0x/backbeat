@@ -160,15 +160,13 @@ export class LoopHandler extends BaseEventHandler {
   // ============================================================================
 
   /**
-   * Handle loop creation — persist via repo, then start first iteration
-   *
-   * DECISION (2026-04-10): Re-throw inner Result errors so the EventBus surfaces
-   * emission failures via emit().Result.err. Previously, errors were logged-and-dropped,
-   * allowing loopRepo.save() failures to propagate as orphan loop IDs into
-   * orchestration-manager.ts which then crashed with FK constraint violations.
+   * Handle loop creation — persist via repo, then start first iteration.
+   * Errors are logged and dropped (matching BaseEventHandler pattern used by all
+   * other handlers). The EventBus never receives thrown exceptions from handlers;
+   * callers rely on handleEvent()'s structured logging for observability.
    */
   private async handleLoopCreated(event: LoopCreatedEvent): Promise<void> {
-    const result = await this.handleEvent(event, async (e) => {
+    await this.handleEvent(event, async (e) => {
       const loop = e.loop;
 
       this.logger.info('Processing new loop', {
@@ -189,9 +187,6 @@ export class LoopHandler extends BaseEventHandler {
 
       return ok(undefined);
     });
-    // Propagate inner failures — the EventBus converts thrown errors into
-    // rejected handler results, surfacing them via emit()'s err(...) return.
-    if (!result.ok) throw result.error;
   }
 
   /**

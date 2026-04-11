@@ -170,6 +170,37 @@ describe('LoopHandler - Behavioral Tests', () => {
     });
   });
 
+  describe('handleLoopCreated — error handling', () => {
+    it('logs the error and does not throw when loopRepo.save fails', async () => {
+      // Arrange: make save() return a failure
+      vi.spyOn(loopRepo, 'save').mockResolvedValueOnce({
+        ok: false,
+        error: new Error('Simulated DB failure'),
+      });
+
+      const loop = createLoop(
+        {
+          prompt: 'test',
+          strategy: LoopStrategy.RETRY,
+          exitCondition: 'true',
+          maxIterations: 5,
+          maxConsecutiveFailures: 3,
+          cooldownMs: 0,
+          freshContext: true,
+          evalTimeout: 60000,
+        },
+        '/tmp',
+      );
+
+      // Act: emitting must not throw even though save() fails
+      await expect(eventBus.emit('LoopCreated', { loop })).resolves.not.toThrow();
+      await flushEventLoop();
+
+      // Assert: error was logged, not thrown
+      expect(logger.hasLogContaining('Failed to save loop')).toBe(true);
+    });
+  });
+
   describe('Retry strategy - basic lifecycle', () => {
     it('should create first iteration on LoopCreated event', async () => {
       const loop = await createAndEmitLoop();
