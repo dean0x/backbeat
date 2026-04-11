@@ -5,6 +5,7 @@
  */
 
 import type {
+  ActivityEntry,
   Loop,
   LoopId,
   LoopIteration,
@@ -14,6 +15,7 @@ import type {
   ScheduleId,
   Task,
   TaskId,
+  TaskUsage,
 } from '../../core/domain.js';
 import type {
   LoopRepository,
@@ -88,6 +90,12 @@ export interface EntityCounts {
  * - iterations: LoopIteration[] when viewing a loop detail
  * - executions: ScheduleExecution[] when viewing a schedule detail
  * - orchestrationLiveness: liveness badges for RUNNING orchestrations
+ *
+ * Metrics view extras (Phase C — v1.3.0):
+ * - costRollup24h: aggregated cost/token usage over the last 24 hours
+ * - topOrchestrationsByCost: top-N orchestrations by total cost in 24h window
+ * - throughputStats: task/loop throughput over a 1-hour window
+ * - activityFeed: merged time-sorted activity across all entity kinds
  */
 export interface DashboardData {
   readonly tasks: readonly Task[];
@@ -102,6 +110,20 @@ export interface DashboardData {
   readonly executions?: readonly ScheduleExecution[];
   /** Liveness state per orchestration ID — only populated for RUNNING orchestrations */
   readonly orchestrationLiveness?: Readonly<Record<string, Liveness>>;
+
+  // Metrics view extras (v1.3.0)
+  readonly costRollup24h?: TaskUsage;
+  readonly topOrchestrationsByCost?: readonly {
+    readonly orchestrationId: OrchestratorId;
+    readonly totalCost: number;
+  }[];
+  readonly throughputStats?: {
+    readonly tasksPerHour: number;
+    readonly loopsPerHour: number;
+    readonly successRate: number;
+    readonly avgDurationMs: number;
+  };
+  readonly activityFeed?: readonly ActivityEntry[];
 }
 
 /**

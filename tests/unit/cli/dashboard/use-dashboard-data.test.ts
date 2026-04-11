@@ -29,16 +29,65 @@ function makeMockRepo(overrides: Record<string, unknown> = {}): {
 }
 
 function makeCtx(overrides: Partial<ReadOnlyContext> = {}): ReadOnlyContext {
-  const taskRepo = makeMockRepo();
+  const taskRepo = {
+    ...makeMockRepo(),
+    getThroughputStats: vi
+      .fn()
+      .mockResolvedValue(ok({ tasksPerHour: 0, loopsPerHour: 0, successRate: 0, avgDurationMs: 0 })),
+    findUpdatedSince: vi.fn().mockResolvedValue(ok([])),
+  };
   const loopRepo = {
     ...makeMockRepo(),
     getIterations: vi.fn().mockResolvedValue(ok([])),
+    findUpdatedSince: vi.fn().mockResolvedValue(ok([])),
   };
   const scheduleRepo = {
     ...makeMockRepo(),
     getExecutionHistory: vi.fn().mockResolvedValue(ok([])),
+    findUpdatedSince: vi.fn().mockResolvedValue(ok([])),
   };
-  const orchestrationRepo = makeMockRepo();
+  const orchestrationRepo = {
+    ...makeMockRepo(),
+    findUpdatedSince: vi.fn().mockResolvedValue(ok([])),
+  };
+  const usageRepo = {
+    sumGlobal: vi.fn().mockResolvedValue(
+      ok({
+        taskId: '' as never,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheCreationInputTokens: 0,
+        cacheReadInputTokens: 0,
+        totalCostUsd: 0,
+        capturedAt: 0,
+      }),
+    ),
+    topOrchestrationsByCost: vi.fn().mockResolvedValue(ok([])),
+    get: vi.fn().mockResolvedValue(ok(null)),
+    save: vi.fn().mockResolvedValue(ok(undefined)),
+    sumByOrchestrationId: vi.fn().mockResolvedValue(
+      ok({
+        taskId: '' as never,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheCreationInputTokens: 0,
+        cacheReadInputTokens: 0,
+        totalCostUsd: 0,
+        capturedAt: 0,
+      }),
+    ),
+    sumByLoopId: vi.fn().mockResolvedValue(
+      ok({
+        taskId: '' as never,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheCreationInputTokens: 0,
+        cacheReadInputTokens: 0,
+        totalCostUsd: 0,
+        capturedAt: 0,
+      }),
+    ),
+  };
 
   return {
     taskRepository: taskRepo as unknown as ReadOnlyContext['taskRepository'],
@@ -46,6 +95,10 @@ function makeCtx(overrides: Partial<ReadOnlyContext> = {}): ReadOnlyContext {
     scheduleRepository: scheduleRepo as unknown as ReadOnlyContext['scheduleRepository'],
     orchestrationRepository: orchestrationRepo as unknown as ReadOnlyContext['orchestrationRepository'],
     outputRepository: {} as ReadOnlyContext['outputRepository'],
+    usageRepository: usageRepo as unknown as ReadOnlyContext['usageRepository'],
+    workerRepository: {
+      findAll: vi.fn().mockResolvedValue(ok([])),
+    } as unknown as ReadOnlyContext['workerRepository'],
     close: vi.fn(),
     ...overrides,
   };
@@ -152,6 +205,10 @@ describe('fetchAllData', () => {
     const taskRepo = {
       findAll: vi.fn().mockResolvedValue(ok([])),
       countByStatus: vi.fn().mockResolvedValue(ok({ running: 3, completed: 7 })),
+      getThroughputStats: vi
+        .fn()
+        .mockResolvedValue(ok({ tasksPerHour: 0, loopsPerHour: 0, successRate: 0, avgDurationMs: 0 })),
+      findUpdatedSince: vi.fn().mockResolvedValue(ok([])),
     };
     const ctx = makeCtx({
       taskRepository: taskRepo as unknown as ReadOnlyContext['taskRepository'],
@@ -170,6 +227,7 @@ describe('fetchAllData', () => {
       findAll: vi.fn().mockResolvedValue(ok([])),
       countByStatus: vi.fn().mockResolvedValue(ok({})),
       getIterations: vi.fn().mockResolvedValue(ok([])),
+      findUpdatedSince: vi.fn().mockResolvedValue(ok([])),
     };
     const ctx = makeCtx({
       loopRepository: loopRepo as unknown as ReadOnlyContext['loopRepository'],
@@ -197,11 +255,12 @@ describe('fetchAllData', () => {
     expect(scheduleRepo.getExecutionHistory).toHaveBeenCalledWith('sched-456', 50);
   });
 
-  it('does not fetch extra data when in main view', async () => {
+  it('does not fetch loop iterations (getIterations) when in main view', async () => {
     const loopRepo = {
       findAll: vi.fn().mockResolvedValue(ok([])),
       countByStatus: vi.fn().mockResolvedValue(ok({})),
       getIterations: vi.fn().mockResolvedValue(ok([])),
+      findUpdatedSince: vi.fn().mockResolvedValue(ok([])),
     };
     const ctx = makeCtx({
       loopRepository: loopRepo as unknown as ReadOnlyContext['loopRepository'],
@@ -209,6 +268,7 @@ describe('fetchAllData', () => {
 
     await fetchAllData(ctx, MAIN_VIEW);
 
+    // getIterations is for detail view only — should not be called in main view
     expect(loopRepo.getIterations).not.toHaveBeenCalled();
   });
 

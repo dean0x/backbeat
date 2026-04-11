@@ -22,6 +22,7 @@ import type {
   OrchestrationRepository,
   OrchestrationService,
   OutputRepository,
+  ResourceMonitor,
   ScheduleRepository,
   ScheduleService,
   TaskManager,
@@ -113,6 +114,10 @@ export async function startDashboard(): Promise<void> {
     },
   };
 
+  // Extract resource monitor for the resources tile (best-effort — optional)
+  const resourceMonitorResult = container.get<ResourceMonitor>('resourceMonitor');
+  const resourceMonitor = resourceMonitorResult.ok ? resourceMonitorResult.value : undefined;
+
   // Extract mutation services for cancel/delete keybindings
   const orchestrationServiceResult = container.get<OrchestrationService>('orchestrationService');
   const loopServiceResult = container.get<LoopService>('loopService');
@@ -173,7 +178,7 @@ export async function startDashboard(): Promise<void> {
     process.exit(1);
   });
 
-  const instance = render(<App ctx={ctx} version={version} mutations={mutations} />, {
+  const instance = render(<App ctx={ctx} version={version} mutations={mutations} resourceMonitor={resourceMonitor} />, {
     stdout: process.stderr,
     patchConsole: false,
   });

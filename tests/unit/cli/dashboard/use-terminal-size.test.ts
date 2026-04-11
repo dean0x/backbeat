@@ -144,10 +144,12 @@ describe('useTerminalSize', () => {
       Object.defineProperty(process.stderr, 'rows', { value: 24, configurable: true, writable: true });
 
       let resizeHandler: (() => void) | undefined;
-      vi.spyOn(process.stderr, 'on').mockImplementation((event: string | symbol, handler: (...args: unknown[]) => void) => {
-        if (event === 'resize') resizeHandler = handler as () => void;
-        return process.stderr;
-      });
+      vi.spyOn(process.stderr, 'on').mockImplementation(
+        (event: string | symbol, handler: (...args: unknown[]) => void) => {
+          if (event === 'resize') resizeHandler = handler as () => void;
+          return process.stderr;
+        },
+      );
       vi.spyOn(process.stderr, 'off').mockReturnValue(process.stderr);
 
       const { unmount } = renderHook();
@@ -172,10 +174,12 @@ describe('useTerminalSize', () => {
       Object.defineProperty(process.stderr, 'rows', { value: 24, configurable: true, writable: true });
 
       let resizeHandler: (() => void) | undefined;
-      vi.spyOn(process.stderr, 'on').mockImplementation((event: string | symbol, handler: (...args: unknown[]) => void) => {
-        if (event === 'resize') resizeHandler = handler as () => void;
-        return process.stderr;
-      });
+      vi.spyOn(process.stderr, 'on').mockImplementation(
+        (event: string | symbol, handler: (...args: unknown[]) => void) => {
+          if (event === 'resize') resizeHandler = handler as () => void;
+          return process.stderr;
+        },
+      );
       vi.spyOn(process.stderr, 'off').mockReturnValue(process.stderr);
 
       const { captureRef, unmount } = renderHook();
@@ -216,10 +220,12 @@ describe('useTerminalSize', () => {
       const clearSpy = vi.spyOn(global, 'clearTimeout');
 
       let resizeHandler: (() => void) | undefined;
-      vi.spyOn(process.stderr, 'on').mockImplementation((event: string | symbol, handler: (...args: unknown[]) => void) => {
-        if (event === 'resize') resizeHandler = handler as () => void;
-        return process.stderr;
-      });
+      vi.spyOn(process.stderr, 'on').mockImplementation(
+        (event: string | symbol, handler: (...args: unknown[]) => void) => {
+          if (event === 'resize') resizeHandler = handler as () => void;
+          return process.stderr;
+        },
+      );
       vi.spyOn(process.stderr, 'off').mockReturnValue(process.stderr);
 
       const { unmount } = renderHook();

@@ -15,6 +15,7 @@ import type { Result } from '../../core/result.js';
 import { err, ok } from '../../core/result.js';
 import { checkOrchestrationLiveness, type Liveness } from '../../services/orchestration-liveness.js';
 import type { ReadOnlyContext } from '../read-only-context.js';
+import { buildActivityFeed } from './activity-feed.js';
 import type { DashboardData, DetailExtra, EntityCounts, ViewState } from './types.js';
 
 export interface UseDashboardDataResult {
@@ -143,6 +144,16 @@ export async function fetchAllData(ctx: ReadOnlyContext, viewState: ViewState): 
     }
   }
 
+  // Main-view metrics extras — fetched in parallel when viewing the metrics dashboard
+  let metricsExtras: Pick<
+    DashboardData,
+    'costRollup24h' | 'topOrchestrationsByCost' | 'throughputStats' | 'activityFeed'
+  > = {};
+
+  if (viewState.kind === 'main') {
+    metricsExtras = await fetchMetricsExtras(ctx);
+  }
+
   return ok({
     tasks: tasks.value,
     loops: loops.value,
@@ -154,7 +165,54 @@ export async function fetchAllData(ctx: ReadOnlyContext, viewState: ViewState): 
     orchestrationCounts: buildEntityCounts(orchestrationCounts.value),
     orchestrationLiveness,
     ...detailExtra,
+    ...metricsExtras,
   });
+}
+
+/**
+ * Fetch metrics-view extras in parallel (cost, throughput, activity feed).
+ * All failures are handled gracefully — errors yield undefined for that field.
+ * Best-effort: dashboard degrades without crashing if any query fails.
+ */
+async function fetchMetricsExtras(
+  ctx: ReadOnlyContext,
+): Promise<Pick<DashboardData, 'costRollup24h' | 'topOrchestrationsByCost' | 'throughputStats' | 'activityFeed'>> {
+  const nowMs = Date.now();
+  const since24h = nowMs - 24 * 3600 * 1000;
+  const since1h = nowMs - 3600 * 1000;
+
+  const [
+    costRollupResult,
+    topOrchsResult,
+    throughputResult,
+    recentTasksResult,
+    recentLoopsResult,
+    recentOrchsResult,
+    recentSchedsResult,
+  ] = await Promise.all([
+    ctx.usageRepository.sumGlobal(since24h),
+    ctx.usageRepository.topOrchestrationsByCost(since24h, 3),
+    ctx.taskRepository.getThroughputStats(3600 * 1000),
+    ctx.taskRepository.findUpdatedSince(since1h, 50),
+    ctx.loopRepository.findUpdatedSince(since1h, 50),
+    ctx.orchestrationRepository.findUpdatedSince(since1h, 50),
+    ctx.scheduleRepository.findUpdatedSince(since1h, 50),
+  ]);
+
+  const activityFeed = buildActivityFeed({
+    tasks: recentTasksResult.ok ? recentTasksResult.value : [],
+    loops: recentLoopsResult.ok ? recentLoopsResult.value : [],
+    orchestrations: recentOrchsResult.ok ? recentOrchsResult.value : [],
+    schedules: recentSchedsResult.ok ? recentSchedsResult.value : [],
+    limit: 50,
+  });
+
+  return {
+    costRollup24h: costRollupResult.ok ? costRollupResult.value : undefined,
+    topOrchestrationsByCost: topOrchsResult.ok ? topOrchsResult.value : undefined,
+    throughputStats: throughputResult.ok ? throughputResult.value : undefined,
+    activityFeed,
+  };
 }
 
 /**

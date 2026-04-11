@@ -6,14 +6,18 @@
 
 import { Box, useApp } from 'ink';
 import React, { useEffect, useState } from 'react';
+import type { ResourceMonitor } from '../../core/interfaces.js';
 import type { ReadOnlyContext } from '../read-only-context.js';
 import { Footer } from './components/footer.js';
 import { Header } from './components/header.js';
+import { computeMetricsLayout } from './layout.js';
 import type { DashboardMutationContext, NavState, ViewState } from './types.js';
 import { useDashboardData } from './use-dashboard-data.js';
 import { useKeyboard } from './use-keyboard.js';
+import { useResourceMetrics } from './use-resource-metrics.js';
+import { useTerminalSize } from './use-terminal-size.js';
 import { DetailView } from './views/detail-view.js';
-import { MainView } from './views/main-view.js';
+import { MetricsView } from './views/metrics-view.js';
 
 interface AppProps {
   readonly ctx: ReadOnlyContext;
@@ -23,6 +27,11 @@ interface AppProps {
    * enabled for cancel/delete operations. Omitted in read-only contexts.
    */
   readonly mutations?: DashboardMutationContext;
+  /**
+   * Optional resource monitor for the resources tile.
+   * When provided, useResourceMetrics polls it every 2s.
+   */
+  readonly resourceMonitor?: ResourceMonitor;
 }
 
 /** Initial navigation state — focus on loops panel, no selection, no filters */
@@ -37,7 +46,7 @@ const INITIAL_NAV: NavState = {
  * Root dashboard component.
  * Renders to stderr via the render() call in index.tsx.
  */
-export const App: React.FC<AppProps> = React.memo(({ ctx, version, mutations }) => {
+export const App: React.FC<AppProps> = React.memo(({ ctx, version, mutations, resourceMonitor }) => {
   const { exit } = useApp();
 
   const [view, setView] = useState<ViewState>({ kind: 'main' });
@@ -51,6 +60,13 @@ export const App: React.FC<AppProps> = React.memo(({ ctx, version, mutations }) 
     }, 250);
     return () => clearInterval(timer);
   }, []);
+
+  // Terminal size + metrics layout for responsive rendering
+  const terminalSize = useTerminalSize();
+  const metricsLayout = computeMetricsLayout(terminalSize);
+
+  // Resource metrics polling (2s interval)
+  const { resources: resourceMetrics, error: resourceError } = useResourceMetrics(resourceMonitor);
 
   const { data, error, refreshedAt, refreshNow } = useDashboardData(ctx, view);
 
@@ -69,7 +85,13 @@ export const App: React.FC<AppProps> = React.memo(({ ctx, version, mutations }) 
     <Box flexDirection="column" width="100%">
       <Header version={version} data={data} refreshedAt={refreshedAt} error={error} />
       {view.kind === 'main' ? (
-        <MainView data={data} nav={nav} />
+        <MetricsView
+          layout={metricsLayout}
+          data={data}
+          nav={nav}
+          resourceMetrics={resourceMetrics}
+          resourceError={resourceError}
+        />
       ) : (
         <DetailView
           entityType={view.entityType}
