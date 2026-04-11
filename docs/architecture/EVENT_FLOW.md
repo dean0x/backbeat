@@ -427,7 +427,7 @@ container.registerValue('dependencyHandler', dependencyHandler);
 | Pattern | Handlers | When to Use |
 |---------|----------|-------------|
 | **Standard** (via registry) | PersistenceHandler, QueueHandler, WorkerHandler | Synchronous initialization, uses `setup(eventBus)` |
-| **Factory** (returned separately) | DependencyHandler, ScheduleHandler, CheckpointHandler | Requires async initialization (loading state from DB) |
+| **Factory** (returned separately) | DependencyHandler, ScheduleHandler, CheckpointHandler, OrchestrationHandler, UsageCaptureHandler | Requires async initialization (loading state from DB) |
 
 ### Adding New Handlers (v0.4.0+)
 

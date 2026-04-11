@@ -59,6 +59,7 @@ npm run test:coverage       # With coverage
 - `ScheduleHandler` → schedule lifecycle (create, pause, resume, cancel)
 - `ScheduleExecutor` → cron/one-time execution engine (note: has direct repo writes, architectural exception to event-driven pattern)
 - `LoopHandler` → loop iteration engine (retry/optimize strategies, exit condition evaluation)
+- `UsageCaptureHandler` → captures Claude token/cost usage on TaskCompleted, writes to `task_usage` via UsageParser
 
 See `docs/architecture/` for implementation details.
 
