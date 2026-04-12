@@ -590,7 +590,11 @@ describe('useKeyboard — c: cancel keybinding', () => {
     // Allow async handler to complete
     await new Promise<void>((resolve) => setTimeout(resolve, 20));
 
-    expect(cancelOrchestration).toHaveBeenCalledWith('orch-1', 'User cancelled via dashboard');
+    // Behavioral change (PR #133): main panel cancel now always cascades (cancelAttributedTasks: true)
+    // to match activity and workspace views — consistent UX across all dashboard contexts.
+    expect(cancelOrchestration).toHaveBeenCalledWith('orch-1', 'User cancelled via dashboard', {
+      cancelAttributedTasks: true,
+    });
   });
 
   it('"c" cancels a running loop', async () => {
