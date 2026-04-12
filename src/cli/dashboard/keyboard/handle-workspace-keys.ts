@@ -6,10 +6,24 @@
  * pagination (PgUp/PgDn), and cancel/delete via entity-mutations.
  */
 
-import type { TaskId } from '../../../core/domain.js';
+import type { OrchestratorChild, TaskId } from '../../../core/domain.js';
+import type { WorkspaceNavState } from '../workspace-types.js';
 import { TERMINAL_STATUSES } from './constants.js';
 import { cancelEntity, deleteEntity } from './entity-mutations.js';
 import type { InkKey, KeyHandlerParams } from './types.js';
+
+/**
+ * Return the focused child task panel for the current workspace view, or null.
+ * Shared by scroll ([/]/g/G), drill-through (Enter), and cancel/delete (c/d) handlers.
+ */
+function getFocusedChild(
+  dataRef: KeyHandlerParams['dataRef'],
+  workspaceNav: WorkspaceNavState,
+): OrchestratorChild | null {
+  const children = dataRef.current?.workspaceData?.children;
+  if (!children || children.length === 0) return null;
+  return children[workspaceNav.focusedPanelIndex] ?? null;
+}
 
 /**
  * Handle key input while in the workspace view.
@@ -118,13 +132,9 @@ export function handleWorkspaceKeys(input: string, key: InkKey, params: KeyHandl
       return true;
     }
     // grid focus — drill into child task detail
-    const data = dataRef.current;
-    const children = data?.workspaceData?.children;
-    if (children && children.length > 0) {
-      const child = children[workspaceNav.focusedPanelIndex];
-      if (child) {
-        setView({ kind: 'detail', entityType: 'tasks', entityId: child.taskId as TaskId, returnTo: 'workspace' });
-      }
+    const child = getFocusedChild(dataRef, workspaceNav);
+    if (child) {
+      setView({ kind: 'detail', entityType: 'tasks', entityId: child.taskId as TaskId, returnTo: 'workspace' });
     }
     return true;
   }
@@ -153,78 +163,62 @@ export function handleWorkspaceKeys(input: string, key: InkKey, params: KeyHandl
 
   // [ — scroll focused panel up
   if (input === '[') {
-    const data = dataRef.current;
-    const children = data?.workspaceData?.children;
-    if (children && children.length > 0) {
-      const child = children[workspaceNav.focusedPanelIndex];
-      if (child) {
-        const taskId = child.taskId;
-        setWorkspaceNav((prev) => ({
-          ...prev,
-          panelScrollOffsets: {
-            ...prev.panelScrollOffsets,
-            [taskId]: Math.max(0, (prev.panelScrollOffsets[taskId] ?? 0) - 1),
-          },
-          autoTailEnabled: { ...prev.autoTailEnabled, [taskId]: false },
-        }));
-      }
+    const child = getFocusedChild(dataRef, workspaceNav);
+    if (child) {
+      const taskId = child.taskId;
+      setWorkspaceNav((prev) => ({
+        ...prev,
+        panelScrollOffsets: {
+          ...prev.panelScrollOffsets,
+          [taskId]: Math.max(0, (prev.panelScrollOffsets[taskId] ?? 0) - 1),
+        },
+        autoTailEnabled: { ...prev.autoTailEnabled, [taskId]: false },
+      }));
     }
     return true;
   }
 
   // ] — scroll focused panel down
   if (input === ']') {
-    const data = dataRef.current;
-    const children = data?.workspaceData?.children;
-    if (children && children.length > 0) {
-      const child = children[workspaceNav.focusedPanelIndex];
-      if (child) {
-        const taskId = child.taskId;
-        setWorkspaceNav((prev) => ({
-          ...prev,
-          panelScrollOffsets: {
-            ...prev.panelScrollOffsets,
-            [taskId]: (prev.panelScrollOffsets[taskId] ?? 0) + 1,
-          },
-          // auto-tail stays as-is — caller re-enables when reaching bottom
-        }));
-      }
+    const child = getFocusedChild(dataRef, workspaceNav);
+    if (child) {
+      const taskId = child.taskId;
+      setWorkspaceNav((prev) => ({
+        ...prev,
+        panelScrollOffsets: {
+          ...prev.panelScrollOffsets,
+          [taskId]: (prev.panelScrollOffsets[taskId] ?? 0) + 1,
+        },
+        // auto-tail stays as-is — caller re-enables when reaching bottom
+      }));
     }
     return true;
   }
 
   // g — jump to top of focused panel
   if (input === 'g') {
-    const data = dataRef.current;
-    const children = data?.workspaceData?.children;
-    if (children && children.length > 0) {
-      const child = children[workspaceNav.focusedPanelIndex];
-      if (child) {
-        const taskId = child.taskId;
-        setWorkspaceNav((prev) => ({
-          ...prev,
-          panelScrollOffsets: { ...prev.panelScrollOffsets, [taskId]: 0 },
-          autoTailEnabled: { ...prev.autoTailEnabled, [taskId]: false },
-        }));
-      }
+    const child = getFocusedChild(dataRef, workspaceNav);
+    if (child) {
+      const taskId = child.taskId;
+      setWorkspaceNav((prev) => ({
+        ...prev,
+        panelScrollOffsets: { ...prev.panelScrollOffsets, [taskId]: 0 },
+        autoTailEnabled: { ...prev.autoTailEnabled, [taskId]: false },
+      }));
     }
     return true;
   }
 
   // G — jump to bottom and re-engage auto-tail
   if (input === 'G') {
-    const data = dataRef.current;
-    const children = data?.workspaceData?.children;
-    if (children && children.length > 0) {
-      const child = children[workspaceNav.focusedPanelIndex];
-      if (child) {
-        const taskId = child.taskId;
-        setWorkspaceNav((prev) => ({
-          ...prev,
-          panelScrollOffsets: { ...prev.panelScrollOffsets, [taskId]: 0 },
-          autoTailEnabled: { ...prev.autoTailEnabled, [taskId]: true },
-        }));
-      }
+    const child = getFocusedChild(dataRef, workspaceNav);
+    if (child) {
+      const taskId = child.taskId;
+      setWorkspaceNav((prev) => ({
+        ...prev,
+        panelScrollOffsets: { ...prev.panelScrollOffsets, [taskId]: 0 },
+        autoTailEnabled: { ...prev.autoTailEnabled, [taskId]: true },
+      }));
     }
     return true;
   }
@@ -249,21 +243,16 @@ export function handleWorkspaceKeys(input: string, key: InkKey, params: KeyHandl
 
   // c — cancel (nav: committed orch with cascade; grid: focused child task)
   if (input === 'c' && mutations) {
-    const data = dataRef.current;
     if (workspaceNav.focusArea === 'nav') {
-      const orchs = data?.orchestrations ?? [];
-      const orch = orchs[workspaceNav.committedOrchestratorIndex];
+      const orch = (dataRef.current?.orchestrations ?? [])[workspaceNav.committedOrchestratorIndex];
       if (orch && !TERMINAL_STATUSES.orchestrations.includes(orch.status)) {
         void cancelEntity('orchestration', orch.id, orch.status, mutations, refreshNow);
       }
     } else {
       // grid focus — cancel focused child task
-      const children = data?.workspaceData?.children;
-      if (children && children.length > 0) {
-        const child = children[workspaceNav.focusedPanelIndex];
-        if (child && !TERMINAL_STATUSES.tasks.includes(child.status)) {
-          void cancelEntity('task', child.taskId, child.status, mutations, refreshNow);
-        }
+      const child = getFocusedChild(dataRef, workspaceNav);
+      if (child && !TERMINAL_STATUSES.tasks.includes(child.status)) {
+        void cancelEntity('task', child.taskId, child.status, mutations, refreshNow);
       }
     }
     return true;
@@ -272,13 +261,9 @@ export function handleWorkspaceKeys(input: string, key: InkKey, params: KeyHandl
   // d — delete terminal entity (grid focus only; nav focus is ignored)
   if (input === 'd' && mutations) {
     if (workspaceNav.focusArea === 'grid') {
-      const data = dataRef.current;
-      const children = data?.workspaceData?.children;
-      if (children && children.length > 0) {
-        const child = children[workspaceNav.focusedPanelIndex];
-        if (child && TERMINAL_STATUSES.tasks.includes(child.status)) {
-          void deleteEntity('task', child.taskId, child.status, mutations, refreshNow);
-        }
+      const child = getFocusedChild(dataRef, workspaceNav);
+      if (child && TERMINAL_STATUSES.tasks.includes(child.status)) {
+        void deleteEntity('task', child.taskId, child.status, mutations, refreshNow);
       }
     }
     return true;

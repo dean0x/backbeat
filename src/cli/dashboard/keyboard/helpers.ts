@@ -4,7 +4,8 @@
  */
 
 import type { ActivityEntry } from '../../../core/domain.js';
-import type { DashboardData, PanelId } from '../types.js';
+import type { DashboardData, NavState, PanelId } from '../types.js';
+import type { EntityKind } from './entity-mutations.js';
 import type { Identifiable } from './types.js';
 
 /**
@@ -78,4 +79,35 @@ export function activityKindToEntityType(
     case 'schedule':
       return 'schedules';
   }
+}
+
+/**
+ * Map a PanelId to its corresponding EntityKind.
+ * Used by cancel/delete handlers to route to the correct service.
+ */
+export function panelToEntityKind(panelId: PanelId): EntityKind {
+  switch (panelId) {
+    case 'orchestrations':
+      return 'orchestration';
+    case 'loops':
+      return 'loop';
+    case 'tasks':
+      return 'task';
+    case 'schedules':
+      return 'schedule';
+  }
+}
+
+/**
+ * Return the currently selected item in the focused panel, or null if data is absent.
+ * Applies the active filter before resolving the selection index.
+ * Used by the 'c' (cancel) and 'd' (delete) handlers in the main panel.
+ */
+export function getFocusedPanelItem(nav: NavState, data: DashboardData | null): Identifiable | null {
+  if (data === null) return null;
+  const panel = nav.focusedPanel;
+  const filter = nav.filters[panel];
+  const allItems = getPanelItems(panel, data);
+  const filteredItems = filter !== null ? allItems.filter((item) => item.status === filter) : allItems;
+  return filteredItems[nav.selectedIndices[panel]] ?? null;
 }

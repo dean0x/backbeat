@@ -17,7 +17,14 @@
 import type { LoopId, OrchestratorId, ScheduleId, TaskId } from '../../../core/domain.js';
 import { FILTER_CYCLES, PANEL_JUMP_KEYS, PANEL_ORDER } from './constants.js';
 import { cancelEntity, deleteEntity } from './entity-mutations.js';
-import { activityKindToEntityType, clamp, filteredLength, getPanelItems } from './helpers.js';
+import {
+  activityKindToEntityType,
+  clamp,
+  filteredLength,
+  getFocusedPanelItem,
+  getPanelItems,
+  panelToEntityKind,
+} from './helpers.js';
 import type { InkKey, KeyHandlerParams } from './types.js';
 
 /**
@@ -240,49 +247,18 @@ export function handleMainKeys(input: string, key: InkKey, params: KeyHandlerPar
   // DECISION (2026-04-10): Manual cancel/delete keybindings on ALL four panels.
   // All orchestration cancels cascade per PR #133 review resolution.
   if (input === 'c' && params.mutations) {
-    const data = params.dataRef.current;
-    if (data !== null) {
-      const panel = nav.focusedPanel;
-      const filter = nav.filters[panel];
-      const allItems = getPanelItems(panel, data);
-      const filteredItems = filter !== null ? allItems.filter((item) => item.status === filter) : allItems;
-      const selectedItem = filteredItems[nav.selectedIndices[panel]];
-      if (selectedItem) {
-        // Map PanelId to EntityKind
-        const kind =
-          panel === 'orchestrations'
-            ? 'orchestration'
-            : panel === 'loops'
-              ? 'loop'
-              : panel === 'tasks'
-                ? 'task'
-                : 'schedule';
-        void cancelEntity(kind, selectedItem.id, selectedItem.status, params.mutations, params.refreshNow);
-      }
+    const item = getFocusedPanelItem(nav, params.dataRef.current);
+    if (item) {
+      void cancelEntity(panelToEntityKind(nav.focusedPanel), item.id, item.status, params.mutations, params.refreshNow);
     }
     return true;
   }
 
   // d — delete focused terminal entity row
   if (input === 'd' && params.mutations) {
-    const data = params.dataRef.current;
-    if (data !== null) {
-      const panel = nav.focusedPanel;
-      const filter = nav.filters[panel];
-      const allItems = getPanelItems(panel, data);
-      const filteredItems = filter !== null ? allItems.filter((item) => item.status === filter) : allItems;
-      const selectedItem = filteredItems[nav.selectedIndices[panel]];
-      if (selectedItem) {
-        const kind =
-          panel === 'orchestrations'
-            ? 'orchestration'
-            : panel === 'loops'
-              ? 'loop'
-              : panel === 'tasks'
-                ? 'task'
-                : 'schedule';
-        void deleteEntity(kind, selectedItem.id, selectedItem.status, params.mutations, params.refreshNow);
-      }
+    const item = getFocusedPanelItem(nav, params.dataRef.current);
+    if (item) {
+      void deleteEntity(panelToEntityKind(nav.focusedPanel), item.id, item.status, params.mutations, params.refreshNow);
     }
     return true;
   }
