@@ -505,6 +505,39 @@ describe('SQLiteUsageRepository', () => {
       expect(result.value.totalCostUsd).toBeCloseTo(0.175);
     });
 
+    it('A1: does not double-count a task reachable via multiple CTE paths', async () => {
+      // Bug: same as sumByOrchestrationId A1 — UNION deduplicates on full tuple,
+      // not task_id alone. A retry recorded as its own iteration AND reachable via
+      // the recursive arm produces duplicates. DISTINCT task_id collapses them.
+      const { loop, task } = await createLoopWithIteration('loop-distinct');
+
+      // Original iteration task
+      await repo.save(makeUsage(task.id, { inputTokens: 100, totalCostUsd: 0.1 }));
+
+      // Retry of the iteration task — also recorded as its own iteration
+      const retry = createTask({ prompt: 'retry of loop task', retryOf: task.id });
+      const completedRetry = { ...retry, status: TaskStatus.COMPLETED };
+      await taskRepo.save(completedRetry);
+      await repo.save(makeUsage(retry.id, { inputTokens: 50, totalCostUsd: 0.05 }));
+
+      // Record retry as a second iteration (so it appears in base case AND recursive arm)
+      await loopRepo.recordIteration({
+        id: 0,
+        loopId: loop.id,
+        iterationNumber: 2,
+        taskId: retry.id,
+        status: 'pass',
+        startedAt: Date.now(),
+      });
+
+      const result = await repo.sumByLoopId(loop.id);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      // Should be 150, not 200 (if retry was double-counted)
+      expect(result.value.inputTokens).toBe(150);
+      expect(result.value.totalCostUsd).toBeCloseTo(0.15);
+    });
+
     it('returns zero aggregate when loop has no iteration tasks with usage', async () => {
       const loop = createLoop({ prompt: 'empty', strategy: LoopStrategy.RETRY, exitCondition: 'exit 0' }, '/workspace');
       const savedLoop = { ...loop, id: LoopId('loop-empty'), status: LoopStatus.RUNNING };

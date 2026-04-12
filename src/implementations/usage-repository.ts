@@ -156,6 +156,12 @@ export class SQLiteUsageRepository implements UsageRepository {
     // Consistent with sumByOrchestrationId and topOrchestrationsByCost — all usage
     // aggregation in this repository walks retry chains.
     // idx_tasks_retry_of (migration v20) covers the recursive JOIN on tasks.retry_of.
+    //
+    // A1 FIX — DISTINCT task_id in the final SELECT:
+    // The single-column UNION already deduplicates today, but DISTINCT guards against
+    // future CTE column additions that could widen the tuple and break deduplication
+    // (the same way sumByOrchestrationId's two-column CTE did). Defensive consistency
+    // with sumByOrchestrationStmt — both aggregation queries use the same pattern.
     this.sumByLoopStmt = this.db.prepare(`
       WITH RECURSIVE iter_tasks(task_id) AS (
         -- Base: tasks directly referenced by loop iterations
@@ -172,7 +178,7 @@ export class SQLiteUsageRepository implements UsageRepository {
         COALESCE(SUM(u.cache_creation_input_tokens), 0)  AS cache_creation_input_tokens,
         COALESCE(SUM(u.cache_read_input_tokens), 0)      AS cache_read_input_tokens,
         COALESCE(SUM(u.total_cost_usd), 0)               AS total_cost_usd
-      FROM iter_tasks it
+      FROM (SELECT DISTINCT task_id FROM iter_tasks) it
       LEFT JOIN task_usage u ON u.task_id = it.task_id
     `);
 
