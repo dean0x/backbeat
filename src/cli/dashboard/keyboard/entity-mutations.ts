@@ -35,33 +35,39 @@ export async function cancelEntity(
   refreshNow: () => void,
 ): Promise<void> {
   const reason = 'User cancelled via dashboard';
-  switch (kind) {
-    case 'orchestration':
-      if (!TERMINAL_STATUSES.orchestrations.includes(entityStatus as OrchestratorStatus)) {
-        await mutations.orchestrationService.cancelOrchestration(entityId as OrchestratorId, reason, {
-          cancelAttributedTasks: true,
-        });
-        refreshNow();
-      }
-      break;
-    case 'loop':
-      if (!TERMINAL_STATUSES.loops.includes(entityStatus as LoopStatus)) {
-        await mutations.loopService.cancelLoop(entityId as LoopId, reason, true);
-        refreshNow();
-      }
-      break;
-    case 'task':
-      if (!TERMINAL_STATUSES.tasks.includes(entityStatus as TaskStatus)) {
-        await mutations.taskManager.cancel(entityId as TaskId, reason);
-        refreshNow();
-      }
-      break;
-    case 'schedule':
-      if (!TERMINAL_STATUSES.schedules.includes(entityStatus as ScheduleStatus)) {
-        await mutations.scheduleService.cancelSchedule(entityId as ScheduleId, reason);
-        refreshNow();
-      }
-      break;
+  try {
+    switch (kind) {
+      case 'orchestration':
+        if (!TERMINAL_STATUSES.orchestrations.includes(entityStatus as OrchestratorStatus)) {
+          await mutations.orchestrationService.cancelOrchestration(entityId as OrchestratorId, reason, {
+            cancelAttributedTasks: true,
+          });
+          refreshNow();
+        }
+        break;
+      case 'loop':
+        if (!TERMINAL_STATUSES.loops.includes(entityStatus as LoopStatus)) {
+          await mutations.loopService.cancelLoop(entityId as LoopId, reason, true);
+          refreshNow();
+        }
+        break;
+      case 'task':
+        if (!TERMINAL_STATUSES.tasks.includes(entityStatus as TaskStatus)) {
+          await mutations.taskManager.cancel(entityId as TaskId, reason);
+          refreshNow();
+        }
+        break;
+      case 'schedule':
+        if (!TERMINAL_STATUSES.schedules.includes(entityStatus as ScheduleStatus)) {
+          await mutations.scheduleService.cancelSchedule(entityId as ScheduleId, reason);
+          refreshNow();
+        }
+        break;
+    }
+  } catch {
+    // Best-effort: service errors are logged internally by each service.
+    // Swallowing here prevents unhandled rejection from crashing the dashboard TUI.
+    // The next 1Hz poll will refresh the UI with accurate state regardless.
   }
 }
 
@@ -78,30 +84,36 @@ export async function deleteEntity(
   mutations: DashboardMutationContext,
   refreshNow: () => void,
 ): Promise<void> {
-  switch (kind) {
-    case 'orchestration':
-      if (TERMINAL_STATUSES.orchestrations.includes(entityStatus as OrchestratorStatus)) {
-        await mutations.orchestrationRepo.delete(entityId as OrchestratorId);
-        refreshNow();
-      }
-      break;
-    case 'loop':
-      if (TERMINAL_STATUSES.loops.includes(entityStatus as LoopStatus)) {
-        await mutations.loopRepo.delete(entityId as LoopId);
-        refreshNow();
-      }
-      break;
-    case 'task':
-      if (TERMINAL_STATUSES.tasks.includes(entityStatus as TaskStatus)) {
-        await mutations.taskRepo.delete(entityId as TaskId);
-        refreshNow();
-      }
-      break;
-    case 'schedule':
-      if (TERMINAL_STATUSES.schedules.includes(entityStatus as ScheduleStatus)) {
-        await mutations.scheduleRepo.delete(entityId as ScheduleId);
-        refreshNow();
-      }
-      break;
+  try {
+    switch (kind) {
+      case 'orchestration':
+        if (TERMINAL_STATUSES.orchestrations.includes(entityStatus as OrchestratorStatus)) {
+          await mutations.orchestrationRepo.delete(entityId as OrchestratorId);
+          refreshNow();
+        }
+        break;
+      case 'loop':
+        if (TERMINAL_STATUSES.loops.includes(entityStatus as LoopStatus)) {
+          await mutations.loopRepo.delete(entityId as LoopId);
+          refreshNow();
+        }
+        break;
+      case 'task':
+        if (TERMINAL_STATUSES.tasks.includes(entityStatus as TaskStatus)) {
+          await mutations.taskRepo.delete(entityId as TaskId);
+          refreshNow();
+        }
+        break;
+      case 'schedule':
+        if (TERMINAL_STATUSES.schedules.includes(entityStatus as ScheduleStatus)) {
+          await mutations.scheduleRepo.delete(entityId as ScheduleId);
+          refreshNow();
+        }
+        break;
+    }
+  } catch {
+    // Best-effort: repo errors are logged internally by each repository.
+    // Swallowing here prevents unhandled rejection from crashing the dashboard TUI.
+    // The next 1Hz poll will refresh the UI with accurate state regardless.
   }
 }
