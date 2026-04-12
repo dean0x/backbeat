@@ -264,6 +264,7 @@ Quick reference for common operations:
 | Usage repository | `src/implementations/usage-repository.ts` |
 | Usage parser | `src/services/usage-parser.ts` |
 | Usage capture handler | `src/services/handlers/usage-capture-handler.ts` |
+| Keyboard handlers | `src/cli/dashboard/keyboard/` |
 
 ## Documentation Structure
 
