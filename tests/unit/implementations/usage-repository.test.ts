@@ -505,10 +505,12 @@ describe('SQLiteUsageRepository', () => {
       expect(result.value.totalCostUsd).toBeCloseTo(0.175);
     });
 
-    it('A1: does not double-count a task reachable via multiple CTE paths', async () => {
-      // Bug: same as sumByOrchestrationId A1 — UNION deduplicates on full tuple,
-      // not task_id alone. A retry recorded as its own iteration AND reachable via
-      // the recursive arm produces duplicates. DISTINCT task_id collapses them.
+    it('A1: does not double-count a task reachable via both base case and recursive arm', async () => {
+      // Scenario: a retry task is recorded as its own loop iteration (appears in base case)
+      // AND is reachable via the recursive arm (retry_of points to the original iteration task).
+      // The single-column UNION deduplicates on task_id today, but the DISTINCT in the final
+      // SELECT is the explicit guard — this test pins that contract so future CTE changes
+      // (e.g. adding columns) cannot silently reintroduce the double-count.
       const { loop, task } = await createLoopWithIteration('loop-distinct');
 
       // Original iteration task
