@@ -290,44 +290,15 @@ export class LoopHandler extends BaseEventHandler {
         // Note: agent eval mode can take a long time; re-fetch state afterwards to guard stale data
         const evalResult = await this.exitConditionEvaluator.evaluate(loop, taskId);
 
-        // Stale state guard: re-fetch loop and iteration after potentially slow agent eval (Step 8b)
-        // Shell eval completes in milliseconds so re-fetching is unnecessary; guard only applies to agent mode
-        // If loop was cancelled while eval ran, skip result processing
-        // Allow PAUSED through — consistent with the early guard at line 208 (graceful pause records results)
+        // Stale state guard: re-fetch loop and iteration after potentially slow agent eval (Step 8b).
+        // Shell eval completes in milliseconds so re-fetching is unnecessary; guard only applies to agent mode.
         if (loop.evalMode === EvalMode.AGENT) {
-          const freshLoopResult = await this.loopRepo.findById(loopId);
-          if (
-            !freshLoopResult.ok ||
-            !freshLoopResult.value ||
-            (freshLoopResult.value.status !== LoopStatus.RUNNING && freshLoopResult.value.status !== LoopStatus.PAUSED)
-          ) {
-            const staleStatus = freshLoopResult.ok ? (freshLoopResult.value?.status ?? 'null') : 'error';
-            this.logger.info('Loop no longer running after eval, skipping result processing', {
-              loopId,
-              status: staleStatus,
-            });
+          const fresh = await this.refetchAfterAgentEval(loop, taskId);
+          if (!fresh) {
             this.cleanupIterationTracking(taskId, loopId, iteration);
             return ok(undefined);
           }
-          const freshLoop = freshLoopResult.value;
-
-          const freshIterationResult = await this.loopRepo.findIterationByTaskId(taskId);
-          if (
-            !freshIterationResult.ok ||
-            !freshIterationResult.value ||
-            freshIterationResult.value.status !== 'running'
-          ) {
-            const staleIterStatus = freshIterationResult.ok ? (freshIterationResult.value?.status ?? 'null') : 'error';
-            this.logger.info('Iteration no longer running after eval, skipping result processing', {
-              loopId,
-              iterationStatus: staleIterStatus,
-            });
-            this.cleanupIterationTracking(taskId, loopId, iteration);
-            return ok(undefined);
-          }
-          const freshIteration = freshIterationResult.value;
-
-          await this.handleIterationResult(freshLoop, freshIteration, evalResult);
+          await this.handleIterationResult(fresh.loop, fresh.iteration, evalResult);
         } else {
           await this.handleIterationResult(loop, iteration, evalResult);
         }
@@ -338,6 +309,42 @@ export class LoopHandler extends BaseEventHandler {
 
       return ok(undefined);
     });
+  }
+
+  /**
+   * After agent eval (which can take seconds), the loop or iteration may have
+   * transitioned (cancelled, paused, etc.). Refetch both and return null if state
+   * is no longer terminal-eligible. Caller is responsible for cleanup on null.
+   *
+   * DECISION: Helper signals stale state by returning null. Caller owns
+   * cleanupIterationTracking because the helper has no visibility into what tracking
+   * the caller has set up. Full loop replacement (loop = fresh.loop) intentionally
+   * discards any in-memory mutations since eval started — DB is source of truth.
+   */
+  private async refetchAfterAgentEval(
+    loop: Loop,
+    taskId: TaskId,
+  ): Promise<{ loop: Loop; iteration: LoopIteration } | null> {
+    const freshLoopResult = await this.loopRepo.findById(loop.id);
+    if (!freshLoopResult.ok || !freshLoopResult.value) return null;
+    const freshLoop = freshLoopResult.value;
+    if (freshLoop.status !== LoopStatus.RUNNING && freshLoop.status !== LoopStatus.PAUSED) {
+      this.logger.info('Loop no longer running after eval, skipping result processing', {
+        loopId: loop.id,
+        status: freshLoop.status,
+      });
+      return null;
+    }
+    const freshIterResult = await this.loopRepo.findIterationByTaskId(taskId);
+    if (!freshIterResult.ok || !freshIterResult.value) return null;
+    if (freshIterResult.value.status !== 'running') {
+      this.logger.info('Iteration no longer running after eval, skipping result processing', {
+        loopId: loop.id,
+        iterationStatus: freshIterResult.value.status,
+      });
+      return null;
+    }
+    return { loop: freshLoop, iteration: freshIterResult.value };
   }
 
   /**
