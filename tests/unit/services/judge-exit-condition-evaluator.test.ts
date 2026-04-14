@@ -1,30 +1,39 @@
 /**
  * Unit tests for JudgeExitConditionEvaluator
  *
- * ARCHITECTURE: Separate file with `vi.mock('node:fs/promises')` at top level.
- * Isolation is required because the top-level mock affects the module registry
- * for all files in the same vitest run — keeping it isolated prevents cross-file
- * mock contamination.
+ * ARCHITECTURE: Uses injected FsAdapter mock rather than vi.mock('node:fs/promises').
+ *
+ * DECISION: Inject fs dependency rather than vi.mock at file scope.
+ * Why: vi.mock('node:fs/promises') leaks through vitest's shared module registry in
+ * --no-file-parallelism runs. When handler-setup.test.ts runs, it imports handler-setup.ts
+ * which instantiates JudgeExitConditionEvaluator, loading the real node:fs/promises into
+ * the module cache. This clobbers the vi.mock regardless of file run order.
+ * DI injection (optional 5th constructor param) is the clean solution — no module-level
+ * mocking required, and the production code defaults to the real fs when no mock is passed.
  *
  * Pattern: Behavioral testing — verifies file-based judge decision mechanism,
  * two-phase eval+judge flow, safe fallbacks, and schema injection for Claude.
  */
 
-import * as fs from 'node:fs/promises';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Loop } from '../../../src/core/domain.js';
 import { createLoop, EvalMode, LoopStrategy, TaskId } from '../../../src/core/domain.js';
 import type { EvalResult, LoopRepository, OutputRepository } from '../../../src/core/interfaces.js';
 import { ok } from '../../../src/core/result.js';
+import type { FsAdapter } from '../../../src/services/judge-exit-condition-evaluator.js';
 import { JudgeExitConditionEvaluator } from '../../../src/services/judge-exit-condition-evaluator.js';
 import { TestEventBus, TestLogger } from '../../fixtures/test-doubles.js';
-
-// Top-level mock for node:fs/promises — isolated in this file to avoid cross-test contamination
-vi.mock('node:fs/promises');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
+
+function createMockFs(): { readFile: ReturnType<typeof vi.fn>; unlink: ReturnType<typeof vi.fn> } & FsAdapter {
+  return {
+    readFile: vi.fn().mockResolvedValue(''),
+    unlink: vi.fn().mockResolvedValue(undefined),
+  };
+}
 
 function createOutputRepo(lines: string[]): OutputRepository {
   return {
@@ -143,12 +152,9 @@ describe('JudgeExitConditionEvaluator', () => {
     const loop = createTestLoop({ evalPrompt: 'Review changes', judgePrompt: 'Should we stop?' });
     const outputRepo = createOutputRepo(['Analysis: tests are passing.']);
     const loopRepo = createLoopRepo();
-    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
-
-    vi.mocked(fs.readFile).mockResolvedValueOnce(
-      JSON.stringify({ continue: false, reasoning: 'All criteria met.' }) as unknown as Buffer,
-    );
-    vi.mocked(fs.unlink).mockResolvedValue(undefined);
+    const mockFs = createMockFs();
+    mockFs.readFile.mockResolvedValueOnce(JSON.stringify({ continue: false, reasoning: 'All criteria met.' }));
+    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger, mockFs);
 
     const result = await evaluateWithCompletions(evaluator, loop, workTaskId, eventBus, [
       (id) => simulateTaskComplete(eventBus, id),
@@ -163,12 +169,9 @@ describe('JudgeExitConditionEvaluator', () => {
     const loop = createTestLoop({ evalPrompt: 'Review changes' });
     const outputRepo = createOutputRepo(['Tests still failing.']);
     const loopRepo = createLoopRepo();
-    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
-
-    vi.mocked(fs.readFile).mockResolvedValueOnce(
-      JSON.stringify({ continue: true, reasoning: 'More work needed.' }) as unknown as Buffer,
-    );
-    vi.mocked(fs.unlink).mockResolvedValue(undefined);
+    const mockFs = createMockFs();
+    mockFs.readFile.mockResolvedValueOnce(JSON.stringify({ continue: true, reasoning: 'More work needed.' }));
+    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger, mockFs);
 
     const result = await evaluateWithCompletions(evaluator, loop, workTaskId, eventBus, [
       (id) => simulateTaskComplete(eventBus, id),
@@ -182,11 +185,10 @@ describe('JudgeExitConditionEvaluator', () => {
     const loop = createTestLoop({ evalPrompt: 'Review changes' });
     const outputRepo = createOutputRepo(['No verdict.']);
     const loopRepo = createLoopRepo();
-    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
-
+    const mockFs = createMockFs();
     const enoentErr = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-    vi.mocked(fs.readFile).mockRejectedValue(enoentErr);
-    vi.mocked(fs.unlink).mockResolvedValue(undefined);
+    mockFs.readFile.mockRejectedValue(enoentErr);
+    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger, mockFs);
 
     const result = await evaluateWithCompletions(evaluator, loop, workTaskId, eventBus, [
       (id) => simulateTaskComplete(eventBus, id),
@@ -200,10 +202,9 @@ describe('JudgeExitConditionEvaluator', () => {
     const loop = createTestLoop({ evalPrompt: 'Review changes' });
     const outputRepo = createOutputRepo(['Some output.']);
     const loopRepo = createLoopRepo();
-    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
-
-    vi.mocked(fs.readFile).mockResolvedValueOnce('not valid json at all!!!!' as unknown as Buffer);
-    vi.mocked(fs.unlink).mockResolvedValue(undefined);
+    const mockFs = createMockFs();
+    mockFs.readFile.mockResolvedValueOnce('not valid json at all!!!!');
+    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger, mockFs);
 
     const result = await evaluateWithCompletions(evaluator, loop, workTaskId, eventBus, [
       (id) => simulateTaskComplete(eventBus, id),
@@ -217,9 +218,8 @@ describe('JudgeExitConditionEvaluator', () => {
     const loop = createTestLoop({ evalPrompt: 'Review changes' });
     const outputRepo = createOutputRepo(['Output here.']);
     const loopRepo = createLoopRepo();
-    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
-
-    vi.mocked(fs.unlink).mockResolvedValue(undefined);
+    const mockFs = createMockFs();
+    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger, mockFs);
 
     const result = await evaluateWithCompletions(evaluator, loop, workTaskId, eventBus, [
       (id) => simulateTaskComplete(eventBus, id),
@@ -233,12 +233,9 @@ describe('JudgeExitConditionEvaluator', () => {
     const loop = createTestLoop({ evalPrompt: 'Evaluate test quality' });
     const outputRepo = createOutputRepo(['Coverage is at 80%.', 'Three tests still failing.']);
     const loopRepo = createLoopRepo();
-    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
-
-    vi.mocked(fs.readFile).mockResolvedValueOnce(
-      JSON.stringify({ continue: true, reasoning: 'Keep going.' }) as unknown as Buffer,
-    );
-    vi.mocked(fs.unlink).mockResolvedValue(undefined);
+    const mockFs = createMockFs();
+    mockFs.readFile.mockResolvedValueOnce(JSON.stringify({ continue: true, reasoning: 'Keep going.' }));
+    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger, mockFs);
 
     const result = await evaluateWithCompletions(evaluator, loop, workTaskId, eventBus, [
       (id) => simulateTaskComplete(eventBus, id),
@@ -256,11 +253,10 @@ describe('JudgeExitConditionEvaluator', () => {
     });
     const outputRepo = createOutputRepo(['Findings.']);
     const loopRepo = createLoopRepo();
-    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
-
+    const mockFs = createMockFs();
     const enoentErr = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-    vi.mocked(fs.readFile).mockRejectedValue(enoentErr);
-    vi.mocked(fs.unlink).mockResolvedValue(undefined);
+    mockFs.readFile.mockRejectedValue(enoentErr);
+    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger, mockFs);
 
     await evaluateWithCompletions(evaluator, loop, workTaskId, eventBus, [
       (id) => simulateTaskComplete(eventBus, id),
@@ -282,11 +278,10 @@ describe('JudgeExitConditionEvaluator', () => {
     });
     const outputRepo = createOutputRepo(['Findings.']);
     const loopRepo = createLoopRepo();
-    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
-
+    const mockFs = createMockFs();
     const enoentErr = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-    vi.mocked(fs.readFile).mockRejectedValue(enoentErr);
-    vi.mocked(fs.unlink).mockResolvedValue(undefined);
+    mockFs.readFile.mockRejectedValue(enoentErr);
+    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger, mockFs);
 
     await evaluateWithCompletions(evaluator, loop, workTaskId, eventBus, [
       (id) => simulateTaskComplete(eventBus, id),
@@ -304,12 +299,9 @@ describe('JudgeExitConditionEvaluator', () => {
     const loop = createTestLoop({ evalPrompt: 'Review' });
     const outputRepo = createOutputRepo(['Good progress.']);
     const loopRepo = createLoopRepo();
-    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
-
-    vi.mocked(fs.readFile).mockResolvedValueOnce(
-      JSON.stringify({ continue: false, reasoning: 'Done.' }) as unknown as Buffer,
-    );
-    vi.mocked(fs.unlink).mockResolvedValue(undefined);
+    const mockFs = createMockFs();
+    mockFs.readFile.mockResolvedValueOnce(JSON.stringify({ continue: false, reasoning: 'Done.' }));
+    const evaluator = new JudgeExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger, mockFs);
 
     const result = await evaluateWithCompletions(evaluator, loop, workTaskId, eventBus, [
       (id) => simulateTaskComplete(eventBus, id),
@@ -344,9 +336,8 @@ describe('JudgeExitConditionEvaluator', () => {
       getByteSize: vi.fn().mockResolvedValue(ok(0)),
     } as unknown as OutputRepository;
     const loopRepo = createLoopRepo();
-    const evaluator = new JudgeExitConditionEvaluator(eventBus, combinedOutputRepo, loopRepo, logger);
-
-    vi.mocked(fs.unlink).mockResolvedValue(undefined);
+    const mockFs = createMockFs();
+    const evaluator = new JudgeExitConditionEvaluator(eventBus, combinedOutputRepo, loopRepo, logger, mockFs);
 
     const result = await evaluateWithCompletions(evaluator, loop, workTaskId, eventBus, [
       (id) => simulateTaskComplete(eventBus, id),

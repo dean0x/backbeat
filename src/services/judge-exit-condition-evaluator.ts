@@ -18,7 +18,7 @@
  * Pattern: Strategy pattern — implements ExitConditionEvaluator
  */
 
-import * as fs from 'node:fs/promises';
+import * as fsDefault from 'node:fs/promises';
 import * as path from 'node:path';
 import type { Loop, LoopId, TaskId } from '../core/domain.js';
 import { createTask, TaskRequest } from '../core/domain.js';
@@ -37,6 +37,20 @@ import type {
   LoopRepository,
   OutputRepository,
 } from '../core/interfaces.js';
+
+/**
+ * Minimal fs interface needed by the judge evaluator.
+ * Injectable for testability — avoids vi.mock('node:fs/promises') ESM contamination issues.
+ *
+ * DECISION: Inject fs as a dependency rather than import directly.
+ * Why: vi.mock('node:fs/promises') at file scope leaks through vitest's shared module registry
+ * in --no-file-parallelism runs (handler-setup.test.ts loads real fs after mock is set, which
+ * clobbers the mock for subsequent tests). DI is the clean solution.
+ */
+export interface FsAdapter {
+  readFile(path: string, encoding: 'utf-8'): Promise<string>;
+  unlink(path: string): Promise<void>;
+}
 
 type TaskCompletionStatus =
   | { type: 'completed' }
@@ -63,12 +77,18 @@ const JUDGE_SCHEMA = JSON.stringify({
 });
 
 export class JudgeExitConditionEvaluator implements ExitConditionEvaluator {
+  private readonly fs: FsAdapter;
+
   constructor(
     private readonly eventBus: EventBus,
     private readonly outputRepo: OutputRepository,
     private readonly loopRepo: LoopRepository,
     private readonly logger: Logger,
-  ) {}
+    fs?: FsAdapter,
+  ) {
+    // Default to the real node:fs/promises; tests can inject a mock
+    this.fs = fs ?? (fsDefault as FsAdapter);
+  }
 
   /**
    * Evaluate iteration quality using two-phase eval+judge strategy.
@@ -344,7 +364,7 @@ Do NOT include any other content in the file. The file will be read programmatic
    */
   private async readDecisionFile(filePath: string): Promise<{ continue: boolean; reasoning: string } | null> {
     try {
-      const content = await fs.readFile(filePath, 'utf-8');
+      const content = await this.fs.readFile(filePath, 'utf-8');
       const parsed = JSON.parse(content.trim()) as unknown;
 
       if (!parsed || typeof parsed !== 'object') {
@@ -379,7 +399,7 @@ Do NOT include any other content in the file. The file will be read programmatic
    */
   private async cleanupDecisionFile(filePath: string): Promise<void> {
     try {
-      await fs.unlink(filePath);
+      await this.fs.unlink(filePath);
     } catch {
       // ENOENT is expected when file doesn't exist — ignore all cleanup errors
     }
