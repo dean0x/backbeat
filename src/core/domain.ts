@@ -108,6 +108,10 @@ export interface Task {
   // Resolution order: per-task > agent-config > CLI default
   readonly model?: string;
 
+  // JSON schema for structured output (v1.4.0): passed to --json-schema for eval tasks
+  // Only applicable to agents that support structured output (e.g., Claude Code).
+  readonly jsonSchema?: string;
+
   // Orchestration attribution (v1.3.0): orchestration that spawned this task
   // Set when a task is created inside an orchestration context (CLI env var or MCP metadata).
   // Validated against DB on receipt — dropped silently if orchestration not found.
@@ -194,6 +198,10 @@ export interface TaskRequest {
   // Model override (per-task): overrides agent-config default model and CLI default
   readonly model?: string;
 
+  // JSON schema for structured output (v1.4.0): passed to --json-schema for eval tasks
+  // Only applicable to agents that support structured output (e.g., Claude Code).
+  readonly jsonSchema?: string;
+
   // Orchestration attribution (v1.3.0): orchestration that spawned this task
   // Passed through CLI env var (AUTOBEAT_ORCHESTRATOR_ID) or MCP metadata field.
   readonly orchestratorId?: OrchestratorId;
@@ -250,6 +258,9 @@ export const createTask = (request: TaskRequest): Task => {
     // Multi-agent support (v0.5.0)
     agent: request.agent,
     model: request.model,
+
+    // Structured output for eval tasks (v1.4.0)
+    jsonSchema: request.jsonSchema,
 
     // Orchestration attribution (v1.3.0)
     orchestratorId: request.orchestratorId,
@@ -556,6 +567,24 @@ export enum EvalMode {
 }
 
 /**
+ * Evaluation sub-strategy for agent-mode loops.
+ *
+ * ARCHITECTURE: Two-level eval hierarchy (evalMode + evalType).
+ * Why: evalMode (shell/agent) is the top-level; evalType (feedforward/judge/schema)
+ * is agent-specific sub-strategy. feedforward is default because it works with any agent.
+ *
+ * - feedforward: current agent's own output drives evaluation (no separate eval agent)
+ * - judge: a separate dedicated agent task evaluates the iteration quality
+ * - schema: structured JSON output is used for deterministic evaluation
+ */
+export const EvalType = {
+  FEEDFORWARD: 'feedforward',
+  JUDGE: 'judge',
+  SCHEMA: 'schema',
+} as const;
+export type EvalType = (typeof EvalType)[keyof typeof EvalType];
+
+/**
  * Loop interface - defines iterative task/pipeline execution
  * ARCHITECTURE: All fields readonly for immutability
  * Pattern: Factory function createLoop() for construction
@@ -585,6 +614,10 @@ export interface Loop {
   readonly gitBaseBranch?: string; // Base branch to diff against (v0.8.0, dead after v0.8.1)
   readonly gitStartCommitSha?: string; // Commit SHA at loop creation for revert target (v0.8.1)
   readonly scheduleId?: ScheduleId; // Owning schedule if created via scheduled loop (v0.8.0)
+  // Eval redesign fields (v1.4.0): sub-strategy and judge configuration
+  readonly evalType?: EvalType; // Agent eval sub-strategy (default: feedforward)
+  readonly judgeAgent?: AgentProvider; // Agent provider for judge mode (judge evalType only)
+  readonly judgePrompt?: string; // Custom prompt for judge agent (judge evalType only)
   readonly createdAt: number;
   readonly updatedAt: number;
   readonly completedAt?: number;
@@ -605,6 +638,7 @@ export interface LoopIteration {
   readonly exitCode?: number;
   readonly errorMessage?: string;
   readonly evalFeedback?: string; // Feedback from agent evaluator (agent mode only)
+  readonly evalResponse?: string; // Raw agent evaluation response text for audit (v1.4.0)
   readonly gitBranch?: string; // Branch used for this iteration (v0.8.0, dead after v0.8.1)
   readonly gitCommitSha?: string; // Commit SHA after iteration changes committed (v0.8.1)
   readonly preIterationCommitSha?: string; // Commit SHA before iteration started (v0.8.1)
@@ -636,6 +670,10 @@ export interface LoopCreateRequest {
   readonly model?: string; // Per-loop model override (applied to taskTemplate)
   readonly gitBranch?: string; // Branch name for loop iteration work (v0.8.0)
   readonly orchestratorId?: OrchestratorId; // Attribute loop tasks to this orchestration (v1.3.0)
+  // Eval redesign fields (v1.4.0): sub-strategy and judge configuration
+  readonly evalType?: EvalType; // Agent eval sub-strategy (default: feedforward)
+  readonly judgeAgent?: AgentProvider; // Agent provider for judge mode (judge evalType only)
+  readonly judgePrompt?: string; // Custom prompt for judge agent (judge evalType only)
 }
 
 /**
@@ -672,6 +710,10 @@ export const createLoop = (request: LoopCreateRequest, workingDirectory: string,
     status: LoopStatus.RUNNING,
     gitBranch: request.gitBranch,
     scheduleId,
+    // Eval redesign (v1.4.0)
+    evalType: request.evalType,
+    judgeAgent: request.judgeAgent,
+    judgePrompt: request.judgePrompt,
     createdAt: now,
     updatedAt: now,
   });

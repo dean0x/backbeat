@@ -753,6 +753,18 @@ export interface EvalResult {
   readonly exitCode?: number;
   readonly error?: string;
   readonly feedback?: string; // Narrative feedback from agent evaluator (agent mode only)
+  /**
+   * DECISION: Explicit 'continue'/'stop' decision field.
+   * Why: feedforward mode needs 'continue' without triggering consecutiveFailures increment.
+   * 'passed' alone conflates "quality gate result" with "loop control signal".
+   * When set, loop handler checks this BEFORE the passed flag.
+   */
+  readonly decision?: 'continue' | 'stop';
+  /**
+   * Raw agent evaluation response text.
+   * Stored per-iteration for audit and debugging.
+   */
+  readonly evalResponse?: string;
 }
 
 /**

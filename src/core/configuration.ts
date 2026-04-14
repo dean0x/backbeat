@@ -17,11 +17,7 @@ import { AGENT_PROVIDERS_TUPLE, type AgentProvider, isAgentProvider } from './ag
  */
 export const ConfigurationSchema = z.object({
   // Core settings - required fields
-  timeout: z
-    .number()
-    .min(0)
-    .max(86400000)
-    .default(0), // DECISION: Default timeout 0 (disabled). Why: tasks run 2.5+ hours; timeout was killing them. Safety max 24hr.
+  timeout: z.number().min(0).max(86400000).default(0), // DECISION: Default timeout 0 (disabled). Why: tasks run 2.5+ hours; timeout was killing them. Safety max 24hr.
   maxOutputBuffer: z.number().min(1024).max(1073741824).default(10485760), // Default: 10MB (max 1GB)
   cpuCoresReserved: z.number().min(1).max(32).default(2), // Default: 2 cores (SECURITY: max 32)
   memoryReserve: z
