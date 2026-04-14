@@ -837,6 +837,27 @@ export class Database implements TransactionRunner {
           );
         },
       },
+      {
+        version: 21,
+        description: 'Add worker heartbeat, loop eval columns (v1.4.0)',
+        up: (db) => {
+          // DECISION: last_heartbeat tracks when the owning process last wrote to the DB.
+          // Enables stale worker detection beyond PID checks (process zombies, hung workers).
+          // Nullable — old rows and newly registered workers before first heartbeat are NULL.
+          db.exec(`ALTER TABLE workers ADD COLUMN last_heartbeat INTEGER`);
+
+          // DECISION: eval_response stores the raw agent evaluation output per loop iteration.
+          // Nullable — non-eval iterations have no response.
+          db.exec(`ALTER TABLE loop_iterations ADD COLUMN eval_response TEXT`);
+
+          // DECISION: eval_type, judge_agent, judge_prompt support the eval redesign (v1.4.0).
+          // eval_type defaults to 'feedforward' (existing behavior) for backward compatibility.
+          // judge_agent and judge_prompt are nullable — only set for judge-based eval loops.
+          db.exec(`ALTER TABLE loops ADD COLUMN eval_type TEXT DEFAULT 'feedforward'`);
+          db.exec(`ALTER TABLE loops ADD COLUMN judge_agent TEXT`);
+          db.exec(`ALTER TABLE loops ADD COLUMN judge_prompt TEXT`);
+        },
+      },
     ];
   }
 
