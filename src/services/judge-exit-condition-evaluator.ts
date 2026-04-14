@@ -31,6 +31,7 @@ import type {
   LoopRepository,
   OutputRepository,
 } from '../core/interfaces.js';
+import { buildEvalPromptBase } from './eval-prompt-builder.js';
 import { type TaskCompletionStatus, waitForEvalTaskCompletion } from './eval-task-waiter.js';
 
 /**
@@ -263,30 +264,15 @@ export class JudgeExitConditionEvaluator implements ExitConditionEvaluator {
    * Build the eval prompt for phase 1 (findings gathering).
    */
   private async buildEvalPrompt(loop: Loop, taskId: TaskId): Promise<string> {
-    let preIterationCommitSha: string | undefined;
-    const iterationResult = await this.loopRepo.findIterationByTaskId(taskId);
-    if (iterationResult.ok && iterationResult.value) {
-      preIterationCommitSha = iterationResult.value.preIterationCommitSha;
-    }
-
-    const gitDiffInstruction = preIterationCommitSha
-      ? `Use \`git diff ${preIterationCommitSha}..HEAD\` to see what changed in this iteration.`
-      : 'Use `git diff HEAD~1..HEAD` to see what changed in this iteration.';
-
-    const toolInstructions = `${gitDiffInstruction} Use \`beat logs ${taskId}\` to read the worker's output.`;
-
+    const base = await buildEvalPromptBase(loop, taskId, this.loopRepo);
     const criteria = loop.evalPrompt ?? 'Review the code changes and provide detailed observations and findings.';
 
     return `You are reviewing the result of an automated code improvement iteration.
 Provide detailed findings — a judge agent will read your output and make the final decision.
 
-IMPORTANT: Do NOT modify any files. You are a reviewer — read and assess only.
+${base.contextHeader}
 
-Working directory: ${loop.workingDirectory}
-Iteration: ${loop.currentIteration}
-Task ID: ${taskId}
-
-${toolInstructions}
+${base.toolInstructions}
 
 ${criteria}
 

@@ -15,6 +15,7 @@ import type {
   LoopRepository,
   OutputRepository,
 } from '../core/interfaces.js';
+import { buildEvalPromptBase } from './eval-prompt-builder.js';
 import { type TaskCompletionStatus, waitForEvalTaskCompletion } from './eval-task-waiter.js';
 
 const MAX_FEEDBACK_LENGTH = 16_000;
@@ -156,23 +157,12 @@ export class AgentExitConditionEvaluator implements ExitConditionEvaluator {
    * Uses a dual-format directive: structured ("automatic") for Claude, text for others.
    */
   private async buildEvalPrompt(loop: Loop, taskId: TaskId): Promise<string> {
-    // Look up preIterationCommitSha from iteration record
-    let preIterationCommitSha: string | undefined;
-    const iterationResult = await this.loopRepo.findIterationByTaskId(taskId);
-    if (iterationResult.ok && iterationResult.value) {
-      preIterationCommitSha = iterationResult.value.preIterationCommitSha;
-    }
-
-    const gitDiffInstruction = preIterationCommitSha
-      ? `Use \`git diff ${preIterationCommitSha}..HEAD\` to see what changed in this iteration.`
-      : 'Use `git diff HEAD~1..HEAD` to see what changed in this iteration.';
+    const base = await buildEvalPromptBase(loop, taskId, this.loopRepo);
 
     const isRetry = loop.strategy === LoopStrategy.RETRY;
     const header = isRetry
       ? 'You are evaluating the result of an automated code improvement iteration.'
       : 'You are evaluating and scoring the result of an automated code improvement iteration.';
-
-    const toolInstructions = `${gitDiffInstruction} Use \`beat logs ${taskId}\` to read the worker's output.`;
 
     const criteria =
       loop.evalPrompt ??
@@ -190,13 +180,9 @@ export class AgentExitConditionEvaluator implements ExitConditionEvaluator {
 
     return `${header}
 
-IMPORTANT: Do NOT modify any files. You are an evaluator — read and assess only.
+${base.contextHeader}
 
-Working directory: ${loop.workingDirectory}
-Iteration: ${loop.currentIteration}
-Task ID: ${taskId}
-
-${toolInstructions}
+${base.toolInstructions}
 
 ${criteria}
 
