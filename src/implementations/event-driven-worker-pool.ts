@@ -106,14 +106,14 @@ export class EventDrivenWorkerPool implements WorkerPool {
     const finalWorkingDirectory = task.workingDirectory || process.cwd();
 
     // Spawn the process using the resolved adapter (pass model, orchestratorId, and jsonSchema)
-    const spawnResult = adapter.spawn(
-      task.prompt,
-      finalWorkingDirectory,
-      task.id,
-      task.model,
-      task.orchestratorId,
-      task.jsonSchema,
-    );
+    const spawnResult = adapter.spawn({
+      prompt: task.prompt,
+      workingDirectory: finalWorkingDirectory,
+      taskId: task.id,
+      model: task.model,
+      orchestratorId: task.orchestratorId,
+      jsonSchema: task.jsonSchema,
+    });
 
     if (!spawnResult.ok) {
       return err(spawnResult.error);

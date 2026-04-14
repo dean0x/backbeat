@@ -259,8 +259,14 @@ export async function handleScheduleExecutor(): Promise<void> {
 
   // Every 5 minutes: check if any active schedules exist — exit gracefully if none
   const IDLE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+  const scheduleRepoResult = container.get<ScheduleRepository>('scheduleRepository');
+  if (!scheduleRepoResult.ok) {
+    process.stderr.write(`Schedule executor: failed to resolve scheduleRepository: ${scheduleRepoResult.error.message}\n`);
+    cleanup();
+    process.exit(1);
+  }
   const idleCheckTimer = startIdleCheckLoop(
-    container.get<ScheduleRepository>('scheduleRepository').value!,
+    scheduleRepoResult.value,
     IDLE_CHECK_INTERVAL_MS,
     () => {
       clearInterval(idleCheckTimer);

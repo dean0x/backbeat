@@ -20,6 +20,7 @@ import {
   AgentAuthConfig,
   AgentProvider,
   isCommandInPath,
+  SpawnOptions,
 } from '../core/agents.js';
 import { AgentConfig, Configuration, loadAgentConfig } from '../core/configuration.js';
 import { AutobeatError, agentMisconfigured, ErrorCode, processSpawnFailed } from '../core/errors.js';
@@ -130,14 +131,14 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
     return agentConfig.model;
   }
 
-  spawn(
-    prompt: string,
-    workingDirectory: string,
-    taskId?: string,
-    model?: string,
-    orchestratorId?: string,
-    jsonSchema?: string,
-  ): Result<{ process: ChildProcess; pid: number }> {
+  spawn({
+    prompt,
+    workingDirectory,
+    taskId,
+    model,
+    orchestratorId,
+    jsonSchema,
+  }: SpawnOptions): Result<{ process: ChildProcess; pid: number }> {
     try {
       // Pre-spawn: verify CLI binary exists before anything else
       if (!isCommandInPath(this.command)) {

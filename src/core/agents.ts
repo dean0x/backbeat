@@ -222,6 +222,30 @@ export function maskApiKey(key: string): string {
 }
 
 /**
+ * Options for spawning an agent process.
+ *
+ * DECISION: Options object instead of 6 positional parameters.
+ * Why: positional optional params are ambiguous at call sites — callers pass
+ * `undefined` to skip middle params, which is error-prone and hard to read.
+ * An options object is self-documenting and easily extensible without breaking
+ * existing callers when new fields are added.
+ */
+export interface SpawnOptions {
+  /** The task prompt to execute */
+  readonly prompt: string;
+  /** Directory to run in */
+  readonly workingDirectory: string;
+  /** Optional task ID for identification (sets AUTOBEAT_TASK_ID env var) */
+  readonly taskId?: string;
+  /** Optional model override (per-task model overrides agent config model) */
+  readonly model?: string;
+  /** Optional orchestration ID for sub-task attribution (v1.3.0) */
+  readonly orchestratorId?: string;
+  /** Optional JSON schema string for structured output (v1.4.0, Claude only) */
+  readonly jsonSchema?: string;
+}
+
+/**
  * Agent adapter interface — abstracts agent-specific CLI interactions
  *
  * ARCHITECTURE: Each agent implementation knows how to:
@@ -236,23 +260,11 @@ export interface AgentAdapter {
   readonly provider: AgentProvider;
 
   /**
-   * Spawn an agent process for the given prompt
-   * @param prompt - The task prompt to execute
-   * @param workingDirectory - Directory to run in
-   * @param taskId - Optional task ID for identification
-   * @param model - Optional model override (per-task model overrides agent config model)
-   * @param orchestratorId - Optional orchestration ID for sub-task attribution (v1.3.0)
-   * @param jsonSchema - Optional JSON schema string for structured output (v1.4.0, Claude only)
+   * Spawn an agent process for the given options.
+   * @param options - Spawn configuration (prompt, workingDirectory, and optional fields)
    * @returns Process handle with PID, or error
    */
-  spawn(
-    prompt: string,
-    workingDirectory: string,
-    taskId?: string,
-    model?: string,
-    orchestratorId?: string,
-    jsonSchema?: string,
-  ): Result<{ process: ChildProcess; pid: number }>;
+  spawn(options: SpawnOptions): Result<{ process: ChildProcess; pid: number }>;
 
   /**
    * Kill an agent process by PID
