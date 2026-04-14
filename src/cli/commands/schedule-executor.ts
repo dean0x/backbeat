@@ -41,14 +41,16 @@ export function readExecutorPid(): number | null {
   }
 }
 
-/** Check if a PID corresponds to a running process. */
+/**
+ * Check if a PID corresponds to a running process.
+ * EPERM means the process exists but we lack permission — treated as alive.
+ */
 export function isProcessAlive(pid: number): boolean {
   try {
-    // Signal 0 checks existence without killing the process
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
 

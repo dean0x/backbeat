@@ -147,15 +147,15 @@ describe('isProcessAlive', () => {
     mockKill.mockRestore();
   });
 
-  it('returns false when process.kill throws for EPERM', () => {
-    // Our implementation: any error from process.kill → return false (conservative respawn)
+  it('returns true when process.kill throws EPERM (process exists but owned by another user)', () => {
+    // EPERM means the process exists but we lack permission to signal it — treat as alive
     const mockKill = vi.spyOn(process, 'kill').mockImplementation((_pid, _sig) => {
       const err = Object.assign(new Error('EPERM'), { code: 'EPERM' });
       throw err;
     });
 
     const result = isProcessAlive(1);
-    expect(result).toBe(false);
+    expect(result).toBe(true);
 
     mockKill.mockRestore();
   });
