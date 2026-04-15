@@ -1,5 +1,6 @@
 import { ChildProcess, spawn } from 'child_process';
 import { EventEmitter } from 'events';
+import { SpawnOptions } from '../../src/core/agents';
 import { AutobeatError } from '../../src/core/errors';
 import { ProcessSpawner } from '../../src/core/interfaces';
 import { err, ok, Result } from '../../src/core/result';
@@ -14,7 +15,7 @@ export class MockProcessSpawner implements ProcessSpawner {
   private failureMessage = 'Mock failure';
   private executionDelay = 100;
 
-  spawn(prompt: string, workingDirectory: string, taskId?: string): Result<{ process: ChildProcess; pid: number }> {
+  spawn({ prompt, workingDirectory, taskId }: SpawnOptions): Result<{ process: ChildProcess; pid: number }> {
     if (this.shouldFail) {
       return err(new AutobeatError(this.failureMessage, 'SPAWN_FAILED'));
     }

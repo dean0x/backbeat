@@ -153,13 +153,22 @@ export async function evaluateWithCompletions<
   const evalPromise = evaluator.evaluate(loop, taskId);
 
   for (let i = 0; i < simulateFns.length; i++) {
-    // Give subscriptions a tick to register before emitting completion
+    // WHY setImmediate (not Promise.resolve / await tick):
+    // evaluate() calls await buildEvalPrompt() before setting up its TaskCompleted
+    // subscription via waitForEvalTaskCompletion. buildEvalPrompt() is an async
+    // function that may itself await, queuing work on the microtask queue. A single
+    // microtask yield (Promise.resolve) is insufficient to drain the entire async
+    // setup chain. setImmediate defers to the next I/O event loop iteration,
+    // ensuring evaluate()'s subscription setup code has fully executed before we
+    // fire the simulated TaskCompleted. Replacing with Promise.resolve causes
+    // intermittent "no subscription registered" failures in CI.
     await new Promise((r) => setImmediate(r));
     const taskIdForPhase = capturedTaskIds[i];
     if (taskIdForPhase) {
       await simulateFns[i](taskIdForPhase);
     }
-    // Give the evaluator a tick to process the completion event
+    // Second setImmediate: give the evaluator's completion handler a full event-loop
+    // tick to process the event and resolve its internal promise before we return.
     await new Promise((r) => setImmediate(r));
   }
 

@@ -248,10 +248,12 @@ describe('EventDrivenWorkerPool', () => {
       await pool.spawn(task);
 
       expect(spawner.spawn as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-        task.prompt,
-        '/my/project',
-        task.id,
-        task.model,
+        expect.objectContaining({
+          prompt: task.prompt,
+          workingDirectory: '/my/project',
+          taskId: task.id,
+          model: task.model,
+        }),
       );
     });
 
@@ -261,10 +263,12 @@ describe('EventDrivenWorkerPool', () => {
       await pool.spawn(task);
 
       expect(spawner.spawn as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-        task.prompt,
-        process.cwd(),
-        task.id,
-        task.model,
+        expect.objectContaining({
+          prompt: task.prompt,
+          workingDirectory: process.cwd(),
+          taskId: task.id,
+          model: task.model,
+        }),
       );
     });
 

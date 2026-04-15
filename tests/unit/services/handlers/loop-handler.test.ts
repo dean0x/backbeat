@@ -1877,6 +1877,14 @@ describe('LoopHandler - Behavioral Tests', () => {
       await flushEventLoop();
 
       expect(loopCompletedFired).toBe(true);
+
+      // Side-effect: loop must be COMPLETED in the DB (LoopCompleted event reflects DB state)
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.status).toBe(LoopStatus.COMPLETED);
+
+      // Side-effect: iteration must be recorded as 'pass' (judge accepted it)
+      const iter = await getLatestIteration(loop.id);
+      expect(iter!.status).toBe('pass');
     });
 
     it('decision: stop — loopRepo.update is NOT called after the commit transaction (no double-write)', async () => {
@@ -1978,6 +1986,10 @@ describe('LoopHandler - Behavioral Tests', () => {
       const updatedLoop = await getLoop(loop.id);
       expect(updatedLoop!.status).toBe(LoopStatus.RUNNING);
       expect(updatedLoop!.consecutiveFailures).toBe(0);
+
+      // Side-effect: iteration must be recorded as 'discard' (no penalty, no fail cascade)
+      const iter = await getLatestIteration(loop.id);
+      expect(iter!.status).toBe('discard');
     });
 
     it('decision: stop — completes optimize loop and marks iteration as keep', async () => {
@@ -2030,6 +2042,14 @@ describe('LoopHandler - Behavioral Tests', () => {
       await flushEventLoop();
 
       expect(loopCompletedFired).toBe(true);
+
+      // Side-effect: loop must be COMPLETED in the DB (LoopCompleted event reflects DB state)
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.status).toBe(LoopStatus.COMPLETED);
+
+      // Side-effect: iteration must be recorded as 'keep' (judge accepted the optimize result)
+      const iter = await getLatestIteration(loop.id);
+      expect(iter!.status).toBe('keep');
     });
 
     it('undefined decision — falls through to normal score comparison logic (backward compat)', async () => {

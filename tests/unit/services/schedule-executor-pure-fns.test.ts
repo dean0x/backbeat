@@ -158,42 +158,45 @@ describe('registerSignalHandlers', () => {
   it('calls cleanup when SIGTERM fires', () => {
     const fakeProc = makeFakeProc();
     const cleanup = vi.fn();
+    const fakeExit = vi.fn();
 
-    // Override process.exit to prevent test process from actually exiting
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as never);
-
-    registerSignalHandlers(cleanup, fakeProc);
+    registerSignalHandlers(cleanup, fakeProc, fakeExit);
     fakeProc.emit('SIGTERM');
 
     expect(cleanup).toHaveBeenCalledTimes(1);
-    exitSpy.mockRestore();
   });
 
   it('calls cleanup when SIGINT fires', () => {
     const fakeProc = makeFakeProc();
     const cleanup = vi.fn();
+    const fakeExit = vi.fn();
 
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as never);
-
-    registerSignalHandlers(cleanup, fakeProc);
+    registerSignalHandlers(cleanup, fakeProc, fakeExit);
     fakeProc.emit('SIGINT');
 
     expect(cleanup).toHaveBeenCalledTimes(1);
-    exitSpy.mockRestore();
   });
 
-  it('cleanup is called before process.exit', () => {
+  it('cleanup is called before exit', () => {
     const fakeProc = makeFakeProc();
     const callOrder: string[] = [];
     const cleanup = vi.fn(() => callOrder.push('cleanup'));
+    const fakeExit = vi.fn(() => callOrder.push('exit'));
 
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => callOrder.push('exit')) as never);
-
-    registerSignalHandlers(cleanup, fakeProc);
+    registerSignalHandlers(cleanup, fakeProc, fakeExit);
     fakeProc.emit('SIGTERM');
 
     expect(callOrder).toEqual(['cleanup', 'exit']);
-    exitSpy.mockRestore();
+  });
+
+  it('calls exit(0) when signal fires', () => {
+    const fakeProc = makeFakeProc();
+    const fakeExit = vi.fn();
+
+    registerSignalHandlers(() => {}, fakeProc, fakeExit);
+    fakeProc.emit('SIGTERM');
+
+    expect(fakeExit).toHaveBeenCalledWith(0);
   });
 });
 

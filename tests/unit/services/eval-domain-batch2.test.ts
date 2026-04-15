@@ -14,6 +14,7 @@ import { createLoop, createTask, EvalMode, EvalType, LoopId, LoopStrategy, TaskI
 import type { EvalResult } from '../../../src/core/interfaces.js';
 import { ok } from '../../../src/core/result.js';
 import { AgentExitConditionEvaluator } from '../../../src/services/agent-exit-condition-evaluator.js';
+import { MAX_EVAL_FEEDBACK_LENGTH } from '../../../src/services/eval-prompt-builder.js';
 import { createLoopRepo, createOutputRepo, createTestLoop } from '../../fixtures/eval-test-helpers.js';
 import { TestEventBus, TestLogger } from '../../fixtures/test-doubles.js';
 
@@ -669,48 +670,96 @@ describe('jsonSchema in Task domain', () => {
 });
 
 // ============================================================================
-// Section 6: Feedback accumulation cap test (behavioral invariant)
+// Section 6: Feedback accumulation cap — real evaluator behavioral invariant
 // ============================================================================
 
+/**
+ * These tests invoke the REAL AgentExitConditionEvaluator with output lines that
+ * exceed MAX_EVAL_FEEDBACK_LENGTH and assert observable properties of the returned
+ * EvalResult. The previous implementation re-implemented the cap loop locally
+ * and never called the evaluator (tautological — #136).
+ */
 describe('Feedback accumulation cap', () => {
-  it('should cap accumulated feedback at 8KB', () => {
-    const MAX_FEEDBACK_BYTES = 8192;
-    const entries: string[] = [];
-    let totalBytes = 0;
+  let eventBus: TestEventBus;
+  let logger: TestLogger;
 
-    // Generate entries with ~200 chars each to hit the 8KB cap (needs ~41 entries)
-    const padding = 'x'.repeat(150);
-    for (let i = 1; i <= 100; i++) {
-      const entry = `Iteration ${i} [FAIL]: ${padding} iteration ${i} more text here.`;
-      if (totalBytes + Buffer.byteLength(entry) > MAX_FEEDBACK_BYTES) break;
-      entries.push(entry);
-      totalBytes += Buffer.byteLength(entry);
-    }
-
-    expect(totalBytes).toBeLessThanOrEqual(MAX_FEEDBACK_BYTES);
-    // Should have included some entries but not all 100 (cap hits before iteration 100)
-    expect(entries.length).toBeGreaterThan(1);
-    expect(entries.length).toBeLessThan(100);
+  beforeEach(() => {
+    eventBus = new TestEventBus();
+    logger = new TestLogger();
+    vi.clearAllMocks();
   });
 
-  it('should preserve oldest iterations when cap is hit', () => {
-    const MAX_FEEDBACK_BYTES = 8192;
-    const allEntries: string[] = [];
-    let totalBytes = 0;
-    const includedEntries: string[] = [];
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
-    for (let i = 1; i <= 100; i++) {
-      const entry = `Iteration ${i} [FAIL]: Something happened at iteration ${i}.`;
-      allEntries.push(entry);
-      if (totalBytes + Buffer.byteLength(entry) <= MAX_FEEDBACK_BYTES) {
-        includedEntries.push(entry);
-        totalBytes += Buffer.byteLength(entry);
-      } else {
-        break; // Stop including when cap is hit
-      }
+  it('truncates feedback to MAX_EVAL_FEEDBACK_LENGTH when eval output exceeds the cap', async () => {
+    // Build output lines whose joined length well exceeds MAX_EVAL_FEEDBACK_LENGTH (16_000).
+    // Each feedback line is ~500 chars; 40 of them = 20_000 chars > 16_000 cap.
+    // The last line must be 'FAIL' (text-parse path, no jsonSchema since agent is not claude).
+    const feedbackLine = 'x'.repeat(500);
+    const lines: string[] = [];
+    for (let i = 0; i < 40; i++) {
+      lines.push(feedbackLine);
     }
+    lines.push('FAIL');
 
-    // Oldest entries (iteration 1) should be first
-    expect(includedEntries[0]).toContain('Iteration 1');
+    const outputRepo = createOutputRepo(lines);
+    const loopRepo = createLoopRepo();
+    const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
+
+    // Use a non-claude agent so structured output is NOT attempted (forces text-parse path)
+    const loop = createTestLoop({ agent: 'codex', strategy: LoopStrategy.RETRY });
+    const result = await evaluateWithCompletion(evaluator, loop, TaskId('task-cap-1'), eventBus);
+
+    // Evaluator must return a result (FAIL path, passed: false)
+    expect(result.passed).toBe(false);
+
+    // feedback must be present and capped at MAX_EVAL_FEEDBACK_LENGTH
+    expect(result.feedback).toBeDefined();
+    expect(result.feedback!.length).toBeLessThanOrEqual(MAX_EVAL_FEEDBACK_LENGTH);
+  });
+
+  it('preserves the start of feedback when truncating (slice(0, cap) semantics)', async () => {
+    // First feedback line is distinctive — it must survive the cap even after truncation.
+    const distinctFirst = 'FIRST_LINE_DISTINCTIVE_MARKER: iteration notes here.';
+    const bulkLine = 'y'.repeat(500);
+    const lines: string[] = [distinctFirst];
+    // Add enough bulk lines to push total well past the cap
+    for (let i = 0; i < 40; i++) {
+      lines.push(bulkLine);
+    }
+    lines.push('FAIL');
+
+    const outputRepo = createOutputRepo(lines);
+    const loopRepo = createLoopRepo();
+    const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
+
+    const loop = createTestLoop({ agent: 'codex', strategy: LoopStrategy.RETRY });
+    const result = await evaluateWithCompletion(evaluator, loop, TaskId('task-cap-2'), eventBus);
+
+    expect(result.feedback).toBeDefined();
+    // The first line must be present (truncation cuts from the end, not the start)
+    expect(result.feedback).toContain(distinctFirst);
+    // Total must still be within cap
+    expect(result.feedback!.length).toBeLessThanOrEqual(MAX_EVAL_FEEDBACK_LENGTH);
+  });
+
+  it('does NOT truncate feedback when output is within the cap', async () => {
+    // 5 short lines totalling well under 16_000 chars
+    const lines = ['Line one.', 'Line two.', 'Line three.', 'FAIL'];
+
+    const outputRepo = createOutputRepo(lines);
+    const loopRepo = createLoopRepo();
+    const evaluator = new AgentExitConditionEvaluator(eventBus, outputRepo, loopRepo, logger);
+
+    const loop = createTestLoop({ agent: 'codex', strategy: LoopStrategy.RETRY });
+    const result = await evaluateWithCompletion(evaluator, loop, TaskId('task-cap-3'), eventBus);
+
+    expect(result.passed).toBe(false);
+    // All feedback lines must be present (no truncation)
+    expect(result.feedback).toContain('Line one.');
+    expect(result.feedback).toContain('Line two.');
+    expect(result.feedback).toContain('Line three.');
   });
 });

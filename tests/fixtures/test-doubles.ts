@@ -7,6 +7,7 @@
  */
 
 import type { ChildProcess } from 'child_process';
+import type { SpawnOptions } from '../../src/core/agents';
 import type {
   SystemResources,
   Task,
@@ -461,6 +462,10 @@ export class TestTaskRepository implements TaskRepository {
 
 /**
  * TestProcessSpawner - Controllable process spawner for testing
+ *
+ * ARCHITECTURE: Implements ProcessSpawner with SpawnOptions (widened in v1.4.0).
+ * Keyed internally by pid string so test helpers (simulateExit, isProcessKilled)
+ * accept the pid returned from spawn(). See batch-D-process-spawner review fix.
  */
 export class TestProcessSpawner implements ProcessSpawner {
   private processes = new Map<string, { pid: number; killed: boolean }>();
@@ -468,24 +473,20 @@ export class TestProcessSpawner implements ProcessSpawner {
   private nextPid = 1000;
   private outputHandlers = new Map<string, (data: string) => void>();
 
-  async spawn(
-    command: string,
-    args: string[],
-    options?: Record<string, unknown>,
-  ): Promise<Result<{ process: ChildProcess; workerId: string }, Error>> {
+  spawn(_options: SpawnOptions): Result<{ process: ChildProcess; pid: number }> {
     if (this.spawnError) {
       return err(this.spawnError);
     }
 
-    const workerId = `worker-${this.nextPid}`;
     const pid = this.nextPid++;
+    const key = pid.toString();
 
-    this.processes.set(workerId, { pid, killed: false });
+    this.processes.set(key, { pid, killed: false });
 
     const mockProcess = {
       pid,
       kill: () => {
-        const proc = this.processes.get(workerId);
+        const proc = this.processes.get(key);
         if (proc) {
           proc.killed = true;
         }
@@ -497,28 +498,29 @@ export class TestProcessSpawner implements ProcessSpawner {
       stdout: {
         on: (event: string, handler: (data: string) => void) => {
           if (event === 'data') {
-            this.outputHandlers.set(`${workerId}-stdout`, handler);
+            this.outputHandlers.set(`${key}-stdout`, handler);
           }
         },
       },
       stderr: {
         on: (event: string, handler: (data: string) => void) => {
           if (event === 'data') {
-            this.outputHandlers.set(`${workerId}-stderr`, handler);
+            this.outputHandlers.set(`${key}-stderr`, handler);
           }
         },
       },
     } as unknown as ChildProcess;
 
-    return ok({ process: mockProcess, workerId });
+    return ok({ process: mockProcess, pid });
   }
 
-  async kill(pid: number): Promise<Result<void, Error>> {
-    const entry = Array.from(this.processes.entries()).find(([_, p]) => p.pid === pid);
-    if (!entry) {
+  kill(pid: number): Result<void> {
+    const key = pid.toString();
+    const proc = this.processes.get(key);
+    if (!proc) {
       return err(new Error(`Process ${pid} not found`));
     }
-    entry[1].killed = true;
+    proc.killed = true;
     return ok(undefined);
   }
 
@@ -527,23 +529,29 @@ export class TestProcessSpawner implements ProcessSpawner {
     this.spawnError = error;
   }
 
-  simulateOutput(workerId: string, stream: 'stdout' | 'stderr', data: string): void {
-    const handler = this.outputHandlers.get(`${workerId}-${stream}`);
+  /**
+   * Simulate output data on stdout or stderr for the given pid.
+   * Pass pid.toString() as the key (matches what spawn() returns).
+   */
+  simulateOutput(pidKey: string, stream: 'stdout' | 'stderr', data: string): void {
+    const handler = this.outputHandlers.get(`${pidKey}-${stream}`);
     if (handler) {
       handler(Buffer.from(data));
     }
   }
 
-  simulateExit(workerId: string, code: number): void {
-    // Simulate process exit
-    const proc = this.processes.get(workerId);
+  /**
+   * Simulate process exit for the given pid key.
+   */
+  simulateExit(pidKey: string, _code: number): void {
+    const proc = this.processes.get(pidKey);
     if (proc) {
       proc.killed = true;
     }
   }
 
-  isProcessKilled(workerId: string): boolean {
-    return this.processes.get(workerId)?.killed || false;
+  isProcessKilled(pidKey: string): boolean {
+    return this.processes.get(pidKey)?.killed || false;
   }
 
   clear(): void {
