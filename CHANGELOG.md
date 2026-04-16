@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [1.3.1] - 2026-04-16
+
+### Fixed
+- **Preflight script**: `npm view` failure (offline/timeout) no longer silently passes — warns and skips the published-version check instead of defaulting to `0.0.0` (#145)
+- **Preflight script**: Added remote sync check — detects local/remote branch divergence before release (#145)
+
+---
+
 ## [1.3.0] - 2026-04-16
 
 ### Added

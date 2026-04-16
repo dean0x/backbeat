@@ -13,12 +13,16 @@ gh auth status 2>&1 || { echo "❌ Not authenticated to GitHub"; exit 1; }
 BRANCH=$(git branch --show-current)
 [[ "$BRANCH" == "main" || "$BRANCH" == release/* ]] || { echo "❌ Not on main or release branch (on: $BRANCH)"; exit 1; }
 git diff --quiet && git diff --cached --quiet || { echo "❌ Uncommitted changes"; exit 1; }
+git fetch origin --quiet
+LOCAL=$(git rev-parse @)
+REMOTE=$(git rev-parse "@{u}" 2>/dev/null || echo "")
+[[ -z "$REMOTE" || "$LOCAL" == "$REMOTE" ]] || { echo "❌ Local branch is out of sync with remote — run git pull"; exit 1; }
 
 # Version checks
-PUBLISHED=$(npm view autobeat version 2>/dev/null || echo "0.0.0")
+PUBLISHED=$(npm view autobeat version 2>/dev/null) || { echo "⚠️  Could not reach npm registry — skipping published-version check"; PUBLISHED=""; }
 PACKAGE=$(node -p "require('./package.json').version")
 echo "Published: $PUBLISHED | Package: $PACKAGE"
-[[ "$PUBLISHED" != "$PACKAGE" ]] || { echo "❌ Version not bumped (both are $PUBLISHED)"; exit 1; }
+[[ -z "$PUBLISHED" || "$PUBLISHED" != "$PACKAGE" ]] || { echo "❌ Version not bumped (both are $PACKAGE)"; exit 1; }
 
 # Release notes check
 NOTES="docs/releases/RELEASE_NOTES_v${PACKAGE}.md"
