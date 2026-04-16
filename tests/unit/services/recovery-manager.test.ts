@@ -1005,4 +1005,81 @@ describe('RecoveryManager', () => {
       // No assertion needed — just verifying it doesn't throw
     });
   });
+
+  describe('Stale heartbeat warning (observability)', () => {
+    it('should log warning when PID is alive but heartbeat is older than 90s', async () => {
+      const staleHeartbeat = Date.now() - 95_000; // 95s ago — older than 90s threshold
+      const aliveWorkerWithStaleHb = {
+        workerId: WorkerId('w-stale-hb'),
+        taskId: TaskId('task-stale-hb'),
+        pid: ALIVE_PID,
+        ownerPid: ALIVE_PID,
+        agent: 'claude',
+        startedAt: Date.now(),
+        lastHeartbeat: staleHeartbeat,
+      };
+      workerRepo.findAll.mockReturnValue(ok([aliveWorkerWithStaleHb]));
+      setupFindByStatus([], []);
+
+      await manager.recover();
+
+      // Worker should NOT be unregistered — PID is alive
+      expect(workerRepo.unregister).not.toHaveBeenCalled();
+
+      // Warning should be logged for stale heartbeat
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Worker PID alive but heartbeat stale',
+        expect.objectContaining({
+          workerId: WorkerId('w-stale-hb'),
+          taskId: TaskId('task-stale-hb'),
+          ownerPid: ALIVE_PID,
+        }),
+      );
+    });
+
+    it('should NOT warn when heartbeat is fresh (< 90s)', async () => {
+      const freshHeartbeat = Date.now() - 20_000; // 20s ago — within threshold
+      const aliveWorkerWithFreshHb = {
+        workerId: WorkerId('w-fresh-hb'),
+        taskId: TaskId('task-fresh-hb'),
+        pid: ALIVE_PID,
+        ownerPid: ALIVE_PID,
+        agent: 'claude',
+        startedAt: Date.now(),
+        lastHeartbeat: freshHeartbeat,
+      };
+      workerRepo.findAll.mockReturnValue(ok([aliveWorkerWithFreshHb]));
+      setupFindByStatus([], []);
+
+      await manager.recover();
+
+      // No warning
+      const staleWarnCalls = (logger.warn as ReturnType<typeof vi.fn>).mock.calls.filter(
+        (call: unknown[]) => call[0] === 'Worker PID alive but heartbeat stale',
+      );
+      expect(staleWarnCalls).toHaveLength(0);
+    });
+
+    it('should NOT warn when lastHeartbeat is undefined (no heartbeat written yet)', async () => {
+      const aliveWorkerNoHb = {
+        workerId: WorkerId('w-no-hb'),
+        taskId: TaskId('task-no-hb'),
+        pid: ALIVE_PID,
+        ownerPid: ALIVE_PID,
+        agent: 'claude',
+        startedAt: Date.now(),
+        // lastHeartbeat intentionally absent
+      };
+      workerRepo.findAll.mockReturnValue(ok([aliveWorkerNoHb]));
+      setupFindByStatus([], []);
+
+      await manager.recover();
+
+      // No warning — newly registered workers have no heartbeat yet, that's normal
+      const staleWarnCalls = (logger.warn as ReturnType<typeof vi.fn>).mock.calls.filter(
+        (call: unknown[]) => call[0] === 'Worker PID alive but heartbeat stale',
+      );
+      expect(staleWarnCalls).toHaveLength(0);
+    });
+  });
 });

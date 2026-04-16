@@ -9,7 +9,7 @@
  */
 
 import { ChildProcess } from 'child_process';
-import { AgentAdapter, AgentProvider } from '../core/agents.js';
+import { AgentAdapter, AgentProvider, SpawnOptions } from '../core/agents.js';
 import { ProcessSpawner } from '../core/interfaces.js';
 import { Result } from '../core/result.js';
 
@@ -23,13 +23,8 @@ export class ProcessSpawnerAdapter implements AgentAdapter {
     this.provider = provider;
   }
 
-  spawn(
-    prompt: string,
-    workingDirectory: string,
-    taskId?: string,
-    model?: string,
-  ): Result<{ process: ChildProcess; pid: number }> {
-    return this.spawner.spawn(prompt, workingDirectory, taskId, model);
+  spawn(options: SpawnOptions): Result<{ process: ChildProcess; pid: number }> {
+    return this.spawner.spawn(options);
   }
 
   kill(pid: number): Result<void> {

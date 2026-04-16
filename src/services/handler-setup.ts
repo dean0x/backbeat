@@ -34,6 +34,7 @@ import { err, ok, Result } from '../core/result.js';
 import { AgentExitConditionEvaluator } from './agent-exit-condition-evaluator.js';
 import { CompositeExitConditionEvaluator } from './composite-exit-condition-evaluator.js';
 import { ShellExitConditionEvaluator } from './exit-condition-evaluator.js';
+import { FeedforwardEvaluator } from './feedforward-evaluator.js';
 import { AttributedTaskCancellationHandler } from './handlers/attributed-task-cancellation-handler.js';
 import { CheckpointHandler } from './handlers/checkpoint-handler.js';
 import { DependencyHandler } from './handlers/dependency-handler.js';
@@ -44,6 +45,7 @@ import { QueueHandler } from './handlers/queue-handler.js';
 import { ScheduleHandler } from './handlers/schedule-handler.js';
 import { UsageCaptureHandler } from './handlers/usage-capture-handler.js';
 import { WorkerHandler } from './handlers/worker-handler.js';
+import { JudgeExitConditionEvaluator } from './judge-exit-condition-evaluator.js';
 
 /**
  * Dependencies required for handler setup
@@ -371,7 +373,24 @@ export async function setupEventHandlers(deps: HandlerDependencies): Promise<Res
     deps.loopRepository,
     childLogger('AgentEval'),
   );
-  const exitConditionEvaluator = new CompositeExitConditionEvaluator(shellEvaluator, agentEvaluator);
+  const feedforwardEvaluator = new FeedforwardEvaluator(
+    eventBus,
+    deps.outputRepository,
+    deps.loopRepository,
+    childLogger('FeedforwardEval'),
+  );
+  const judgeEvaluator = new JudgeExitConditionEvaluator(
+    eventBus,
+    deps.outputRepository,
+    deps.loopRepository,
+    childLogger('JudgeEval'),
+  );
+  const exitConditionEvaluator = new CompositeExitConditionEvaluator(
+    shellEvaluator,
+    agentEvaluator,
+    judgeEvaluator,
+    feedforwardEvaluator,
+  );
 
   const loopHandlerResult = await LoopHandler.create({
     loopRepo: deps.loopRepository,

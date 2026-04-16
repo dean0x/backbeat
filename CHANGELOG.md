@@ -8,6 +8,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [1.4.0] - 2026-04-15
+
+### Added
+- **FeedforwardEvaluator** (`evalType: 'feedforward'`): New default evaluation mode that gathers agent findings on every iteration and feeds them into the next iteration's prompt as context, without making a stop/continue decision. Loop runs to `maxIterations` unconditionally. When no `evalPrompt` is set, acts as a pure pass-through (no eval agent spawned) (#136)
+- **JudgeExitConditionEvaluator** (`evalType: 'judge'`): Two-phase eval+judge strategy. Phase 1 eval agent generates narrative findings; Phase 2 judge agent reads findings and writes a structured JSON decision to `.autobeat-judge-task-{uuid}` in the working directory (unique per judge task, prevents TOCTOU), optionally using Claude's `--json-schema` belt-and-suspenders mechanism. Defaults to `continue: true` if both mechanisms fail (#136)
+- **Schema evaluator** (`evalType: 'schema'`): Deterministic structured output evaluation via Claude's `--json-schema`. Eval agent must respond with `{"continue": bool, "reasoning": string}`. No separate judge agent required (#136)
+- `evalType` field on `Loop` domain object (`'feedforward'` | `'judge'` | `'schema'`); defaults to `'feedforward'` for backward compatibility (#136)
+- `judgeAgent` and `judgePrompt` fields on `Loop` for configuring the judge agent and decision prompt independently of the eval agent (#136)
+- `EvalMode` enum aligning internal evaluation dispatch with `evalType` (#136)
+- `buildEvalPromptBase()` shared utility: extracts git diff context, tool instructions, and iteration header used by all three evaluators (#140)
+- `acquirePidFile()`: Atomic O_EXCL PID file acquisition with sentinel Result return (`acquired` | `already-running`), stale-file cleanup, and recovery from concurrent startup races (#141)
+- `checkActiveSchedules()`, `registerSignalHandlers()`, `startIdleCheckLoop()`: Extracted pure functions from `handleScheduleExecutor` for unit testability (#142)
+- `SpawnOptions` interface: Replaces 6 positional parameters on `AgentAdapter.spawn()` with a named options object (#139)
+
+### Database
+- **Migration v21**: Adds `workers.last_heartbeat INTEGER` (liveness tracking), `loops.eval_type TEXT DEFAULT 'feedforward'`, `loops.judge_agent TEXT`, and `loops.judge_prompt TEXT` columns (#136)
+- **Migration v22**: Recreates `loops` table with CHECK constraints on `eval_type IN ('feedforward', 'judge', 'schema')` and `judge_agent IN ('claude', 'codex', 'gemini')`. **Full table rebuild — back up `~/.autobeat/autobeat.db` before upgrading** (#136)
+
+### Changed
+- `handleScheduleExecutor` now uses atomic PID file acquisition (`acquirePidFile`) instead of a read-then-write pattern (#141)
+- `AgentAdapter.spawn()` signature changed from 6 positional params to `spawn(options: SpawnOptions)` — all implementations and call sites updated (#139)
+
+### Internal Refactoring
+- `refetchAfterAgentEval()` extracted from `LoopHandler.handleTaskTerminal()` to encapsulate stale-state guard (#137)
+- `handleStopDecision()` extracted from `LoopHandler` to deduplicate stop-path logic shared between `handleRetryResult` and `handleOptimizeResult` (#138)
+- Shared eval test fixtures extracted to `tests/fixtures/eval-test-helpers.ts` to eliminate duplicated helpers across 3 test files (#143)
+
+---
+
 ## [1.3.0] - 2026-04-11
 
 ### Added
@@ -165,6 +194,16 @@ Despite the major version bump, all changes from v0.8.2 are **additive**. No bre
 
 ### 🔄 Events
 - 2 new events (31 total): `LoopPaused`, `LoopResumed`
+
+---
+
+## [0.7.2] - 2026-03-22
+
+### 📦 Dependencies
+- **Updated `better-sqlite3`** from 12.6.2 to 12.8.0
+
+### 🧪 Test Fixes
+- **Fixed flaky CI test**: Widened packet loss simulation tolerance (0.15-0.50 from 0.2-0.4) to prevent random CI failures
 
 ---
 

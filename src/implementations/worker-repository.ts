@@ -26,6 +26,7 @@ const WorkerRowSchema = z.object({
   owner_pid: z.number(),
   agent: z.string(),
   started_at: z.number(),
+  last_heartbeat: z.number().nullable().optional(),
 });
 
 /** Database row type inferred from Zod schema (single source of truth) */
@@ -40,6 +41,7 @@ export class SQLiteWorkerRepository implements WorkerRepository {
   private readonly findAllStmt: SQLite.Statement;
   private readonly countStmt: SQLite.Statement;
   private readonly deleteByOwnerPidStmt: SQLite.Statement;
+  private readonly updateHeartbeatStmt: SQLite.Statement;
 
   constructor(database: Database) {
     this.db = database.getDatabase();
@@ -71,6 +73,10 @@ export class SQLiteWorkerRepository implements WorkerRepository {
 
     this.deleteByOwnerPidStmt = this.db.prepare(`
       DELETE FROM workers WHERE owner_pid = ?
+    `);
+
+    this.updateHeartbeatStmt = this.db.prepare(`
+      UPDATE workers SET last_heartbeat = ? WHERE worker_id = ?
     `);
   }
 
@@ -162,6 +168,20 @@ export class SQLiteWorkerRepository implements WorkerRepository {
   }
 
   /**
+   * Update the last_heartbeat column for the given worker to the current time.
+   * DECISION: 30s write interval keeps DB write load low while enabling stale-worker
+   * detection at 90s threshold in RecoveryManager. PID check remains authoritative.
+   */
+  updateHeartbeat(workerId: WorkerId): Result<void> {
+    return tryCatch(
+      () => {
+        this.updateHeartbeatStmt.run(Date.now(), workerId);
+      },
+      operationErrorHandler('update worker heartbeat', { workerId }),
+    );
+  }
+
+  /**
    * Convert database row to WorkerRegistration domain object
    * Pattern: Validate at boundary - ensures data integrity from database
    * @throws Error if row data is invalid (indicates database corruption)
@@ -176,6 +196,8 @@ export class SQLiteWorkerRepository implements WorkerRepository {
       ownerPid: data.owner_pid,
       agent: data.agent,
       startedAt: data.started_at,
+      // lastHeartbeat is undefined when NULL (no heartbeat written yet)
+      lastHeartbeat: data.last_heartbeat ?? undefined,
     };
   }
 }

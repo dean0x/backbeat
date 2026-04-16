@@ -1764,4 +1764,317 @@ describe('LoopHandler - Behavioral Tests', () => {
       expect(iter1!.status).toBe('crash');
     });
   });
+
+  // ==========================================================================
+  // v1.4.0 — EvalResult.decision field branching
+  // ==========================================================================
+
+  describe('decision field — RETRY strategy', () => {
+    it('decision: continue — schedules next iteration WITHOUT incrementing consecutiveFailures', async () => {
+      // decision: 'continue' is the feedforward/judge signal "keep going, no penalty"
+      mockEvaluator.evaluate.mockResolvedValue({
+        passed: false,
+        decision: 'continue',
+        feedback: 'keep iterating',
+        exitCode: 0,
+      });
+
+      const loop = await createAndEmitLoop({
+        strategy: LoopStrategy.RETRY,
+        maxConsecutiveFailures: 3,
+        maxIterations: 10,
+      });
+
+      const taskId = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // Loop must still be running (not completed or failed)
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.status).toBe(LoopStatus.RUNNING);
+      expect(updatedLoop!.currentIteration).toBe(2);
+
+      // consecutiveFailures must NOT have been incremented
+      expect(updatedLoop!.consecutiveFailures).toBe(0);
+
+      // Iteration 1 should be recorded as 'fail' (exit condition not met) but without penalty
+      const iters = await loopRepo.getIterations(loop.id, 10);
+      expect(iters.ok).toBe(true);
+      const iter1 = iters.value.find((i) => i.iterationNumber === 1);
+      expect(iter1!.status).toBe('fail');
+    });
+
+    it('decision: continue — does not fail loop even at maxConsecutiveFailures boundary', async () => {
+      // If decision: continue bypasses the increment, it must also bypass the limit check.
+      // This is the core v1.4.0 behavioral guarantee.
+      mockEvaluator.evaluate.mockResolvedValue({
+        passed: false,
+        decision: 'continue',
+        feedback: 'feedforward: keep going',
+        exitCode: 0,
+      });
+
+      const loop = await createAndEmitLoop({
+        strategy: LoopStrategy.RETRY,
+        maxConsecutiveFailures: 1, // very tight limit
+        maxIterations: 10,
+      });
+
+      const taskId = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // With regular 'fail' result this would have triggered maxConsecutiveFailures.
+      // With decision: 'continue' the loop must still be running.
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.status).toBe(LoopStatus.RUNNING);
+      expect(updatedLoop!.consecutiveFailures).toBe(0);
+    });
+
+    it('decision: stop — completes loop and marks iteration as pass', async () => {
+      mockEvaluator.evaluate.mockResolvedValue({
+        passed: false,
+        decision: 'stop',
+        feedback: 'judge says done',
+        exitCode: 0,
+      });
+
+      const loop = await createAndEmitLoop({
+        strategy: LoopStrategy.RETRY,
+        maxIterations: 10,
+      });
+
+      const taskId = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.status).toBe(LoopStatus.COMPLETED);
+
+      // Iteration must be 'pass' (judge accepted it)
+      const iter = await getLatestIteration(loop.id);
+      expect(iter!.status).toBe('pass');
+      expect(iter!.evalFeedback).toBe('judge says done');
+    });
+
+    it('decision: stop — emits LoopCompleted event', async () => {
+      mockEvaluator.evaluate.mockResolvedValue({
+        passed: false,
+        decision: 'stop',
+        feedback: 'stop signal',
+        exitCode: 0,
+      });
+
+      const loop = await createAndEmitLoop({ strategy: LoopStrategy.RETRY });
+
+      let loopCompletedFired = false;
+      eventBus.subscribe('LoopCompleted', async () => {
+        loopCompletedFired = true;
+      });
+
+      const taskId = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      expect(loopCompletedFired).toBe(true);
+
+      // Side-effect: loop must be COMPLETED in the DB (LoopCompleted event reflects DB state)
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.status).toBe(LoopStatus.COMPLETED);
+
+      // Side-effect: iteration must be recorded as 'pass' (judge accepted it)
+      const iter = await getLatestIteration(loop.id);
+      expect(iter!.status).toBe('pass');
+    });
+
+    it('decision: stop — loopRepo.update is NOT called after the commit transaction (no double-write)', async () => {
+      // After decision=stop, the loop status is atomically committed in a transaction.
+      // finishLoop() should be called (not completeLoop()), so loopRepo.update must
+      // not be invoked redundantly on the success path.
+      mockEvaluator.evaluate.mockResolvedValue({
+        passed: false,
+        decision: 'stop',
+        feedback: 'done',
+        exitCode: 0,
+      });
+
+      const loop = await createAndEmitLoop({ strategy: LoopStrategy.RETRY });
+      const updateSpy = vi.spyOn(loopRepo, 'update');
+
+      const taskId = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // loopRepo.update must not have been called (status was committed via sync transaction)
+      expect(updateSpy).not.toHaveBeenCalled();
+
+      // Sanity: loop is still COMPLETED in the DB (from the transaction)
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.status).toBe(LoopStatus.COMPLETED);
+    });
+
+    it('undefined decision — falls through to normal passed/failed logic (backward compat)', async () => {
+      // No decision field set — must behave identically to the pre-v1.4.0 retry path.
+      mockEvaluator.evaluate.mockResolvedValue({ passed: false, exitCode: 1, error: 'test failed' });
+
+      const loop = await createAndEmitLoop({
+        strategy: LoopStrategy.RETRY,
+        maxConsecutiveFailures: 5,
+      });
+
+      const taskId = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // Normal fail path: consecutiveFailures incremented
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.consecutiveFailures).toBe(1);
+      expect(updatedLoop!.status).toBe(LoopStatus.RUNNING);
+    });
+  });
+
+  describe('decision field — OPTIMIZE strategy', () => {
+    it('decision: continue — schedules next iteration WITHOUT incrementing consecutiveFailures', async () => {
+      mockEvaluator.evaluate.mockResolvedValue({
+        passed: false,
+        decision: 'continue',
+        feedback: 'feedforward findings',
+        exitCode: 0,
+      });
+
+      const loop = await createAndEmitLoop({
+        strategy: LoopStrategy.OPTIMIZE,
+        evalDirection: OptimizeDirection.MAXIMIZE,
+        maxConsecutiveFailures: 3,
+        maxIterations: 10,
+      });
+
+      const taskId = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.status).toBe(LoopStatus.RUNNING);
+      expect(updatedLoop!.currentIteration).toBe(2);
+      expect(updatedLoop!.consecutiveFailures).toBe(0);
+
+      // Iteration 1 should be 'discard' (no penalty, but outcome recorded)
+      const iters = await loopRepo.getIterations(loop.id, 10);
+      expect(iters.ok).toBe(true);
+      const iter1 = iters.value.find((i) => i.iterationNumber === 1);
+      expect(iter1!.status).toBe('discard');
+    });
+
+    it('decision: continue — does not fail optimize loop at maxConsecutiveFailures boundary', async () => {
+      mockEvaluator.evaluate.mockResolvedValue({
+        passed: false,
+        decision: 'continue',
+        exitCode: 0,
+      });
+
+      const loop = await createAndEmitLoop({
+        strategy: LoopStrategy.OPTIMIZE,
+        evalDirection: OptimizeDirection.MAXIMIZE,
+        maxConsecutiveFailures: 1, // very tight
+        maxIterations: 10,
+      });
+
+      const taskId = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.status).toBe(LoopStatus.RUNNING);
+      expect(updatedLoop!.consecutiveFailures).toBe(0);
+
+      // Side-effect: iteration 1 must be recorded as 'discard' (no penalty, no fail cascade).
+      // getLatestIteration returns iteration 2 (currently 'running'), so query all and filter.
+      const iters = await loopRepo.getIterations(loop.id, 10);
+      expect(iters.ok).toBe(true);
+      const iter1 = iters.value.find((i) => i.iterationNumber === 1);
+      expect(iter1!.status).toBe('discard');
+    });
+
+    it('decision: stop — completes optimize loop and marks iteration as keep', async () => {
+      mockEvaluator.evaluate.mockResolvedValue({
+        passed: false,
+        decision: 'stop',
+        feedback: 'judge satisfied',
+        score: 95,
+        exitCode: 0,
+      });
+
+      const loop = await createAndEmitLoop({
+        strategy: LoopStrategy.OPTIMIZE,
+        evalDirection: OptimizeDirection.MAXIMIZE,
+        maxIterations: 10,
+      });
+
+      const taskId = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.status).toBe(LoopStatus.COMPLETED);
+
+      // Iteration must be 'keep' for optimize (judge selected it)
+      const iter = await getLatestIteration(loop.id);
+      expect(iter!.status).toBe('keep');
+      expect(iter!.evalFeedback).toBe('judge satisfied');
+    });
+
+    it('decision: stop — emits LoopCompleted event for optimize loop', async () => {
+      mockEvaluator.evaluate.mockResolvedValue({
+        passed: false,
+        decision: 'stop',
+        exitCode: 0,
+      });
+
+      const loop = await createAndEmitLoop({
+        strategy: LoopStrategy.OPTIMIZE,
+        evalDirection: OptimizeDirection.MAXIMIZE,
+      });
+
+      let loopCompletedFired = false;
+      eventBus.subscribe('LoopCompleted', async () => {
+        loopCompletedFired = true;
+      });
+
+      const taskId = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      expect(loopCompletedFired).toBe(true);
+
+      // Side-effect: loop must be COMPLETED in the DB (LoopCompleted event reflects DB state)
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.status).toBe(LoopStatus.COMPLETED);
+
+      // Side-effect: iteration must be recorded as 'keep' (judge accepted the optimize result)
+      const iter = await getLatestIteration(loop.id);
+      expect(iter!.status).toBe('keep');
+    });
+
+    it('undefined decision — falls through to normal score comparison logic (backward compat)', async () => {
+      // First iteration: score 50 (baseline)
+      mockEvaluator.evaluate.mockResolvedValue({ passed: true, score: 50, exitCode: 0 });
+
+      const loop = await createAndEmitLoop({
+        strategy: LoopStrategy.OPTIMIZE,
+        evalDirection: OptimizeDirection.MAXIMIZE,
+        maxConsecutiveFailures: 5,
+        maxIterations: 5,
+      });
+
+      const taskId = await getLatestTaskId(loop.id);
+      await eventBus.emit('TaskCompleted', { taskId: taskId!, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      // Normal optimize path: score persisted, loop continues
+      const updatedLoop = await getLoop(loop.id);
+      expect(updatedLoop!.bestScore).toBe(50);
+      expect(updatedLoop!.status).toBe(LoopStatus.RUNNING);
+      expect(updatedLoop!.consecutiveFailures).toBe(0);
+    });
+  });
 });

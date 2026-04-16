@@ -16,7 +16,8 @@ export class GeminiAdapter extends BaseAgentAdapter {
     super(config, geminiCommand);
   }
 
-  protected buildArgs(prompt: string, model?: string): readonly string[] {
+  // jsonSchema parameter accepted but ignored — Gemini CLI does not support structured output
+  protected buildArgs(prompt: string, model?: string, _jsonSchema?: string): readonly string[] {
     const modelArgs: string[] = model ? ['--model', model] : [];
     return ['--yolo', ...modelArgs, '--prompt', prompt];
   }

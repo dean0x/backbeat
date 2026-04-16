@@ -128,7 +128,8 @@ describe('Integration: Service initialization', () => {
       delete process.env.MAX_OUTPUT_BUFFER;
       const config2 = loadConfiguration();
 
-      expect(config2.timeout).toBe(1800000); // 30 minutes default
+      // DECISION: Default timeout is 0 (disabled) since v1.4.0
+      expect(config2.timeout).toBe(0); // 0 = disabled (no timeout)
       expect(config2.maxOutputBuffer).toBe(10485760); // 10MB default
 
       // Test 3: loadConfiguration returns consistent values
@@ -388,7 +389,9 @@ describe('Integration: Service initialization', () => {
     it.each([
       ['server', { skipResourceMonitoring: false, skipScheduleExecutor: false, skipRecovery: false }],
       ['cli', { skipResourceMonitoring: false, skipScheduleExecutor: true, skipRecovery: true }],
-      ['run', { skipResourceMonitoring: true, skipScheduleExecutor: true, skipRecovery: false }],
+      // DECISION: Resource monitoring enabled in all modes — 'run' mode workers need resource
+      // checks to prevent overload.
+      ['run', { skipResourceMonitoring: false, skipScheduleExecutor: true, skipRecovery: false }],
     ] as const)('mode "%s" produces correct flags', (mode, expected) => {
       expect(deriveModeFlags(mode)).toEqual(expected);
     });

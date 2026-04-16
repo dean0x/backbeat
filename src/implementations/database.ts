@@ -837,6 +837,106 @@ export class Database implements TransactionRunner {
           );
         },
       },
+      {
+        version: 21,
+        description: 'Add worker heartbeat, loop eval columns (v1.4.0)',
+        up: (db) => {
+          // DECISION: last_heartbeat tracks when the owning process last wrote to the DB.
+          // Enables stale worker detection beyond PID checks (process zombies, hung workers).
+          // Nullable — old rows and newly registered workers before first heartbeat are NULL.
+          db.exec(`ALTER TABLE workers ADD COLUMN last_heartbeat INTEGER`);
+
+          // DECISION: eval_response stores the raw agent evaluation output per loop iteration.
+          // Nullable — non-eval iterations have no response.
+          db.exec(`ALTER TABLE loop_iterations ADD COLUMN eval_response TEXT`);
+
+          // DECISION: eval_type, judge_agent, judge_prompt support the eval redesign (v1.4.0).
+          // eval_type defaults to 'feedforward' (existing behavior) for backward compatibility.
+          // judge_agent and judge_prompt are nullable — only set for judge-based eval loops.
+          db.exec(`ALTER TABLE loops ADD COLUMN eval_type TEXT DEFAULT 'feedforward'`);
+          db.exec(`ALTER TABLE loops ADD COLUMN judge_agent TEXT`);
+          db.exec(`ALTER TABLE loops ADD COLUMN judge_prompt TEXT`);
+        },
+      },
+      {
+        version: 22,
+        description: 'Add CHECK constraints on eval_type and judge_agent in loops table (v1.4.0)',
+        up: (db) => {
+          // SQLite does not support adding CHECK constraints to existing columns via ALTER TABLE.
+          // Pattern: Safe table recreation with data preservation (same as migrations v2, v3, v11).
+          // DECISION: eval_type CHECK enforces the three valid sub-strategies at the DB level as
+          // defense-in-depth. judge_agent CHECK enforces the same agent values as the application
+          // layer. Both columns default to NULL / 'feedforward' so existing rows are valid.
+          db.exec(`
+            CREATE TABLE loops_new (
+              id TEXT PRIMARY KEY,
+              strategy TEXT NOT NULL CHECK(strategy IN ('retry', 'optimize')),
+              task_template TEXT NOT NULL,
+              pipeline_steps TEXT,
+              exit_condition TEXT NOT NULL,
+              eval_direction TEXT,
+              eval_timeout INTEGER NOT NULL DEFAULT 60000,
+              eval_mode TEXT NOT NULL DEFAULT 'shell',
+              eval_prompt TEXT,
+              working_directory TEXT NOT NULL,
+              max_iterations INTEGER NOT NULL DEFAULT 10,
+              max_consecutive_failures INTEGER NOT NULL DEFAULT 3,
+              cooldown_ms INTEGER NOT NULL DEFAULT 0,
+              fresh_context INTEGER NOT NULL DEFAULT 1,
+              status TEXT NOT NULL DEFAULT 'running'
+                CHECK(status IN ('running', 'paused', 'completed', 'failed', 'cancelled')),
+              current_iteration INTEGER NOT NULL DEFAULT 0,
+              best_score REAL,
+              best_iteration_id INTEGER,
+              best_iteration_commit_sha TEXT,
+              consecutive_failures INTEGER NOT NULL DEFAULT 0,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              completed_at INTEGER,
+              git_branch TEXT,
+              git_base_branch TEXT,
+              git_start_commit_sha TEXT,
+              schedule_id TEXT REFERENCES schedules(id) ON DELETE SET NULL,
+              eval_type TEXT DEFAULT 'feedforward'
+                CHECK(eval_type IS NULL OR eval_type IN ('feedforward', 'judge', 'schema')),
+              judge_agent TEXT
+                CHECK(judge_agent IS NULL OR judge_agent IN ('claude', 'codex', 'gemini')),
+              judge_prompt TEXT
+            )
+          `);
+
+          db.exec(`
+            INSERT INTO loops_new (
+              id, strategy, task_template, pipeline_steps, exit_condition,
+              eval_direction, eval_timeout, eval_mode, eval_prompt,
+              working_directory, max_iterations, max_consecutive_failures,
+              cooldown_ms, fresh_context, status, current_iteration,
+              best_score, best_iteration_id, best_iteration_commit_sha,
+              consecutive_failures, created_at, updated_at, completed_at,
+              git_branch, git_base_branch, git_start_commit_sha, schedule_id,
+              eval_type, judge_agent, judge_prompt
+            )
+            SELECT
+              id, strategy, task_template, pipeline_steps, exit_condition,
+              eval_direction, eval_timeout, eval_mode, eval_prompt,
+              working_directory, max_iterations, max_consecutive_failures,
+              cooldown_ms, fresh_context, status, current_iteration,
+              best_score, best_iteration_id, best_iteration_commit_sha,
+              consecutive_failures, created_at, updated_at, completed_at,
+              git_branch, git_base_branch, git_start_commit_sha, schedule_id,
+              eval_type, judge_agent, judge_prompt
+            FROM loops
+          `);
+
+          db.exec(`DROP TABLE loops`);
+          db.exec(`ALTER TABLE loops_new RENAME TO loops`);
+
+          // Recreate indexes (dropped with the table rename)
+          db.exec(`CREATE INDEX IF NOT EXISTS idx_loops_status ON loops(status)`);
+          db.exec(`CREATE INDEX IF NOT EXISTS idx_loops_schedule_id ON loops(schedule_id)`);
+          db.exec(`CREATE INDEX IF NOT EXISTS idx_loops_updated_at ON loops(updated_at)`);
+        },
+      },
     ];
   }
 

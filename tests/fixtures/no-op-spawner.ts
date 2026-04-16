@@ -5,6 +5,7 @@
 
 import { ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
+import { SpawnOptions } from '../../src/core/agents.js';
 import { ProcessSpawner } from '../../src/core/interfaces.js';
 import { ok, Result } from '../../src/core/result.js';
 
@@ -77,7 +78,7 @@ class MockChildProcess extends EventEmitter {
 export class NoOpProcessSpawner implements ProcessSpawner {
   private mockPidCounter = 90000; // High PID to avoid collision with real processes
 
-  spawn(_prompt: string, _workingDirectory: string, _taskId?: string): Result<{ process: ChildProcess; pid: number }> {
+  spawn(_options: SpawnOptions): Result<{ process: ChildProcess; pid: number }> {
     const pid = this.mockPidCounter++;
     // Double assertion required: ChildProcess is a class (not interface), MockChildProcess implements all required properties
     const mockProcess = new MockChildProcess(pid) as unknown as ChildProcess;

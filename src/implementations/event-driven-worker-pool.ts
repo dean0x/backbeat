@@ -27,6 +27,7 @@ interface WorkerState extends Worker {
   process: ChildProcess;
   task: Task;
   timeoutTimer?: NodeJS.Timeout;
+  heartbeatTimer?: NodeJS.Timeout;
 }
 
 export interface EventDrivenWorkerPoolDeps {
@@ -104,8 +105,15 @@ export class EventDrivenWorkerPool implements WorkerPool {
     const adapter = adapterResult.value;
     const finalWorkingDirectory = task.workingDirectory || process.cwd();
 
-    // Spawn the process using the resolved adapter (pass model and orchestratorId for attribution)
-    const spawnResult = adapter.spawn(task.prompt, finalWorkingDirectory, task.id, task.model, task.orchestratorId);
+    // Spawn the process using the resolved adapter (pass model, orchestratorId, and jsonSchema)
+    const spawnResult = adapter.spawn({
+      prompt: task.prompt,
+      workingDirectory: finalWorkingDirectory,
+      taskId: task.id,
+      model: task.model,
+      orchestratorId: task.orchestratorId,
+      jsonSchema: task.jsonSchema,
+    });
 
     if (!spawnResult.ok) {
       return err(spawnResult.error);
@@ -121,6 +129,9 @@ export class EventDrivenWorkerPool implements WorkerPool {
 
     // Set up timeout if task has one
     this.setupTimeoutForWorker(worker);
+
+    // Set up periodic heartbeat to update DB timestamp for stale-worker detection
+    this.setupHeartbeatForWorker(worker);
 
     // Connect process output to OutputCapture
     this.processConnector.connect(childProcess, task.id, (exitCode) => {
@@ -270,6 +281,13 @@ export class EventDrivenWorkerPool implements WorkerPool {
    * and unregister from DB. Shared by kill() and handleWorkerCompletion().
    */
   private cleanupWorkerState(workerId: WorkerId, taskId: TaskId): void {
+    // Clear heartbeat timer before removing from maps (timer holds reference to worker)
+    const worker = this.workers.get(workerId);
+    if (worker?.heartbeatTimer) {
+      clearInterval(worker.heartbeatTimer);
+      worker.heartbeatTimer = undefined;
+    }
+
     this.workers.delete(workerId);
     this.taskToWorker.delete(taskId);
     this.monitor.decrementWorkerCount();
@@ -317,6 +335,32 @@ export class EventDrivenWorkerPool implements WorkerPool {
         workerId: worker.id,
       });
     }
+
+    if (worker.heartbeatTimer) {
+      clearInterval(worker.heartbeatTimer);
+      worker.heartbeatTimer = undefined;
+    }
+  }
+
+  /**
+   * Set up a periodic heartbeat timer to update last_heartbeat in DB.
+   *
+   * DECISION: 30s heartbeat interval, 90s staleness threshold.
+   * Why: balance between write load and detection speed. PID check remains primary.
+   * timer.unref() prevents the timer from keeping the Node.js process alive.
+   */
+  private setupHeartbeatForWorker(worker: WorkerState): void {
+    const timer = setInterval(() => {
+      const result = this.workerRepository.updateHeartbeat(worker.id);
+      if (!result.ok) {
+        this.logger.warn('Heartbeat update failed', {
+          workerId: worker.id,
+          error: result.error.message,
+        });
+      }
+    }, 30_000);
+    timer.unref();
+    worker.heartbeatTimer = timer;
   }
 
   /**

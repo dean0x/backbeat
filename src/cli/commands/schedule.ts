@@ -6,6 +6,7 @@ import { toMissedRunPolicy, toOptimizeDirection, truncatePrompt } from '../../ut
 import { validatePath } from '../../utils/validation.js';
 import { exitOnError, exitOnNull, withReadOnlyContext, withServices } from '../services.js';
 import * as ui from '../ui.js';
+import { ensureScheduleExecutorRunning } from './schedule-executor.js';
 
 /**
  * Parsed arguments from CLI schedule create command.
@@ -501,6 +502,7 @@ async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]):
     if (created.nextRunAt) details.push(`Next run: ${new Date(created.nextRunAt).toISOString()}`);
     if (created.cronExpression) details.push(`Cron: ${created.cronExpression}`);
     ui.info(details.join(' | '));
+    await ensureScheduleExecutorRunning();
     return;
   }
 
@@ -521,6 +523,7 @@ async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]):
     if (pipeline.cronExpression) details.push(`Cron: ${pipeline.cronExpression}`);
     if (args.agent) details.push(`Agent: ${args.agent}`);
     ui.info(details.join(' | '));
+    await ensureScheduleExecutorRunning();
     return;
   }
 
@@ -537,6 +540,7 @@ async function scheduleCreate(service: ScheduleService, scheduleArgs: string[]):
   if (created.afterScheduleId) details.push(`After: ${created.afterScheduleId}`);
   if (args.agent) details.push(`Agent: ${args.agent}`);
   ui.info(details.join(' | '));
+  await ensureScheduleExecutorRunning();
 }
 
 async function scheduleList(repo: ScheduleRepository, scheduleArgs: string[]): Promise<void> {
@@ -696,4 +700,5 @@ async function scheduleResume(service: ScheduleService, scheduleArgs: string[]):
   const result = await service.resumeSchedule(ScheduleId(scheduleId));
   exitOnError(result, undefined, 'Failed to resume schedule');
   ui.success(`Schedule ${scheduleId} resumed`);
+  await ensureScheduleExecutorRunning();
 }

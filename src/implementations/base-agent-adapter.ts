@@ -20,6 +20,7 @@ import {
   AgentAuthConfig,
   AgentProvider,
   isCommandInPath,
+  SpawnOptions,
 } from '../core/agents.js';
 import { AgentConfig, Configuration, loadAgentConfig } from '../core/configuration.js';
 import { AutobeatError, agentMisconfigured, ErrorCode, processSpawnFailed } from '../core/errors.js';
@@ -35,8 +36,12 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
     protected readonly command: string,
   ) {}
 
-  /** Build CLI args for the given prompt and optional model override */
-  protected abstract buildArgs(prompt: string, model?: string): readonly string[];
+  /**
+   * Build CLI args for the given prompt, optional model override, and optional JSON schema.
+   * Subclasses that support structured output (Claude) should use jsonSchema;
+   * others should accept the parameter but ignore it.
+   */
+  protected abstract buildArgs(prompt: string, model?: string, jsonSchema?: string): readonly string[];
 
   /** Env var prefixes to strip before spawning (prevents nesting issues) */
   protected abstract get envPrefixesToStrip(): readonly string[];
@@ -126,13 +131,14 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
     return agentConfig.model;
   }
 
-  spawn(
-    prompt: string,
-    workingDirectory: string,
-    taskId?: string,
-    model?: string,
-    orchestratorId?: string,
-  ): Result<{ process: ChildProcess; pid: number }> {
+  spawn({
+    prompt,
+    workingDirectory,
+    taskId,
+    model,
+    orchestratorId,
+    jsonSchema,
+  }: SpawnOptions): Result<{ process: ChildProcess; pid: number }> {
     try {
       // Pre-spawn: verify CLI binary exists before anything else
       if (!isCommandInPath(this.command)) {
@@ -154,7 +160,7 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
 
       const resolvedModel = this.resolveModel(agentConfig, model);
       const finalPrompt = this.transformPrompt(prompt);
-      const args = this.buildArgs(finalPrompt, resolvedModel);
+      const args = this.buildArgs(finalPrompt, resolvedModel, jsonSchema);
 
       const exactMatches = this.envExactMatchesToStrip;
       const cleanEnv = Object.fromEntries(

@@ -32,6 +32,13 @@ export interface RecoveryManagerDeps {
 /** 7-day retention window for cleanup of terminal tasks, loops, and orchestrations */
 const CLEANUP_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * DECISION: 90s staleness threshold for heartbeat warnings.
+ * Why: 3x the 30s heartbeat interval gives 2 missed beats before alerting,
+ * filtering transient delays. PID check is authoritative.
+ */
+const HEARTBEAT_STALENESS_MS = 90_000;
+
 export class RecoveryManager {
   private readonly taskRepo: TaskRepository;
   private readonly queue: TaskQueue;
@@ -42,15 +49,24 @@ export class RecoveryManager {
   private readonly loopRepo?: LoopRepository;
   private readonly orchestrationRepo?: OrchestrationRepository;
 
-  constructor(deps: RecoveryManagerDeps) {
-    this.taskRepo = deps.taskRepo;
-    this.queue = deps.queue;
-    this.eventBus = deps.eventBus;
-    this.logger = deps.logger;
-    this.workerRepo = deps.workerRepo;
-    this.dependencyRepo = deps.dependencyRepo;
-    this.loopRepo = deps.loopRepo;
-    this.orchestrationRepo = deps.orchestrationRepo;
+  constructor({
+    taskRepo,
+    queue,
+    eventBus,
+    logger,
+    workerRepo,
+    dependencyRepo,
+    loopRepo,
+    orchestrationRepo,
+  }: RecoveryManagerDeps) {
+    this.taskRepo = taskRepo;
+    this.queue = queue;
+    this.eventBus = eventBus;
+    this.logger = logger;
+    this.workerRepo = workerRepo;
+    this.dependencyRepo = dependencyRepo;
+    this.loopRepo = loopRepo;
+    this.orchestrationRepo = orchestrationRepo;
   }
 
   /**
@@ -183,6 +199,16 @@ export class RecoveryManager {
         } else {
           this.logger.error('Failed to mark dead worker task as failed', updateResult.error, {
             taskId: reg.taskId,
+          });
+        }
+      } else {
+        // PID alive — observability only: warn if heartbeat is stale
+        if (reg.lastHeartbeat !== undefined && Date.now() - reg.lastHeartbeat > HEARTBEAT_STALENESS_MS) {
+          this.logger.warn('Worker PID alive but heartbeat stale', {
+            workerId: reg.workerId,
+            taskId: reg.taskId,
+            ownerPid: reg.ownerPid,
+            lastHeartbeatAgeMs: Date.now() - reg.lastHeartbeat,
           });
         }
       }

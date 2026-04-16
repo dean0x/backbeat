@@ -4,6 +4,7 @@
  */
 
 import { ChildProcess } from 'child_process';
+import { SpawnOptions } from './agents.js';
 import {
   ActivityEntry,
   Loop,
@@ -56,14 +57,14 @@ export interface TaskQueue {
 
 /**
  * Process spawning abstraction
+ *
+ * ARCHITECTURE: Widened in v1.4.0 to accept a SpawnOptions bag instead of
+ * 4 positional params. This preserves orchestratorId and jsonSchema through
+ * the ProcessSpawnerAdapter shim — both fields were silently dropped before
+ * the refactor. See #139 review (batch-D-process-spawner).
  */
 export interface ProcessSpawner {
-  spawn(
-    prompt: string,
-    workingDirectory: string,
-    taskId?: string,
-    model?: string,
-  ): Result<{ process: ChildProcess; pid: number }>;
+  spawn(options: SpawnOptions): Result<{ process: ChildProcess; pid: number }>;
   kill(pid: number): Result<void>;
 }
 
@@ -573,6 +574,12 @@ export interface WorkerRepository {
   findAll(): Result<readonly WorkerRegistration[]>;
   getGlobalCount(): Result<number>;
   deleteByOwnerPid(ownerPid: number): Result<number>;
+  /**
+   * Update the last_heartbeat timestamp for a worker to Date.now().
+   * Called periodically by the worker pool to signal the owning process is alive.
+   * DECISION: 30s write interval — balances DB write load vs. staleness detection speed.
+   */
+  updateHeartbeat(workerId: WorkerId): Result<void>;
 }
 
 // ============================================================================
@@ -747,6 +754,18 @@ export interface EvalResult {
   readonly exitCode?: number;
   readonly error?: string;
   readonly feedback?: string; // Narrative feedback from agent evaluator (agent mode only)
+  /**
+   * DECISION: Explicit 'continue'/'stop' decision field.
+   * Why: feedforward mode needs 'continue' without triggering consecutiveFailures increment.
+   * 'passed' alone conflates "quality gate result" with "loop control signal".
+   * When set, loop handler checks this BEFORE the passed flag.
+   */
+  readonly decision?: 'continue' | 'stop';
+  /**
+   * Raw agent evaluation response text.
+   * Stored per-iteration for audit and debugging.
+   */
+  readonly evalResponse?: string;
 }
 
 /**

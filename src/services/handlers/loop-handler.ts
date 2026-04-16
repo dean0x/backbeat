@@ -66,10 +66,11 @@ export interface LoopHandlerDeps {
  * Extracted to avoid duplicating the inline type across the five recordAndContinue call sites.
  */
 export type IterationResultFields = {
-  score?: number;
-  exitCode?: number;
-  errorMessage?: string;
-  evalFeedback?: string;
+  readonly score?: number;
+  readonly exitCode?: number;
+  readonly errorMessage?: string;
+  readonly evalFeedback?: string;
+  readonly evalResponse?: string; // Raw eval agent output for audit (v1.4.0)
 };
 
 export class LoopHandler extends BaseEventHandler {
@@ -252,12 +253,10 @@ export class LoopHandler extends BaseEventHandler {
         return ok(undefined);
       }
 
-      // Determine outcome based on event type
-      const isTaskFailed = event.type === 'TaskFailed';
-
-      if (isTaskFailed) {
+      // Determine outcome based on event type — branch directly on event.type so TypeScript
+      // narrows the discriminated union automatically (no intermediate boolean needed).
+      if (event.type === 'TaskFailed') {
         // Task FAILED — record failure, check limits
-        const failedEvent = event as TaskFailedEvent;
         const newConsecutiveFailures = loop.consecutiveFailures + 1;
 
         // Git reset: revert working directory to pre-iteration state on failure (v0.8.1)
@@ -269,8 +268,8 @@ export class LoopHandler extends BaseEventHandler {
           this.loopRepo.updateIterationSync({
             ...iteration,
             status: 'fail',
-            exitCode: failedEvent.exitCode,
-            errorMessage: failedEvent.error?.message ?? 'Task failed',
+            exitCode: event.exitCode,
+            errorMessage: event.error?.message ?? 'Task failed',
             completedAt: Date.now(),
           });
           this.loopRepo.updateSync(updatedLoop);
@@ -289,44 +288,15 @@ export class LoopHandler extends BaseEventHandler {
         // Note: agent eval mode can take a long time; re-fetch state afterwards to guard stale data
         const evalResult = await this.exitConditionEvaluator.evaluate(loop, taskId);
 
-        // Stale state guard: re-fetch loop and iteration after potentially slow agent eval (Step 8b)
-        // Shell eval completes in milliseconds so re-fetching is unnecessary; guard only applies to agent mode
-        // If loop was cancelled while eval ran, skip result processing
-        // Allow PAUSED through — consistent with the early guard at line 208 (graceful pause records results)
+        // Stale state guard: re-fetch loop and iteration after potentially slow agent eval (Step 8b).
+        // Shell eval completes in milliseconds so re-fetching is unnecessary; guard only applies to agent mode.
         if (loop.evalMode === EvalMode.AGENT) {
-          const freshLoopResult = await this.loopRepo.findById(loopId);
-          if (
-            !freshLoopResult.ok ||
-            !freshLoopResult.value ||
-            (freshLoopResult.value.status !== LoopStatus.RUNNING && freshLoopResult.value.status !== LoopStatus.PAUSED)
-          ) {
-            const staleStatus = freshLoopResult.ok ? (freshLoopResult.value?.status ?? 'null') : 'error';
-            this.logger.info('Loop no longer running after eval, skipping result processing', {
-              loopId,
-              status: staleStatus,
-            });
+          const fresh = await this.refetchAfterAgentEval(loop, taskId);
+          if (!fresh) {
             this.cleanupIterationTracking(taskId, loopId, iteration);
             return ok(undefined);
           }
-          const freshLoop = freshLoopResult.value;
-
-          const freshIterationResult = await this.loopRepo.findIterationByTaskId(taskId);
-          if (
-            !freshIterationResult.ok ||
-            !freshIterationResult.value ||
-            freshIterationResult.value.status !== 'running'
-          ) {
-            const staleIterStatus = freshIterationResult.ok ? (freshIterationResult.value?.status ?? 'null') : 'error';
-            this.logger.info('Iteration no longer running after eval, skipping result processing', {
-              loopId,
-              iterationStatus: staleIterStatus,
-            });
-            this.cleanupIterationTracking(taskId, loopId, iteration);
-            return ok(undefined);
-          }
-          const freshIteration = freshIterationResult.value;
-
-          await this.handleIterationResult(freshLoop, freshIteration, evalResult);
+          await this.handleIterationResult(fresh.loop, fresh.iteration, evalResult);
         } else {
           await this.handleIterationResult(loop, iteration, evalResult);
         }
@@ -337,6 +307,59 @@ export class LoopHandler extends BaseEventHandler {
 
       return ok(undefined);
     });
+  }
+
+  /**
+   * After agent eval (which can take seconds), the loop or iteration may have
+   * transitioned (cancelled, paused, etc.). Refetch both and return null if state
+   * is no longer terminal-eligible. Caller is responsible for cleanup on null.
+   *
+   * DECISION: Helper signals stale state by returning null. Caller owns
+   * cleanupIterationTracking because the helper has no visibility into what tracking
+   * the caller has set up. Full loop replacement (loop = fresh.loop) intentionally
+   * discards any in-memory mutations since eval started — DB is source of truth.
+   */
+  private async refetchAfterAgentEval(
+    loop: Loop,
+    taskId: TaskId,
+  ): Promise<{ loop: Loop; iteration: LoopIteration } | null> {
+    // Observability: preserve the original repo-error / null-row diagnostic logs that were
+    // emitted before the helper was extracted (#137). Silently returning null on repo
+    // failure would hide transient DB issues that look like "loop disappeared after eval".
+    const freshLoopResult = await this.loopRepo.findById(loop.id);
+    if (!freshLoopResult.ok || !freshLoopResult.value) {
+      const staleStatus = freshLoopResult.ok ? 'null' : 'error';
+      this.logger.info('Loop no longer running after eval, skipping result processing', {
+        loopId: loop.id,
+        status: staleStatus,
+      });
+      return null;
+    }
+    const freshLoop = freshLoopResult.value;
+    if (freshLoop.status !== LoopStatus.RUNNING && freshLoop.status !== LoopStatus.PAUSED) {
+      this.logger.info('Loop no longer running after eval, skipping result processing', {
+        loopId: loop.id,
+        status: freshLoop.status,
+      });
+      return null;
+    }
+    const freshIterResult = await this.loopRepo.findIterationByTaskId(taskId);
+    if (!freshIterResult.ok || !freshIterResult.value) {
+      const staleIterStatus = freshIterResult.ok ? 'null' : 'error';
+      this.logger.info('Iteration no longer running after eval, skipping result processing', {
+        loopId: loop.id,
+        iterationStatus: staleIterStatus,
+      });
+      return null;
+    }
+    if (freshIterResult.value.status !== 'running') {
+      this.logger.info('Iteration no longer running after eval, skipping result processing', {
+        loopId: loop.id,
+        iterationStatus: freshIterResult.value.status,
+      });
+      return null;
+    }
+    return { loop: freshLoop, iteration: freshIterResult.value };
   }
 
   /**
@@ -825,10 +848,35 @@ export class LoopHandler extends BaseEventHandler {
 
   /**
    * Handle retry strategy iteration result
-   * - pass → complete loop with success
+   * - decision='continue' → schedule next iteration WITHOUT incrementing consecutiveFailures
+   * - decision='stop' → complete loop (feedforward/judge modes)
+   * - pass → complete loop with success (schema mode / backward compat)
    * - fail → increment consecutiveFailures, check limits
    */
   private async handleRetryResult(loop: Loop, iteration: LoopIteration, evalResult: EvalResult): Promise<void> {
+    // DECISION: Check explicit decision field first (feedforward/judge modes).
+    // This prevents consecutiveFailures from incrementing when feedforward just says "keep going".
+    if (evalResult.decision === 'continue') {
+      await this.recordAndContinue(
+        loop,
+        iteration,
+        'fail', // iteration "failed the exit condition" but loop should continue without penalty
+        loop.consecutiveFailures, // do NOT increment
+        {}, // no loop state update needed
+        {
+          exitCode: evalResult.exitCode,
+          evalFeedback: evalResult.feedback,
+          evalResponse: evalResult.evalResponse,
+        },
+      );
+      return;
+    }
+    if (evalResult.decision === 'stop') {
+      await this.handleStopDecision(loop, iteration, evalResult, 'pass');
+      return;
+    }
+
+    // Fall through to passed/failed logic (schema mode and backward compat)
     if (evalResult.passed) {
       const { gitCommitSha, gitDiffSummary } = await this.handleIterationGitOutcome(loop, iteration, 'pass');
 
@@ -839,6 +887,7 @@ export class LoopHandler extends BaseEventHandler {
           status: 'pass',
           exitCode: evalResult.exitCode,
           evalFeedback: evalResult.feedback,
+          evalResponse: evalResult.evalResponse,
           gitCommitSha,
           gitDiffSummary,
           completedAt: Date.now(),
@@ -857,8 +906,8 @@ export class LoopHandler extends BaseEventHandler {
         return;
       }
 
-      // Post-commit: cleanup (timer, event) — double-write on loop row is harmless
-      await this.completeLoop(loop, LoopStatus.COMPLETED, 'Exit condition passed');
+      // Status already committed in transaction above — only cleanup needed
+      await this.finishLoop(loop, LoopStatus.COMPLETED, 'Exit condition passed');
       return;
     }
 
@@ -871,12 +920,19 @@ export class LoopHandler extends BaseEventHandler {
       'fail',
       newConsecutiveFailures,
       { consecutiveFailures: newConsecutiveFailures },
-      { exitCode: evalResult.exitCode, errorMessage: evalResult.error, evalFeedback: evalResult.feedback },
+      {
+        exitCode: evalResult.exitCode,
+        errorMessage: evalResult.error,
+        evalFeedback: evalResult.feedback,
+        evalResponse: evalResult.evalResponse,
+      },
     );
   }
 
   /**
    * Handle optimize strategy iteration result
+   * - decision='continue' → continue without consecutiveFailures increment (feedforward mode)
+   * - decision='stop' → complete loop (feedforward/judge modes)
    * - First iteration: always 'keep' as baseline (R5)
    * - Better score → 'keep', update bestScore
    * - Equal or worse → 'discard', increment consecutiveFailures
@@ -885,6 +941,28 @@ export class LoopHandler extends BaseEventHandler {
   private async handleOptimizeResult(loop: Loop, iteration: LoopIteration, evalResult: EvalResult): Promise<void> {
     const loopId = loop.id;
     const iterationNumber = iteration.iterationNumber;
+
+    // DECISION: Check explicit decision field first (feedforward/judge modes).
+    if (evalResult.decision === 'continue') {
+      await this.recordAndContinue(
+        loop,
+        iteration,
+        'discard', // discard outcome but no consecutiveFailures increment
+        loop.consecutiveFailures, // do NOT increment
+        {},
+        {
+          exitCode: evalResult.exitCode,
+          evalFeedback: evalResult.feedback,
+          evalResponse: evalResult.evalResponse,
+        },
+      );
+      this.logger.info('Optimize iteration: feedforward continue (no failure increment)', { loopId, iterationNumber });
+      return;
+    }
+    if (evalResult.decision === 'stop') {
+      await this.handleStopDecision(loop, iteration, evalResult, 'keep');
+      return;
+    }
 
     // Check for crash (NaN/Infinity or exec failure in optimize mode)
     if (!evalResult.passed || evalResult.score === undefined) {
@@ -896,7 +974,12 @@ export class LoopHandler extends BaseEventHandler {
         'crash',
         newConsecutiveFailures,
         { consecutiveFailures: newConsecutiveFailures },
-        { exitCode: evalResult.exitCode, errorMessage: evalResult.error, evalFeedback: evalResult.feedback },
+        {
+          exitCode: evalResult.exitCode,
+          errorMessage: evalResult.error,
+          evalFeedback: evalResult.feedback,
+          evalResponse: evalResult.evalResponse,
+        },
       );
       return;
     }
@@ -911,7 +994,12 @@ export class LoopHandler extends BaseEventHandler {
         'keep',
         0,
         { bestScore: score, bestIterationId: iterationNumber, consecutiveFailures: 0 },
-        { score, exitCode: evalResult.exitCode, evalFeedback: evalResult.feedback },
+        {
+          score,
+          exitCode: evalResult.exitCode,
+          evalFeedback: evalResult.feedback,
+          evalResponse: evalResult.evalResponse,
+        },
       );
       this.logger.info('Baseline score established', { loopId, score, iterationNumber });
       return;
@@ -935,7 +1023,12 @@ export class LoopHandler extends BaseEventHandler {
         'keep',
         0,
         { bestScore: score, bestIterationId: iterationNumber, consecutiveFailures: 0 },
-        { score, exitCode: evalResult.exitCode, evalFeedback: evalResult.feedback },
+        {
+          score,
+          exitCode: evalResult.exitCode,
+          evalFeedback: evalResult.feedback,
+          evalResponse: evalResult.evalResponse,
+        },
       );
     } else {
       // Equal or worse → 'discard'
@@ -947,7 +1040,12 @@ export class LoopHandler extends BaseEventHandler {
         'discard',
         newConsecutiveFailures,
         { consecutiveFailures: newConsecutiveFailures },
-        { score, exitCode: evalResult.exitCode, evalFeedback: evalResult.feedback },
+        {
+          score,
+          exitCode: evalResult.exitCode,
+          evalFeedback: evalResult.feedback,
+          evalResponse: evalResult.evalResponse,
+        },
       );
     }
   }
@@ -1044,7 +1142,12 @@ export class LoopHandler extends BaseEventHandler {
   }
 
   /**
-   * Complete a loop with a final status and reason
+   * Complete a loop with a final status and reason.
+   * Writes the final status to the DB, clears cooldown timer, and emits LoopCompleted.
+   *
+   * Use this when no prior transaction has already written the final status.
+   * When the status was already atomically committed in a transaction, use
+   * finishLoop() instead to skip the redundant DB write.
    */
   private async completeLoop(
     loop: Loop,
@@ -1058,7 +1161,18 @@ export class LoopHandler extends BaseEventHandler {
       ...extraUpdate,
     });
     await this.loopRepo.update(updatedLoop);
+    await this.finishLoop(updatedLoop, status, reason);
+  }
 
+  /**
+   * Post-commit cleanup for a loop that was already persisted in a transaction.
+   * Clears cooldown timer, emits LoopCompleted, and logs — no DB write.
+   *
+   * DECISION: Separate from completeLoop to eliminate the redundant DB write that
+   * occurs when a transaction has already set the final status. Calling completeLoop
+   * after a transaction causes a double-write (harmless, but wasteful and misleading).
+   */
+  private async finishLoop(loop: Loop, status: LoopStatus, reason: string): Promise<void> {
     // Clear cooldown timer if exists
     const timer = this.cooldownTimers.get(loop.id);
     if (timer) {
@@ -1123,6 +1237,49 @@ export class LoopHandler extends BaseEventHandler {
   }
 
   /**
+   * Handle EvalResult.decision === 'stop' for both RETRY and OPTIMIZE strategies.
+   * Persists the iteration with the appropriate terminal status, marks loop as COMPLETED,
+   * and runs post-commit cleanup via finishLoop. Score is preserved from evalResult
+   * (undefined for retry/pass, set for optimize/keep).
+   *
+   * DECISION: Extracted from handleRetryResult and handleOptimizeResult to eliminate
+   * ~25 lines of duplication. Differs only in iterationStatus ('pass' vs 'keep') and
+   * score inclusion (evalResult.score is undefined for retry, set for optimize).
+   * Logger key standardised to loopId: loop.id (retry used loop.id, optimize used loopId
+   * shorthand — functionally identical, now consistent).
+   */
+  private async handleStopDecision(
+    loop: Loop,
+    iteration: LoopIteration,
+    evalResult: EvalResult,
+    iterationStatus: 'pass' | 'keep',
+  ): Promise<void> {
+    // Record iteration result before completing the loop — prevents orphan 'running' iterations
+    const { gitCommitSha, gitDiffSummary } = await this.handleIterationGitOutcome(loop, iteration, iterationStatus);
+    const txResult = this.database.runInTransaction(() => {
+      this.loopRepo.updateIterationSync({
+        ...iteration,
+        status: iterationStatus,
+        score: evalResult.score,
+        exitCode: evalResult.exitCode,
+        evalFeedback: evalResult.feedback,
+        evalResponse: evalResult.evalResponse,
+        gitCommitSha,
+        gitDiffSummary,
+        completedAt: Date.now(),
+      });
+      this.loopRepo.updateSync(updateLoop(loop, { status: LoopStatus.COMPLETED, completedAt: Date.now() }));
+    });
+    if (!txResult.ok) {
+      this.logger.error('Failed to persist stop decision', txResult.error, { loopId: loop.id });
+      await this.completeLoop(loop, LoopStatus.FAILED, 'Failed to persist stop decision');
+      return;
+    }
+    // Status already committed in transaction above — only cleanup needed
+    await this.finishLoop(loop, LoopStatus.COMPLETED, 'Eval decision: stop');
+  }
+
+  /**
    * Record iteration result, emit event, check termination, update loop, and schedule next
    * ARCHITECTURE: Reduces duplication across 5 non-terminal iteration branches
    */
@@ -1149,6 +1306,7 @@ export class LoopHandler extends BaseEventHandler {
         exitCode: evalResult?.exitCode ?? iteration.exitCode,
         errorMessage: evalResult?.errorMessage ?? iteration.errorMessage,
         evalFeedback: evalResult?.evalFeedback ?? iteration.evalFeedback,
+        evalResponse: evalResult?.evalResponse ?? iteration.evalResponse,
         gitCommitSha,
         gitDiffSummary: gitDiffSummary ?? iteration.gitDiffSummary,
         completedAt: Date.now(),
@@ -1324,51 +1482,59 @@ export class LoopHandler extends BaseEventHandler {
    * ARCHITECTURE: NO dependsOn for iteration chaining — LoopHandler manages sequencing directly
    */
   private async enrichPromptWithCheckpoint(loop: Loop, iterationNumber: number, prompt: string): Promise<string> {
-    // Get the 2 most recent iterations (ordered by iteration_number DESC):
-    // the current iteration we just started + the previous one for checkpoint context
-    const iterationsResult = await this.loopRepo.getIterations(loop.id, 2, 0);
+    // Get last 11 iterations (enough for 10 feedback entries + the running one)
+    const iterationsResult = await this.loopRepo.getIterations(loop.id, 11, 0);
     if (!iterationsResult.ok || iterationsResult.value.length === 0) {
       return prompt;
     }
 
-    // Find the previous iteration (must be terminal, not still running)
+    const contextParts: string[] = [prompt];
+
+    // --- Previous Iteration Checkpoint (existing behavior) ---
     const previousIteration = iterationsResult.value.find(
       (i) => i.iterationNumber === iterationNumber - 1 && i.status !== 'running',
     );
-    if (!previousIteration) {
-      return prompt;
+    if (previousIteration?.taskId) {
+      const checkpointResult = await this.checkpointRepo.findLatest(previousIteration.taskId);
+      if (checkpointResult.ok && checkpointResult.value) {
+        const cp = checkpointResult.value;
+        contextParts.push('', '--- Previous Iteration Context ---');
+        if (cp.outputSummary) contextParts.push(`Output: ${cp.outputSummary}`);
+        if (cp.errorSummary) contextParts.push(`Errors: ${cp.errorSummary}`);
+        if (cp.gitCommitSha) contextParts.push(`Git commit: ${cp.gitCommitSha}`);
+        contextParts.push(`Iteration ${iterationNumber - 1} status: ${previousIteration.status}`);
+        contextParts.push('---');
+      } else {
+        this.logger.debug('No checkpoint available for previous iteration', {
+          loopId: loop.id,
+          previousTaskId: previousIteration.taskId,
+        });
+      }
     }
 
-    // Skip if previous iteration's task was cleaned up (ON DELETE SET NULL)
-    if (!previousIteration.taskId) {
-      return prompt;
-    }
+    /**
+     * DECISION: Accumulate last 10 iterations' feedback, capped at 8KB.
+     * Why: each iteration needs full evaluation trajectory to avoid repeating mistakes.
+     * Cap prevents prompt bloat from degrading model performance.
+     */
+    const feedbackIterations = iterationsResult.value
+      .filter((i) => i.iterationNumber < iterationNumber && i.evalFeedback && i.status !== 'running')
+      .sort((a, b) => a.iterationNumber - b.iterationNumber);
 
-    // Fetch checkpoint for previous iteration's task
-    const checkpointResult = await this.checkpointRepo.findLatest(previousIteration.taskId);
-    if (!checkpointResult.ok || !checkpointResult.value) {
-      this.logger.debug('No checkpoint available for previous iteration', {
-        loopId: loop.id,
-        previousTaskId: previousIteration.taskId,
-      });
-      return prompt;
+    if (feedbackIterations.length > 0) {
+      contextParts.push('', '--- Evaluation History ---');
+      let totalBytes = 0;
+      const MAX_FEEDBACK_BYTES = 8192;
+      for (const iter of feedbackIterations) {
+        const statusLabel = iter.status.toUpperCase();
+        const scoreLabel = iter.score !== undefined ? ` (score: ${iter.score})` : '';
+        const entry = `Iteration ${iter.iterationNumber} [${statusLabel}${scoreLabel}]: ${iter.evalFeedback}`;
+        if (totalBytes + Buffer.byteLength(entry) > MAX_FEEDBACK_BYTES) break;
+        contextParts.push(entry);
+        totalBytes += Buffer.byteLength(entry);
+      }
+      contextParts.push('---');
     }
-
-    const checkpoint = checkpointResult.value;
-    const contextParts: string[] = [prompt, '', '--- Previous Iteration Context ---'];
-
-    if (checkpoint.outputSummary) {
-      contextParts.push(`Output: ${checkpoint.outputSummary}`);
-    }
-    if (checkpoint.errorSummary) {
-      contextParts.push(`Errors: ${checkpoint.errorSummary}`);
-    }
-    if (checkpoint.gitCommitSha) {
-      contextParts.push(`Git commit: ${checkpoint.gitCommitSha}`);
-    }
-
-    contextParts.push(`Iteration ${iterationNumber - 1} status: ${previousIteration.status}`);
-    contextParts.push('---');
 
     return contextParts.join('\n');
   }
@@ -1419,8 +1585,7 @@ export class LoopHandler extends BaseEventHandler {
       return ok(undefined);
     }
 
-    // Cancel remaining pipeline tasks
-    const failedEvent = event as TaskFailedEvent;
+    // Cancel remaining pipeline tasks — event is narrowed to TaskFailedEvent (TaskCompleted returned early above)
     this.logger.info('Pipeline intermediate task failed, failing iteration', {
       taskId,
       loopId,
@@ -1439,8 +1604,8 @@ export class LoopHandler extends BaseEventHandler {
       this.loopRepo.updateIterationSync({
         ...iteration,
         status: 'fail',
-        exitCode: failedEvent.exitCode,
-        errorMessage: `Pipeline step failed: ${failedEvent.error?.message ?? 'Task failed'}`,
+        exitCode: event.exitCode,
+        errorMessage: `Pipeline step failed: ${event.error?.message ?? 'Task failed'}`,
         completedAt: Date.now(),
       });
       this.loopRepo.updateSync(updatedLoop);

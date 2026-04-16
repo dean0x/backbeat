@@ -77,9 +77,10 @@ describe('Security: Configuration Schema Attack Prevention', () => {
   });
 
   describe('Infinite Task Attacks', () => {
-    it('should reject task timeout exceeding 1 hour', () => {
-      // ATTACK: 24 hour timeout to lock workers indefinitely
-      const attack = { timeout: 24 * 60 * 60 * 1000 };
+    it('should reject task timeout exceeding 24 hours (hard maximum)', () => {
+      // ATTACK: Timeout beyond max (86400001ms) to lock workers indefinitely.
+      // Schema allows 0–86400000ms; 0 means disabled (DECISION: tasks run 2.5+ hours).
+      const attack = { timeout: 24 * 60 * 60 * 1000 + 1 }; // 1ms over 24hr max
       const result = ConfigurationSchema.safeParse(attack);
 
       expect(result.success).toBe(false);
@@ -88,22 +89,22 @@ describe('Security: Configuration Schema Attack Prevention', () => {
       }
     });
 
-    it('should reject timeout below minimum threshold', () => {
-      // ATTACK: Sub-second timeout causing rapid task churn
-      const attack = { timeout: 500 };
+    it('should reject negative timeout', () => {
+      // ATTACK: Negative timeout is invalid (min is 0 = disabled)
+      const attack = { timeout: -1 };
       const result = ConfigurationSchema.safeParse(attack);
 
       expect(result.success).toBe(false);
     });
 
-    it('should accept maximum safe timeout of 1 hour', () => {
-      // BOUNDARY: 1 hour maximum should work
-      const maxSafe = { timeout: 60 * 60 * 1000 };
+    it('should accept maximum safe timeout of 24 hours', () => {
+      // BOUNDARY: 24 hour maximum (86400000ms) should work
+      const maxSafe = { timeout: 24 * 60 * 60 * 1000 };
       const result = ConfigurationSchema.safeParse(maxSafe);
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.timeout).toBe(60 * 60 * 1000);
+        expect(result.data.timeout).toBe(24 * 60 * 60 * 1000);
       }
     });
   });
@@ -188,8 +189,8 @@ describe('Security: Configuration Schema Attack Prevention', () => {
         expect(config.memoryReserve).toBeGreaterThanOrEqual(0);
         expect(config.memoryReserve).toBeLessThanOrEqual(64 * 1024 * 1024 * 1024);
 
-        expect(config.timeout).toBeGreaterThanOrEqual(1000);
-        expect(config.timeout).toBeLessThanOrEqual(60 * 60 * 1000);
+        expect(config.timeout).toBeGreaterThanOrEqual(0); // 0 = disabled (default)
+        expect(config.timeout).toBeLessThanOrEqual(24 * 60 * 60 * 1000); // max 24hr
 
         expect(config.maxOutputBuffer).toBeGreaterThanOrEqual(1024);
         expect(config.maxOutputBuffer).toBeLessThanOrEqual(1024 * 1024 * 1024);
@@ -210,7 +211,7 @@ describe('Security: Configuration Schema Attack Prevention', () => {
 
       // loadConfiguration() would return safe defaults via parse({})
       const fallback = ConfigurationSchema.parse({});
-      expect(fallback.timeout).toBe(1800000); // 30 minutes
+      expect(fallback.timeout).toBe(0); // Disabled by default (tasks run 2.5+ hours)
       expect(fallback.cpuCoresReserved).toBe(2);
       expect(fallback.memoryReserve).toBe(2684354560); // 2.5GB
     });

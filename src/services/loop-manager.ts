@@ -10,6 +10,7 @@ import { Configuration } from '../core/configuration.js';
 import {
   createLoop,
   EvalMode,
+  EvalType,
   Loop,
   LoopCreateRequest,
   LoopId,
@@ -170,6 +171,44 @@ export class LoopManagerService implements LoopService {
           strategy: request.strategy,
         }),
       );
+    }
+
+    // Validate evalType constraints (v1.4.0)
+    const evalType = request.evalType;
+    const agentForEval = request.agent;
+    if (evalType !== undefined) {
+      // schema evalType requires Claude — --json-schema is Claude-only
+      if (evalType === EvalType.SCHEMA && agentForEval && agentForEval !== 'claude') {
+        return err(
+          new AutobeatError(
+            ErrorCode.INVALID_INPUT,
+            `evalType '${EvalType.SCHEMA}' requires Claude agent (--json-schema is Claude-only), got agent '${agentForEval}'`,
+            { field: 'evalType', evalType, agent: agentForEval },
+          ),
+        );
+      }
+
+      // judge evalType requires evalPrompt — eval agent needs something to evaluate
+      if (evalType === EvalType.JUDGE && evalMode === EvalMode.AGENT && !request.evalPrompt) {
+        return err(
+          new AutobeatError(
+            ErrorCode.INVALID_INPUT,
+            `evalType '${EvalType.JUDGE}' requires evalPrompt (eval agent needs criteria to evaluate against)`,
+            { field: 'evalPrompt', evalType },
+          ),
+        );
+      }
+
+      // feedforward + optimize is invalid — optimize needs scoring to converge
+      if (evalType === EvalType.FEEDFORWARD && request.strategy === LoopStrategy.OPTIMIZE) {
+        return err(
+          new AutobeatError(
+            ErrorCode.INVALID_INPUT,
+            `evalType '${EvalType.FEEDFORWARD}' is not compatible with optimize strategy — optimize requires scoring to converge (use '${EvalType.SCHEMA}' or '${EvalType.JUDGE}')`,
+            { field: 'evalType', evalType, strategy: request.strategy },
+          ),
+        );
+      }
     }
 
     // Validate pipelineSteps: 2-20 steps if provided

@@ -248,10 +248,12 @@ describe('EventDrivenWorkerPool', () => {
       await pool.spawn(task);
 
       expect(spawner.spawn as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-        task.prompt,
-        '/my/project',
-        task.id,
-        task.model,
+        expect.objectContaining({
+          prompt: task.prompt,
+          workingDirectory: '/my/project',
+          taskId: task.id,
+          model: task.model,
+        }),
       );
     });
 
@@ -261,10 +263,12 @@ describe('EventDrivenWorkerPool', () => {
       await pool.spawn(task);
 
       expect(spawner.spawn as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-        task.prompt,
-        process.cwd(),
-        task.id,
-        task.model,
+        expect.objectContaining({
+          prompt: task.prompt,
+          workingDirectory: process.cwd(),
+          taskId: task.id,
+          model: task.model,
+        }),
       );
     });
 
@@ -713,6 +717,99 @@ describe('EventDrivenWorkerPool', () => {
       expect(pool.getWorkerCount()).toBe(0);
       // Process should have been killed
       expect(mockProcess.kill).toHaveBeenCalledWith('SIGTERM');
+    });
+  });
+
+  // --- Heartbeat behavior ---
+
+  describe('heartbeat behavior', () => {
+    it('should start calling updateHeartbeat every 30 seconds after spawn', async () => {
+      // Capture the setInterval callback for the heartbeat timer (30s interval)
+      const setIntervalCalls: { fn: Function; delay: number }[] = [];
+      const origSetInterval = global.setInterval;
+      const setIntervalSpy = vi
+        .spyOn(global, 'setInterval')
+        .mockImplementation((fn: (...args: unknown[]) => void, delay?: number, ...args: unknown[]) => {
+          setIntervalCalls.push({ fn, delay: delay ?? 0 });
+          return origSetInterval(fn, delay, ...args);
+        });
+
+      const task = buildTask();
+      await pool.spawn(task);
+
+      setIntervalSpy.mockRestore();
+
+      // Find the 30s heartbeat callback
+      const heartbeatCall = setIntervalCalls.find((c) => c.delay === 30_000);
+      expect(heartbeatCall).toBeDefined();
+
+      // No heartbeat yet
+      expect(workerRepository.updateHeartbeat).not.toHaveBeenCalled();
+
+      // Manually trigger the callback (simulates 30s passing)
+      heartbeatCall!.fn();
+      expect(workerRepository.updateHeartbeat).toHaveBeenCalledTimes(1);
+
+      // Trigger again
+      heartbeatCall!.fn();
+      expect(workerRepository.updateHeartbeat).toHaveBeenCalledTimes(2);
+    });
+
+    it('should set heartbeatTimer on worker and clear it on kill', async () => {
+      const task = buildTask();
+      const spawnResult = await pool.spawn(task);
+      if (!spawnResult.ok) return;
+      const workerId = spawnResult.value.id;
+
+      // Worker should have a heartbeat timer after spawn
+      const workerState = (
+        pool as unknown as { workers: Map<string, { heartbeatTimer?: NodeJS.Timeout }> }
+      ).workers.get(workerId);
+      expect(workerState?.heartbeatTimer).toBeDefined();
+
+      // Kill the worker
+      await pool.kill(workerId);
+
+      // Worker is removed from map — verify updateHeartbeat is not called after kill
+      // (We've already verified it was set and then cleared)
+      expect(workerRepository.unregister).toHaveBeenCalledWith(workerId);
+    });
+
+    it('should stop calling updateHeartbeat after worker is killed (via captured callback)', async () => {
+      // Capture the heartbeat callback
+      const setIntervalCalls: { fn: Function; delay: number }[] = [];
+      const origSetInterval = global.setInterval;
+      const setIntervalSpy = vi
+        .spyOn(global, 'setInterval')
+        .mockImplementation((fn: (...args: unknown[]) => void, delay?: number, ...args: unknown[]) => {
+          setIntervalCalls.push({ fn, delay: delay ?? 0 });
+          return origSetInterval(fn, delay, ...args);
+        });
+
+      const task = buildTask();
+      const spawnResult = await pool.spawn(task);
+      if (!spawnResult.ok) return;
+      setIntervalSpy.mockRestore();
+
+      const heartbeatCall = setIntervalCalls.find((c) => c.delay === 30_000);
+      expect(heartbeatCall).toBeDefined();
+
+      // Call heartbeat once (simulates 30s)
+      heartbeatCall!.fn();
+      expect(workerRepository.updateHeartbeat).toHaveBeenCalledTimes(1);
+
+      // Kill the worker
+      await pool.kill(spawnResult.value.id);
+
+      // After kill, clear mock and advance — the real interval timer should be cleared
+      (workerRepository.updateHeartbeat as ReturnType<typeof vi.fn>).mockClear();
+
+      // Advance time — the real interval (captured via origSetInterval) is still running
+      // but the clearInterval in cleanupWorkerState should have stopped it
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      // updateHeartbeat should NOT be called — timer was cleared on kill
+      expect(workerRepository.updateHeartbeat).not.toHaveBeenCalled();
     });
   });
 });

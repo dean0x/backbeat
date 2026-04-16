@@ -285,4 +285,57 @@ describe('SQLiteWorkerRepository - Unit Tests', () => {
       expect(result.value).toBe(0);
     });
   });
+
+  // ============================================================================
+  // updateHeartbeat()
+  // ============================================================================
+
+  describe('updateHeartbeat', () => {
+    it('should write a timestamp and round-trip through rowToRegistration', () => {
+      // Arrange
+      const reg = createRegistration({ workerId: WorkerId('w-hb'), taskId: TaskId('t-hb') });
+      repo.register(reg);
+
+      const before = Date.now();
+
+      // Act
+      const result = repo.updateHeartbeat(WorkerId('w-hb'));
+
+      const after = Date.now();
+
+      // Assert result ok
+      expect(result.ok).toBe(true);
+
+      // Round-trip: findByTaskId should return lastHeartbeat in [before, after]
+      const found = repo.findByTaskId(TaskId('t-hb'));
+      expect(found.ok).toBe(true);
+      if (!found.ok || found.value === null) return;
+
+      expect(found.value.lastHeartbeat).toBeDefined();
+      expect(found.value.lastHeartbeat!).toBeGreaterThanOrEqual(before);
+      expect(found.value.lastHeartbeat!).toBeLessThanOrEqual(after);
+    });
+
+    it('should return ok(undefined) and be a no-op for an unknown workerId', () => {
+      // Act — updating a non-existent worker should not error (UPDATE affects 0 rows)
+      const result = repo.updateHeartbeat(WorkerId('non-existent'));
+
+      // Assert
+      expect(result.ok).toBe(true);
+    });
+
+    it('should return undefined lastHeartbeat on newly registered worker (no heartbeat yet)', () => {
+      // Arrange
+      const reg = createRegistration({ workerId: WorkerId('w-no-hb'), taskId: TaskId('t-no-hb') });
+      repo.register(reg);
+
+      // Act — retrieve without ever calling updateHeartbeat
+      const found = repo.findByTaskId(TaskId('t-no-hb'));
+
+      // Assert
+      expect(found.ok).toBe(true);
+      if (!found.ok || found.value === null) return;
+      expect(found.value.lastHeartbeat).toBeUndefined();
+    });
+  });
 });

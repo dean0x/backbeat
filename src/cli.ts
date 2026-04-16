@@ -261,7 +261,12 @@ if (mainCommand === 'mcp') {
 } else if (mainCommand === 'list' || mainCommand === 'ls') {
   await getTaskStatus(undefined);
 } else if (mainCommand === 'schedule') {
-  await handleScheduleCommand(subCommand, args.slice(2));
+  if (subCommand === 'executor') {
+    const { handleScheduleExecutor } = await import('./cli/commands/schedule-executor.js');
+    await handleScheduleExecutor();
+  } else {
+    await handleScheduleCommand(subCommand, args.slice(2));
+  }
 } else if (mainCommand === 'pipeline') {
   await handlePipelineCommand(args.slice(1));
 } else if (mainCommand === 'orchestrate') {

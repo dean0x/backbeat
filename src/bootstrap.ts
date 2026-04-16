@@ -58,7 +58,9 @@ export interface ModeFlags {
  */
 export function deriveModeFlags(mode: BootstrapMode): ModeFlags {
   return {
-    skipResourceMonitoring: mode === 'run',
+    // DECISION: Resource monitoring in all modes. Why: 'run' mode workers need resource
+    // checks to prevent overload. Prior behavior (skip for 'run') could allow unchecked spawning.
+    skipResourceMonitoring: false,
     skipScheduleExecutor: mode === 'cli' || mode === 'run',
     skipRecovery: mode === 'cli',
   };

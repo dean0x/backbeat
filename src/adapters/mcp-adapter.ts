@@ -95,6 +95,13 @@ export const DelegateTaskSchema = z.object({
     })
     .optional()
     .describe('Optional per-request metadata for orchestration attribution'),
+  /**
+   * v1.4.0: JSON schema for structured output (Claude only).
+   * DECISION: Passed through to TaskRequest unchanged — validation at boundary.
+   * Why: Claude --json-schema enables deterministic structured responses.
+   * Max 16000 chars to stay well within typical schema sizes.
+   */
+  jsonSchema: z.string().max(16000).optional().describe('JSON schema for structured output (Claude only)'),
 });
 
 const TaskStatusSchema = z.object({
@@ -336,6 +343,24 @@ const CreateLoopSchema = z.object({
     .optional()
     .describe('Model override for each iteration task (overrides agent-config default)'),
   gitBranch: z.string().optional().describe('Git branch name for loop iteration work'),
+  /**
+   * v1.4.0: Agent eval sub-strategy.
+   * DECISION: Default is 'feedforward' — works with any agent, never blocks iteration.
+   * 'schema' uses Claude --json-schema for deterministic structured eval output.
+   * 'judge' runs a two-phase eval+judge pipeline with file-based decision.
+   */
+  evalType: z
+    .enum(['feedforward', 'judge', 'schema'])
+    .optional()
+    .default('feedforward')
+    .describe(
+      'Agent eval sub-strategy: feedforward (default, findings only, always continue), judge (eval+judge agents, file-based decision), schema (Claude --json-schema for structured pass/fail)',
+    ),
+  judgeAgent: z
+    .enum(AGENT_PROVIDERS_TUPLE)
+    .optional()
+    .describe('Agent for judge decisions (judge evalType only — defaults to loop agent if omitted)'),
+  judgePrompt: z.string().max(8000).optional().describe('Custom judge instructions (judge evalType only)'),
 });
 
 const LoopStatusSchema = z.object({
@@ -1546,6 +1571,7 @@ export class MCPAdapter {
       agent: data.agent as AgentProvider | undefined,
       model: data.model,
       orchestratorId,
+      jsonSchema: data.jsonSchema,
     };
 
     // Delegate task using our new architecture
@@ -2377,6 +2403,9 @@ export class MCPAdapter {
       agent: data.agent as AgentProvider | undefined,
       model: data.model,
       gitBranch: data.gitBranch,
+      evalType: data.evalType,
+      judgeAgent: data.judgeAgent as AgentProvider | undefined,
+      judgePrompt: data.judgePrompt,
     };
 
     const result = await this.loopService.createLoop(request);
