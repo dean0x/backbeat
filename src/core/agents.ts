@@ -241,7 +241,7 @@ export interface SpawnOptions {
   readonly model?: string;
   /** Optional orchestration ID for sub-task attribution (v1.3.0) */
   readonly orchestratorId?: string;
-  /** Optional JSON schema string for structured output (v1.4.0, Claude only) */
+  /** Optional JSON schema string for structured output (v1.3.0, Claude only) */
   readonly jsonSchema?: string;
 }
 

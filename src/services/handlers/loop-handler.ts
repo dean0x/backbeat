@@ -70,7 +70,7 @@ export type IterationResultFields = {
   readonly exitCode?: number;
   readonly errorMessage?: string;
   readonly evalFeedback?: string;
-  readonly evalResponse?: string; // Raw eval agent output for audit (v1.4.0)
+  readonly evalResponse?: string; // Raw eval agent output for audit (v1.3.0)
 };
 
 export class LoopHandler extends BaseEventHandler {

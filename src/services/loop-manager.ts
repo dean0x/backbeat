@@ -173,7 +173,7 @@ export class LoopManagerService implements LoopService {
       );
     }
 
-    // Validate evalType constraints (v1.4.0)
+    // Validate evalType constraints (v1.3.0)
     const evalType = request.evalType;
     const agentForEval = request.agent;
     if (evalType !== undefined) {

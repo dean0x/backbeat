@@ -1,5 +1,5 @@
 /**
- * Tests for MCP schema updates (v1.4.0 batch 3)
+ * Tests for MCP schema updates (v1.3.0 batch 3)
  *
  * Tests that DelegateTaskSchema accepts jsonSchema field,
  * and CreateLoopSchema accepts evalType, judgeAgent, judgePrompt fields.
@@ -13,7 +13,7 @@ import { DelegateTaskSchema } from '../../../src/adapters/mcp-adapter.js';
 // We test CreateLoopSchema indirectly through module import
 // since it's not exported from mcp-adapter.ts; the schema is tested via handleCreateLoop args
 
-describe('DelegateTaskSchema — jsonSchema field (v1.4.0)', () => {
+describe('DelegateTaskSchema — jsonSchema field (v1.3.0)', () => {
   it('accepts jsonSchema field when provided', () => {
     const result = DelegateTaskSchema.safeParse({
       prompt: 'Do something',

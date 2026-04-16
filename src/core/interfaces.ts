@@ -58,7 +58,7 @@ export interface TaskQueue {
 /**
  * Process spawning abstraction
  *
- * ARCHITECTURE: Widened in v1.4.0 to accept a SpawnOptions bag instead of
+ * ARCHITECTURE: Widened in v1.3.0 to accept a SpawnOptions bag instead of
  * 4 positional params. This preserves orchestratorId and jsonSchema through
  * the ProcessSpawnerAdapter shim — both fields were silently dropped before
  * the refactor. See #139 review (batch-D-process-spawner).

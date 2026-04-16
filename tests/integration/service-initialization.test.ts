@@ -128,7 +128,7 @@ describe('Integration: Service initialization', () => {
       delete process.env.MAX_OUTPUT_BUFFER;
       const config2 = loadConfiguration();
 
-      // DECISION: Default timeout is 0 (disabled) since v1.4.0
+      // DECISION: Default timeout is 0 (disabled) since v1.3.0
       expect(config2.timeout).toBe(0); // 0 = disabled (no timeout)
       expect(config2.maxOutputBuffer).toBe(10485760); // 10MB default
 

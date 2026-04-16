@@ -2,11 +2,9 @@
 
 ## Latest Release
 
-- **[v1.4.0](./RELEASE_NOTES_v1.4.0.md)** — Evaluator Redesign & Reliability (2026-04-15)
+- **[v1.3.0](./RELEASE_NOTES_v1.3.0.md)** — Dashboard Redesign, Eval Redesign & Reliability (2026-04-16)
 
 ## Previous Releases
-
-- [v1.3.0](./RELEASE_NOTES_v1.3.0.md) — Dashboard Redesign (2026-04-11)
 - [v1.2.0](./RELEASE_NOTES_v1.2.0.md) — Terminal Dashboard & Agent Config Passthrough (2026-04-10)
 - [v1.1.0](./RELEASE_NOTES_v1.1.0.md) — Agent Eval Mode & Skill System (2026-04-01)
 - [v1.0.0](./RELEASE_NOTES_v1.0.0.md) — Autonomous Coding Agent Orchestration (2026-03-28)

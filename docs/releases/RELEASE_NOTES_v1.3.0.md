@@ -1,6 +1,6 @@
-# Autobeat v1.3.0 — Dashboard Redesign
+# Autobeat v1.3.0 — Dashboard Redesign, Eval Redesign & Reliability
 
-A complete rethink of the terminal dashboard: two purpose-built views (Metrics and Workspace), live agent output streaming, cost and token tracking for Claude agents, responsive layout, and orchestrator attribution wired through the full stack.
+A complete rethink of the terminal dashboard: two purpose-built views (Metrics and Workspace), live agent output streaming, cost and token tracking for Claude agents, responsive layout, and orchestrator attribution wired through the full stack. Plus: three evaluation modes for loops (feedforward, judge, schema), atomic PID file management, and a suite of reliability improvements targeting testability and correctness in the loop/schedule execution path.
 
 ---
 
@@ -12,6 +12,10 @@ A complete rethink of the terminal dashboard: two purpose-built views (Metrics a
 - **Cancel cascade**: `c` on an orchestration cancels it and all attributed child tasks in one command
 - **Responsive layout**: Adapts to terminal size; degrades gracefully on narrow or small terminals
 - **Orchestrator attribution**: Sub-task spawning wired through both CLI and MCP paths
+- **Three evaluation modes**: `feedforward` (default — findings without a stop decision), `judge` (two-phase eval+judge with TOCTOU-safe file decisions), and `schema` (deterministic Claude `--json-schema` eval)
+- **Atomic PID file locking**: Schedule executor uses O_EXCL file creation to prevent double-execution races
+- **SpawnOptions refactor**: `AgentAdapter.spawn()` now accepts a named options object instead of 6 positional parameters
+- **Extracted pure functions**: `refetchAfterAgentEval`, `handleStopDecision`, `buildEvalPromptBase`, `checkActiveSchedules`, `registerSignalHandlers`, `startIdleCheckLoop` — all fully unit-tested
 
 ---
 
@@ -194,6 +198,12 @@ Layout is recomputed whenever the terminal is resized (SIGWINCH).
 | `src/services/usage-parser.ts` | Extracts token/cost data from Claude output |
 | `src/services/handlers/usage-capture-handler.ts` | Listens for task completion, writes usage row |
 
+| `src/services/feedforward-evaluator.ts` | Feedforward exit condition evaluator |
+| `src/services/judge-exit-condition-evaluator.ts` | Two-phase eval+judge evaluator |
+| `src/services/eval-prompt-builder.ts` | Shared eval prompt context builder |
+| `src/core/agents.ts` → `SpawnOptions` | Named spawn options interface |
+| `tests/fixtures/eval-test-helpers.ts` | Shared eval test fixtures |
+
 ### Deleted Modules
 
 - `src/cli/dashboard/views/main-view.tsx` — replaced by `metrics-view.tsx`. Consumers of dashboard internals must update imports.
@@ -219,8 +229,10 @@ DelegateTask (MCP, with metadata.orchestratorId)
 |-----------|-------------|
 | v18 | `tasks.orchestrator_id TEXT` — nullable FK to `orchestrations(id)` with partial index |
 | v19 | `task_usage` table — one row per task, PK/FK to tasks, cascade-deleted with task |
+| v21 | `workers.last_heartbeat`, `loops.eval_type`, `loops.judge_agent`, `loops.judge_prompt` columns |
+| v22 | Recreates `loops` table with CHECK constraints on `eval_type` and `judge_agent` (**full table rebuild**) |
 
-No user action required. Existing rows are unaffected.
+**Back up your database before upgrading.** Migration v22 recreates the `loops` table — it is a destructive operation that cannot be rolled back without a backup.
 
 ---
 
@@ -242,9 +254,84 @@ OUTPUT_FLUSH_INTERVAL_MS=5000 beat dashboard
 
 ## Migration Notes
 
-- **Auto-applied**: Migrations v18 and v19 apply on the first `beat` command after upgrading. No manual steps needed.
-- **Backward compatible**: All existing tasks, loops, schedules, and orchestrations work unchanged. New columns default to `NULL`.
+- **Back up your database before upgrading.** Migration v22 recreates the `loops` table — back up `~/.autobeat/autobeat.db` before running `npm install -g autobeat@1.3.0`.
+- **Auto-applied**: Migrations v18, v19, v21, and v22 apply on the first `beat` command after upgrading. No manual steps needed.
+- **Backward compatible**: All existing tasks, loops, schedules, and orchestrations work unchanged. New columns default to `NULL`. Existing loops with no `evalType` configured are treated as `feedforward`.
+- **`AgentAdapter.spawn()` signature change**: If you have custom `AgentAdapter` implementations (not using `BaseAgentAdapter`), update `spawn(prompt, workingDirectory, ...)` to `spawn({ prompt, workingDirectory, ... })`.
 - **Database size**: `task_usage` adds one small row per completed Claude task. Impact is negligible for typical workloads.
+
+---
+
+## New Evaluation Modes
+
+The `evalType` field accepts three values: `'feedforward'` (default), `'judge'`, or `'schema'`. It is set per loop and stored in the `loops.eval_type` column.
+
+### Feedforward (`evalType: 'feedforward'`) — Default
+
+Gathers agent findings on every iteration and injects them as context into the next iteration's prompt — without making a stop/continue decision. The loop always runs to `maxIterations`.
+
+```json
+{
+  "evalType": "feedforward",
+  "evalPrompt": "Review the changes and note any issues for the next iteration.",
+  "maxIterations": 10
+}
+```
+
+**No `evalPrompt` configured?** The evaluator returns immediately with no findings (`{ decision: 'continue', feedback: undefined }`) — a pure pass-through.
+
+### Judge (`evalType: 'judge'`)
+
+Two-phase evaluation:
+
+1. **Eval agent** (phase 1): runs `evalPrompt` and produces narrative findings
+2. **Judge agent** (phase 2): reads findings and writes a structured JSON decision to `.autobeat-judge-task-{uuid}` in the working directory
+
+The filename includes the full judge task ID (`task-{uuid}`) to prevent TOCTOU races. Claude's `--json-schema` is used as belt-and-suspenders when `judgeAgent: 'claude'`. If both mechanisms fail, the evaluator defaults to `continue: true`.
+
+```json
+{
+  "evalType": "judge",
+  "evalPrompt": "Review the test suite and identify any remaining failures.",
+  "judgeAgent": "claude",
+  "judgePrompt": "Based on the findings, should iteration continue? Stop when all tests pass."
+}
+```
+
+### Schema (`evalType: 'schema'`)
+
+Deterministic structured output evaluation using Claude's `--json-schema` flag. The eval agent must respond with `{"continue": true, "reasoning": "..."}`.
+
+```json
+{
+  "evalType": "schema",
+  "evalPrompt": "Assess whether all acceptance criteria are met.",
+  "maxIterations": 5
+}
+```
+
+---
+
+## Reliability Improvements
+
+### Atomic PID File Locking
+
+The schedule executor uses `O_EXCL` (create-or-fail) semantics when acquiring its PID file. Concurrent executor startups cannot both succeed. Stale PID files from crashed processes are detected and cleaned up automatically.
+
+### SpawnOptions Interface
+
+`AgentAdapter.spawn()` now accepts a single `SpawnOptions` object instead of 6 positional parameters. This is an internal refactor with no observable behaviour change.
+
+### Extracted Pure Functions
+
+All extracted functions are DI-injectable and have dedicated unit tests:
+- `refetchAfterAgentEval(loop, taskId)` — stale-state guard in `LoopHandler`
+- `handleStopDecision(loop, iteration, evalResult, status)` — stop-path logic in `LoopHandler`
+- `buildEvalPromptBase(loop, taskId, loopRepo)` — shared eval prompt context
+- `acquirePidFile(pidPath, pid)` — atomic PID file locking
+- `checkActiveSchedules(scheduleRepo)` — schedule liveness check
+- `registerSignalHandlers(cleanup, proc?)` — SIGTERM/SIGINT registration
+- `startIdleCheckLoop(scheduleRepo, intervalMs, onIdle, warn)` — idle exit timer
 
 ---
 
@@ -256,6 +343,14 @@ OUTPUT_FLUSH_INTERVAL_MS=5000 beat dashboard
 - **feat**: orchestrator_id propagation through CLI and MCP spawn paths (#133)
 - **feat**: cancel cascade for orchestrations (#133)
 - **feat**: responsive layout with terminal size detection (#133)
+- **feat**: feedforward and judge evaluator modes (#136)
+- **refactor**: extract refetchAfterAgentEval helper (#137)
+- **refactor**: extract handleStopDecision helper (#138)
+- **refactor**: SpawnOptions object replaces 6 positional spawn() params (#139)
+- **refactor**: extract buildEvalPromptBase shared utility (#140)
+- **fix**: atomic PID file locking with sentinel result (#141)
+- **refactor**: extract schedule-executor pure functions with DI (#142)
+- **refactor**: extract shared eval test fixtures (#143)
 - **fix**: ActivityPanel Enter dispatch via activity focus mode (#133)
 - **fix**: zombie orchestration recovery via worker liveness detection (#133)
 - **fix**: orchestration creation failure compensating soft-delete (#133)

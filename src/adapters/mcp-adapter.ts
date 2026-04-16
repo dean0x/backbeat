@@ -96,7 +96,7 @@ export const DelegateTaskSchema = z.object({
     .optional()
     .describe('Optional per-request metadata for orchestration attribution'),
   /**
-   * v1.4.0: JSON schema for structured output (Claude only).
+   * v1.3.0: JSON schema for structured output (Claude only).
    * DECISION: Passed through to TaskRequest unchanged — validation at boundary.
    * Why: Claude --json-schema enables deterministic structured responses.
    * Max 16000 chars to stay well within typical schema sizes.
@@ -344,7 +344,7 @@ const CreateLoopSchema = z.object({
     .describe('Model override for each iteration task (overrides agent-config default)'),
   gitBranch: z.string().optional().describe('Git branch name for loop iteration work'),
   /**
-   * v1.4.0: Agent eval sub-strategy.
+   * v1.3.0: Agent eval sub-strategy.
    * DECISION: Default is 'feedforward' — works with any agent, never blocks iteration.
    * 'schema' uses Claude --json-schema for deterministic structured eval output.
    * 'judge' runs a two-phase eval+judge pipeline with file-based decision.

@@ -2,25 +2,9 @@
 
 This document lists all features that are **currently implemented and working** in Autobeat.
 
-Last Updated: April 2026 (2026-04-15)
+Last Updated: April 2026 (2026-04-16)
 
-## ✅ Eval Redesign & Reliability Cleanup (v1.4.0)
-
-- **Three eval strategies** via `evalType` field on loop creation:
-  - `'feedforward'` (default) — gathers agent findings per iteration and injects them as context into the next iteration's prompt; always continues to `maxIterations`. When no `evalPrompt` is set, acts as a pure pass-through (no eval agent spawned).
-  - `'judge'` — two-phase eval+judge: Phase 1 eval agent generates findings; Phase 2 judge agent reads findings and writes a decision to `.autobeat-judge-task-{uuid}` in the working directory (TOCTOU-safe). Safe fallback to `continue: true` if both structured output and file mechanisms fail.
-  - `'schema'` — deterministic Claude `--json-schema` eval; the eval agent must respond with `{"continue": bool, "reasoning": string}`. No judge agent required.
-- **`judgeAgent` and `judgePrompt`** fields for configuring the judge phase independently of the eval agent
-- **Atomic PID file locking** for the schedule executor — `O_EXCL` file creation prevents double-execution races; stale PID files are cleaned up automatically
-- **`SpawnOptions` interface** — `AgentAdapter.spawn()` now accepts a named options object instead of 6 positional parameters (internal refactor, no user-visible behavior change)
-- **Extracted pure functions** with full unit test coverage: `refetchAfterAgentEval`, `handleStopDecision`, `buildEvalPromptBase`, `acquirePidFile`, `checkActiveSchedules`, `registerSignalHandlers`, `startIdleCheckLoop`
-
-### Database (v1.4.0)
-
-- **Migration 21**: Adds `workers.last_heartbeat`, `loops.eval_type` (default `'feedforward'`), `loops.judge_agent`, `loops.judge_prompt` columns
-- **Migration 22**: Recreates `loops` table with CHECK constraints on `eval_type` and `judge_agent` — **full table rebuild; back up `~/.autobeat/autobeat.db` before upgrading**
-
-## ✅ Dashboard Redesign (v1.3.0)
+## ✅ Dashboard Redesign, Eval Redesign & Reliability (v1.3.0)
 
 - **Two-view dashboard**: Metrics view (overview tiles + activity feed) and Workspace view (per-orchestration task grid)
 - **Live agent output streaming**: 1-2s latency via per-task polling with ring buffer; auto-tail follows new output
@@ -50,10 +34,23 @@ Last Updated: April 2026 (2026-04-15)
 | `PgUp` / `PgDn` (Workspace) | Page through task grid |
 | `d` (Workspace grid) | Delete focused child task (terminal status only) |
 
+### Eval Redesign & Reliability (v1.3.0)
+
+- **Three eval strategies** via `evalType` field on loop creation:
+  - `'feedforward'` (default) — gathers agent findings per iteration and injects them as context into the next iteration's prompt; always continues to `maxIterations`. When no `evalPrompt` is set, acts as a pure pass-through (no eval agent spawned).
+  - `'judge'` — two-phase eval+judge: Phase 1 eval agent generates findings; Phase 2 judge agent reads findings and writes a decision to `.autobeat-judge-task-{uuid}` in the working directory (TOCTOU-safe). Safe fallback to `continue: true` if both structured output and file mechanisms fail.
+  - `'schema'` — deterministic Claude `--json-schema` eval; the eval agent must respond with `{"continue": bool, "reasoning": string}`. No judge agent required.
+- **`judgeAgent` and `judgePrompt`** fields for configuring the judge phase independently of the eval agent
+- **Atomic PID file locking** for the schedule executor — `O_EXCL` file creation prevents double-execution races; stale PID files are cleaned up automatically
+- **`SpawnOptions` interface** — `AgentAdapter.spawn()` now accepts a named options object instead of 6 positional parameters (internal refactor, no user-visible behavior change)
+- **Extracted pure functions** with full unit test coverage: `refetchAfterAgentEval`, `handleStopDecision`, `buildEvalPromptBase`, `acquirePidFile`, `checkActiveSchedules`, `registerSignalHandlers`, `startIdleCheckLoop`
+
 ### Database (v1.3.0)
 
 - **Migration 18**: Adds `orchestrator_id` column to `tasks` for sub-task attribution
 - **Migration 19**: Adds `task_usage` table for token/cost tracking per task
+- **Migration 21**: Adds `workers.last_heartbeat`, `loops.eval_type` (default `'feedforward'`), `loops.judge_agent`, `loops.judge_prompt` columns
+- **Migration 22**: Recreates `loops` table with CHECK constraints on `eval_type` and `judge_agent` — **full table rebuild; back up `~/.autobeat/autobeat.db` before upgrading**
 
 ## ✅ Terminal Dashboard & Agent Config (v1.2.0)
 

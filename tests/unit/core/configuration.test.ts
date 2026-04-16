@@ -77,7 +77,7 @@ describe('ConfigurationSchema - REAL Validation Behavior', () => {
     });
 
     it('accepts timeout of 0 (no timeout)', () => {
-      // DECISION: timeout=0 means disabled (no timeout). Default since v1.4.0.
+      // DECISION: timeout=0 means disabled (no timeout). Default since v1.3.0.
       const config = {
         timeout: 0,
         maxOutputBuffer: BUFFER_SIZES.SMALL,
@@ -409,7 +409,7 @@ describe('loadConfiguration - REAL Configuration Loading', () => {
       const config = loadConfiguration();
 
       // Should use defaults for invalid numbers
-      // DECISION: Default timeout is 0 (disabled) since v1.4.0
+      // DECISION: Default timeout is 0 (disabled) since v1.3.0
       expect(config.timeout).toBe(0);
       expect(config.maxOutputBuffer).toBe(BUFFER_SIZES.MEDIUM);
       expect(config.cpuCoresReserved).toBe(2);
@@ -440,7 +440,7 @@ describe('loadConfiguration - REAL Configuration Loading', () => {
 
       const config = loadConfiguration();
 
-      // DECISION: Default timeout is 0 (disabled) since v1.4.0
+      // DECISION: Default timeout is 0 (disabled) since v1.3.0
       expect(config.timeout).toBe(0); // Default
     });
 
@@ -471,7 +471,7 @@ describe('loadConfiguration - REAL Configuration Loading', () => {
       const config = loadConfiguration();
 
       // FIX: Check core fields only (20+ fields returned)
-      // DECISION: Default timeout is 0 (disabled) since v1.4.0
+      // DECISION: Default timeout is 0 (disabled) since v1.3.0
       expect(config.timeout).toBe(0);
       expect(config.maxOutputBuffer).toBe(BUFFER_SIZES.MEDIUM);
       expect(config.cpuCoresReserved).toBe(2);

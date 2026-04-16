@@ -1,22 +1,17 @@
 # Autobeat Development Roadmap
 
-## Current Status: v1.4.0 RELEASED (2026-04-15)
+## Current Status: v1.3.0 RELEASED (2026-04-16)
 
-Evaluator redesign (feedforward, judge, schema strategies), atomic PID file locking for schedule executor, SpawnOptions refactor, and extracted pure functions for improved testability. Includes database migrations v21 and v22.
+Dashboard redesign (Metrics + Workspace views), live agent output streaming, cost/token tracking, three eval strategies (feedforward, judge, schema), atomic PID file locking, SpawnOptions refactor, and extracted pure functions. Includes database migrations v18-v22.
 
 ---
 
 ## Released Versions
 
-### v1.4.0 - Eval Redesign & Reliability Cleanup ✅
-**Status**: **RELEASED** (2026-04-15)
+### v1.3.0 - Dashboard Redesign, Eval Redesign & Reliability ✅
+**Status**: **RELEASED** (2026-04-16)
 
-Three eval strategies for loop exit conditions (`feedforward` default, `judge` two-phase, `schema` deterministic Claude structured output). Atomic PID file locking for schedule executor prevents double-execution. SpawnOptions refactor cleans up AgentAdapter interface. Database migrations v21 (eval columns) and v22 (CHECK constraints via table rebuild).
-
-### v1.3.0 - Dashboard Redesign ✅
-**Status**: **RELEASED** (2026-04-11)
-
-Two-view dashboard (Metrics + Workspace), live agent output streaming in workspace panels, cost/token tracking for Claude agents, orchestrator_id propagation through CLI and MCP spawn paths, cancel cascade for orchestrations, and responsive terminal layout.
+Two-view dashboard (Metrics + Workspace), live agent output streaming in workspace panels, cost/token tracking for Claude agents, orchestrator_id propagation through CLI and MCP spawn paths, cancel cascade for orchestrations, and responsive terminal layout. Three eval strategies for loop exit conditions (`feedforward` default, `judge` two-phase, `schema` deterministic Claude structured output). Atomic PID file locking for schedule executor prevents double-execution. SpawnOptions refactor cleans up AgentAdapter interface. Database migrations v18-v22.
 
 ### v1.2.0 - Terminal Dashboard & Agent Config ✅
 **Status**: **RELEASED** (2026-04-10)
@@ -160,8 +155,7 @@ Multi-server support, shared state (Redis backend), fault tolerance, task affini
 | **v1.0.0** | ✅ Released | **Autonomous Orchestration** |
 | **v1.1.0** | ✅ Released | **Agent Eval Mode & Skill System** |
 | **v1.2.0** | ✅ Released | **Terminal Dashboard & Agent Config** |
-| **v1.3.0** | ✅ Released | **Dashboard Redesign & Cost Tracking** |
-| **v1.4.0** | ✅ Released | **Eval Redesign & Reliability Cleanup** |
+| **v1.3.0** | ✅ Released | **Dashboard Redesign, Eval Redesign & Reliability** |
 
 ---
 

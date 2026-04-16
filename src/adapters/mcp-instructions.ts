@@ -40,7 +40,7 @@ Use when you need iterative improvement — run a task repeatedly until a condit
 **Pipeline loops**: Repeat a multi-step pipeline per iteration.
 - CreateLoop with pipelineSteps: ["lint the code", "run tests"] and exitCondition: "npm test"
 
-**Agent eval sub-strategies** (evalMode: "agent" only, v1.4.0+):
+**Agent eval sub-strategies** (evalMode: "agent" only, v1.3.0+):
 - evalType: "feedforward" (default) → eval agent gathers findings only, loop always continues until maxIterations; works with any agent
 - evalType: "schema" → Claude uses --json-schema for deterministic structured pass/fail output; requires agent: "claude"
 - evalType: "judge" → two-phase: eval agent gathers findings, then a judge agent writes a continue/stop decision to .autobeat-judge file; requires evalPrompt

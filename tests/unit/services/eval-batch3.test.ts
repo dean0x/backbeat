@@ -1,5 +1,5 @@
 /**
- * Tests for eval batch 3 (v1.4.0)
+ * Tests for eval batch 3 (v1.3.0)
  *
  * ARCHITECTURE: Covers FeedforwardEvaluator, CompositeExitConditionEvaluator routing
  * by evalType, and LoopManagerService evalType validation constraints.

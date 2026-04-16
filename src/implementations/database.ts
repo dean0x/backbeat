@@ -839,7 +839,7 @@ export class Database implements TransactionRunner {
       },
       {
         version: 21,
-        description: 'Add worker heartbeat, loop eval columns (v1.4.0)',
+        description: 'Add worker heartbeat, loop eval columns (v1.3.0)',
         up: (db) => {
           // DECISION: last_heartbeat tracks when the owning process last wrote to the DB.
           // Enables stale worker detection beyond PID checks (process zombies, hung workers).
@@ -850,7 +850,7 @@ export class Database implements TransactionRunner {
           // Nullable — non-eval iterations have no response.
           db.exec(`ALTER TABLE loop_iterations ADD COLUMN eval_response TEXT`);
 
-          // DECISION: eval_type, judge_agent, judge_prompt support the eval redesign (v1.4.0).
+          // DECISION: eval_type, judge_agent, judge_prompt support the eval redesign (v1.3.0).
           // eval_type defaults to 'feedforward' (existing behavior) for backward compatibility.
           // judge_agent and judge_prompt are nullable — only set for judge-based eval loops.
           db.exec(`ALTER TABLE loops ADD COLUMN eval_type TEXT DEFAULT 'feedforward'`);
@@ -860,7 +860,7 @@ export class Database implements TransactionRunner {
       },
       {
         version: 22,
-        description: 'Add CHECK constraints on eval_type and judge_agent in loops table (v1.4.0)',
+        description: 'Add CHECK constraints on eval_type and judge_agent in loops table (v1.3.0)',
         up: (db) => {
           // SQLite does not support adding CHECK constraints to existing columns via ALTER TABLE.
           // Pattern: Safe table recreation with data preservation (same as migrations v2, v3, v11).

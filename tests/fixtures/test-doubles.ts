@@ -463,7 +463,7 @@ export class TestTaskRepository implements TaskRepository {
 /**
  * TestProcessSpawner - Controllable process spawner for testing
  *
- * ARCHITECTURE: Implements ProcessSpawner with SpawnOptions (widened in v1.4.0).
+ * ARCHITECTURE: Implements ProcessSpawner with SpawnOptions (widened in v1.3.0).
  * Keyed internally by pid string so test helpers (simulateExit, isProcessKilled)
  * accept the pid returned from spawn(). See batch-D-process-spawner review fix.
  */

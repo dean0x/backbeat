@@ -60,7 +60,7 @@ const LoopRowSchema = z.object({
   git_base_branch: z.string().nullable(),
   git_start_commit_sha: z.string().nullable(),
   schedule_id: z.string().nullable(),
-  // Eval redesign fields (v1.4.0) — added by migration v21, nullable for backward compat.
+  // Eval redesign fields (v1.3.0) — added by migration v21, nullable for backward compat.
   // Use enum validation for eval_type and judge_agent to reject corrupt DB values at the
   // boundary rather than silently propagating them as untyped strings.
   // .optional() is kept because SQLite columns added via ALTER TABLE may be absent in
@@ -87,7 +87,7 @@ const LoopIterationRowSchema = z.object({
   git_commit_sha: z.string().nullable(),
   pre_iteration_commit_sha: z.string().nullable(),
   git_diff_summary: z.string().nullable(),
-  // Eval redesign fields (v1.4.0) — added by migration v21, nullable for backward compat.
+  // Eval redesign fields (v1.3.0) — added by migration v21, nullable for backward compat.
   // .optional() kept for same reason as LoopRowSchema: ALTER TABLE columns may be absent
   // in RowDescription under very old schema; .nullable() covers the normal NULL case.
   eval_response: z.string().nullable().optional(),
@@ -114,7 +114,7 @@ const TaskRequestSchema = z.object({
   // iteration tasks (single and pipeline) carry orchestrator_id into cost tracking and
   // cancel cascade. Without this, Zod strips the field and attribution silently breaks.
   orchestratorId: z.string().optional(),
-  // v1.4.0: JSON schema for structured output — must round-trip through loop.taskTemplate
+  // v1.3.0: JSON schema for structured output — must round-trip through loop.taskTemplate
   // so schema-mode eval loops pass the JSON schema string to iteration tasks.
   // Without this, Zod strips the field and schema-mode evaluation silently breaks.
   jsonSchema: z.string().optional(),
@@ -163,7 +163,7 @@ interface LoopRow {
   readonly git_base_branch: string | null;
   readonly git_start_commit_sha: string | null;
   readonly schedule_id: string | null;
-  // Eval redesign (v1.4.0)
+  // Eval redesign (v1.3.0)
   readonly eval_type: string | null | undefined;
   readonly judge_agent: string | null | undefined;
   readonly judge_prompt: string | null | undefined;
@@ -186,7 +186,7 @@ interface LoopIterationRow {
   readonly git_commit_sha: string | null;
   readonly pre_iteration_commit_sha: string | null;
   readonly git_diff_summary: string | null;
-  // Eval redesign (v1.4.0)
+  // Eval redesign (v1.3.0)
   readonly eval_response: string | null | undefined;
 }
 
@@ -476,7 +476,7 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
           iteration.gitCommitSha ?? null,
           iteration.preIterationCommitSha ?? null,
           iteration.gitDiffSummary ?? null,
-          iteration.evalResponse ?? null, // Eval redesign (v1.4.0)
+          iteration.evalResponse ?? null, // Eval redesign (v1.3.0)
         );
       },
       operationErrorHandler('record loop iteration', {
@@ -531,7 +531,7 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
           gitCommitSha: iteration.gitCommitSha ?? null,
           preIterationCommitSha: iteration.preIterationCommitSha ?? null,
           gitDiffSummary: iteration.gitDiffSummary ?? null,
-          evalResponse: iteration.evalResponse ?? null, // Eval redesign (v1.4.0)
+          evalResponse: iteration.evalResponse ?? null, // Eval redesign (v1.3.0)
         });
       },
       operationErrorHandler('update loop iteration', {
@@ -567,7 +567,7 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
       iteration.gitCommitSha ?? null,
       iteration.preIterationCommitSha ?? null,
       iteration.gitDiffSummary ?? null,
-      iteration.evalResponse ?? null, // Eval redesign (v1.4.0)
+      iteration.evalResponse ?? null, // Eval redesign (v1.3.0)
     );
   }
 
@@ -590,7 +590,7 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
       gitCommitSha: iteration.gitCommitSha ?? null,
       preIterationCommitSha: iteration.preIterationCommitSha ?? null,
       gitDiffSummary: iteration.gitDiffSummary ?? null,
-      evalResponse: iteration.evalResponse ?? null, // Eval redesign (v1.4.0)
+      evalResponse: iteration.evalResponse ?? null, // Eval redesign (v1.3.0)
     });
   }
 
@@ -632,7 +632,7 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
       gitBaseBranch: loop.gitBaseBranch ?? null,
       gitStartCommitSha: loop.gitStartCommitSha ?? null,
       scheduleId: loop.scheduleId ?? null,
-      // Eval redesign (v1.4.0)
+      // Eval redesign (v1.3.0)
       evalType: loop.evalType ?? null,
       judgeAgent: loop.judgeAgent ?? null,
       judgePrompt: loop.judgePrompt ?? null,
@@ -692,7 +692,7 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
       gitBaseBranch: data.git_base_branch ?? undefined,
       gitStartCommitSha: data.git_start_commit_sha ?? undefined,
       scheduleId: data.schedule_id ? ScheduleId(data.schedule_id) : undefined,
-      // Eval redesign (v1.4.0) — no casts needed: LoopRowSchema validates eval_type and
+      // Eval redesign (v1.3.0) — no casts needed: LoopRowSchema validates eval_type and
       // judge_agent as enums, so TypeScript can trust the narrowed types directly.
       evalType: data.eval_type ?? undefined,
       judgeAgent: data.judge_agent ?? undefined,
@@ -738,7 +738,7 @@ export class SQLiteLoopRepository implements LoopRepository, SyncLoopOperations 
       gitCommitSha: data.git_commit_sha ?? undefined,
       preIterationCommitSha: data.pre_iteration_commit_sha ?? undefined,
       gitDiffSummary: data.git_diff_summary ?? undefined,
-      // Eval redesign (v1.4.0)
+      // Eval redesign (v1.3.0)
       evalResponse: data.eval_response ?? undefined,
       startedAt: data.started_at,
       completedAt: data.completed_at ?? undefined,

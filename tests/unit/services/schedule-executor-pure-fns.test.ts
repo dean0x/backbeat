@@ -1,5 +1,5 @@
 /**
- * Tests for schedule-executor extracted pure functions (v1.4.0 batch 6)
+ * Tests for schedule-executor extracted pure functions (v1.3.0 batch 6)
  *
  * Tests checkActiveSchedules, registerSignalHandlers, and startIdleCheckLoop.
  *

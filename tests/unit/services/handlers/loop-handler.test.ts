@@ -1766,7 +1766,7 @@ describe('LoopHandler - Behavioral Tests', () => {
   });
 
   // ==========================================================================
-  // v1.4.0 — EvalResult.decision field branching
+  // v1.3.0 — EvalResult.decision field branching
   // ==========================================================================
 
   describe('decision field — RETRY strategy', () => {
@@ -1806,7 +1806,7 @@ describe('LoopHandler - Behavioral Tests', () => {
 
     it('decision: continue — does not fail loop even at maxConsecutiveFailures boundary', async () => {
       // If decision: continue bypasses the increment, it must also bypass the limit check.
-      // This is the core v1.4.0 behavioral guarantee.
+      // This is the core v1.3.0 behavioral guarantee.
       mockEvaluator.evaluate.mockResolvedValue({
         passed: false,
         decision: 'continue',
@@ -1914,7 +1914,7 @@ describe('LoopHandler - Behavioral Tests', () => {
     });
 
     it('undefined decision — falls through to normal passed/failed logic (backward compat)', async () => {
-      // No decision field set — must behave identically to the pre-v1.4.0 retry path.
+      // No decision field set — must behave identically to the pre-v1.3.0 retry path.
       mockEvaluator.evaluate.mockResolvedValue({ passed: false, exitCode: 1, error: 'test failed' });
 
       const loop = await createAndEmitLoop({

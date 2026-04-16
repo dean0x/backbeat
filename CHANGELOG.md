@@ -8,9 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [1.4.0] - 2026-04-15
+## [1.3.0] - 2026-04-16
 
 ### Added
+- **Dashboard Redesign**: Two-view dashboard — Metrics view (resources/cost/throughput tiles + activity feed) and Workspace view (per-orchestration live task grid with streaming output panels) (#133)
+- **Live agent output streaming**: 1-2s output latency in Workspace view via per-task polling with ring buffer and auto-tail (#133)
+- **Cost and token tracking**: `UsageCaptureHandler` + `UsageParser` capture Claude token usage and USD cost into new `task_usage` table; 24h aggregate shown in Metrics view cost tile (#133)
+- **Orchestrator_id propagation**: Sub-tasks attributed to their orchestration via `tasks.orchestrator_id`; propagated through CLI (`AUTOBEAT_ORCHESTRATOR_ID` env) and MCP (`metadata.orchestratorId`) spawn paths (#133)
+- **Cancel cascade for orchestrations**: `c` on an orchestration cancels it and all in-flight attributed child tasks (#133)
+- **Responsive layout**: Terminal size detection via `process.stderr`; adapts to narrow/full/too-small modes; recomputes on SIGWINCH (#133)
+- **Activity feed keyboard navigation**: Tab cycles into activity focus; ↑/↓ navigate rows; Enter opens detail view (#133)
 - **FeedforwardEvaluator** (`evalType: 'feedforward'`): New default evaluation mode that gathers agent findings on every iteration and feeds them into the next iteration's prompt as context, without making a stop/continue decision. Loop runs to `maxIterations` unconditionally. When no `evalPrompt` is set, acts as a pure pass-through (no eval agent spawned) (#136)
 - **JudgeExitConditionEvaluator** (`evalType: 'judge'`): Two-phase eval+judge strategy. Phase 1 eval agent generates narrative findings; Phase 2 judge agent reads findings and writes a structured JSON decision to `.autobeat-judge-task-{uuid}` in the working directory (unique per judge task, prevents TOCTOU), optionally using Claude's `--json-schema` belt-and-suspenders mechanism. Defaults to `continue: true` if both mechanisms fail (#136)
 - **Schema evaluator** (`evalType: 'schema'`): Deterministic structured output evaluation via Claude's `--json-schema`. Eval agent must respond with `{"continue": bool, "reasoning": string}`. No separate judge agent required (#136)
@@ -23,43 +30,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `SpawnOptions` interface: Replaces 6 positional parameters on `AgentAdapter.spawn()` with a named options object (#139)
 
 ### Database
+- **Migration v18**: `tasks.orchestrator_id` — nullable FK for sub-task attribution to an orchestration (#133)
+- **Migration v19**: `task_usage` table — one row per task with input/output/cache tokens and total_cost_usd (#133)
 - **Migration v21**: Adds `workers.last_heartbeat INTEGER` (liveness tracking), `loops.eval_type TEXT DEFAULT 'feedforward'`, `loops.judge_agent TEXT`, and `loops.judge_prompt TEXT` columns (#136)
 - **Migration v22**: Recreates `loops` table with CHECK constraints on `eval_type IN ('feedforward', 'judge', 'schema')` and `judge_agent IN ('claude', 'codex', 'gemini')`. **Full table rebuild — back up `~/.autobeat/autobeat.db` before upgrading** (#136)
 
 ### Changed
-- `handleScheduleExecutor` now uses atomic PID file acquisition (`acquirePidFile`) instead of a read-then-write pattern (#141)
-- `AgentAdapter.spawn()` signature changed from 6 positional params to `spawn(options: SpawnOptions)` — all implementations and call sites updated (#139)
-
-### Internal Refactoring
-- `refetchAfterAgentEval()` extracted from `LoopHandler.handleTaskTerminal()` to encapsulate stale-state guard (#137)
-- `handleStopDecision()` extracted from `LoopHandler` to deduplicate stop-path logic shared between `handleRetryResult` and `handleOptimizeResult` (#138)
-- Shared eval test fixtures extracted to `tests/fixtures/eval-test-helpers.ts` to eliminate duplicated helpers across 3 test files (#143)
-
----
-
-## [1.3.0] - 2026-04-11
-
-### Added
-- **Dashboard Redesign**: Two-view dashboard — Metrics view (resources/cost/throughput tiles + activity feed) and Workspace view (per-orchestration live task grid with streaming output panels) (#133)
-- **Live agent output streaming**: 1-2s output latency in Workspace view via per-task polling with ring buffer and auto-tail (#133)
-- **Cost and token tracking**: `UsageCaptureHandler` + `UsageParser` capture Claude token usage and USD cost into new `task_usage` table; 24h aggregate shown in Metrics view cost tile (#133)
-- **Orchestrator_id propagation**: Sub-tasks attributed to their orchestration via `tasks.orchestrator_id`; propagated through CLI (`AUTOBEAT_ORCHESTRATOR_ID` env) and MCP (`metadata.orchestratorId`) spawn paths (#133)
-- **Cancel cascade for orchestrations**: `c` on an orchestration cancels it and all in-flight attributed child tasks (#133)
-- **Responsive layout**: Terminal size detection via `process.stderr`; adapts to narrow/full/too-small modes; recomputes on SIGWINCH (#133)
-- **Activity feed keyboard navigation**: Tab cycles into activity focus; ↑/↓ navigate rows; Enter opens detail view (#133)
-
-### Changed
 - `outputFlushIntervalMs` default: 5000ms → 1000ms (set `OUTPUT_FLUSH_INTERVAL_MS=5000` to opt out) (#133)
 - Metrics view replaces the old 4-panel grid as the default main view (#133)
+- `handleScheduleExecutor` now uses atomic PID file acquisition (`acquirePidFile`) instead of a read-then-write pattern (#141)
+- `AgentAdapter.spawn()` signature changed from 6 positional params to `spawn(options: SpawnOptions)` — all implementations and call sites updated (#139)
 
 ### Fixed
 - ActivityPanel Enter dispatch was ungated — now routed through activity focus mode (#133)
 - Zombie RUNNING orchestrations detected via worker liveness check on recovery (#133)
 - Orchestration creation failure now applies compensating soft-delete to prevent phantom rows (#133)
 
+### Internal Refactoring
+- `refetchAfterAgentEval()` extracted from `LoopHandler.handleTaskTerminal()` to encapsulate stale-state guard (#137)
+- `handleStopDecision()` extracted from `LoopHandler` to deduplicate stop-path logic shared between `handleRetryResult` and `handleOptimizeResult` (#138)
+- Shared eval test fixtures extracted to `tests/fixtures/eval-test-helpers.ts` to eliminate duplicated helpers across 3 test files (#143)
+
 ### Breaking
 - `src/cli/dashboard/views/main-view.tsx` removed; consumers of dashboard internals must update imports to `metrics-view.tsx` (#133)
-- **Database**: Migrations v18 (`tasks.orchestrator_id`) and v19 (`task_usage`) auto-applied on first startup (#133)
 
 ---
 

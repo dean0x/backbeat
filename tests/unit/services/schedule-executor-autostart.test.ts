@@ -1,5 +1,5 @@
 /**
- * Tests for schedule auto-executor utilities (v1.4.0 batch 3)
+ * Tests for schedule auto-executor utilities (v1.3.0 batch 3)
  *
  * Tests PID file read/write, liveness detection, stale PID cleanup,
  * and auto-spawn behavior.

@@ -1,5 +1,5 @@
 /**
- * Tests for eval domain foundations — Batch 2 (v1.4.0)
+ * Tests for eval domain foundations — Batch 2 (v1.3.0)
  *
  * ARCHITECTURE: Tests for EvalType enum, jsonSchema spawn chain, structured
  * output parsing, evalResponse persistence, feedback accumulation, and
