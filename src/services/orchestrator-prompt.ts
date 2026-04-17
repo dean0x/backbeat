@@ -1,7 +1,12 @@
 /**
  * Orchestrator prompt builder
- * ARCHITECTURE: Pure function that constructs the system prompt for orchestrator agents
- * Pattern: No side effects, fully parameterized — easy to test
+ * ARCHITECTURE: Pure function that constructs the orchestrator prompts.
+ * Returns { systemPrompt, userPrompt } — role/capability instructions belong in
+ * the system prompt; the goal belongs in the user prompt.
+ *
+ * @design Separation enables proper prompt routing per agent's native mechanism
+ * (e.g., --append-system-prompt for Claude). Callers that cannot use a system
+ * prompt can concatenate: systemPrompt + "\n\n" + userPrompt.
  */
 
 /**
@@ -23,12 +28,19 @@ export interface OrchestratorPromptParams {
 }
 
 /**
- * Build the orchestrator agent prompt
+ * Build the orchestrator agent prompts
+ *
+ * Returns { systemPrompt, userPrompt }:
+ *   - systemPrompt: Role/capability instructions (ROLE through RESILIENCE sections)
+ *   - userPrompt: The specific goal the orchestrator should achieve
  *
  * The prompt instructs the agent to use `beat` CLI commands (NOT MCP tools)
  * for worker management, enabling autonomous delegation and monitoring.
  */
-export function buildOrchestratorPrompt(params: OrchestratorPromptParams): string {
+export function buildOrchestratorPrompt(params: OrchestratorPromptParams): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
   const { goal, stateFilePath, workingDirectory, maxDepth, maxWorkers, agent, model } = params;
 
   // Build --agent and --model flag strings for injection into delegation examples.
@@ -37,7 +49,7 @@ export function buildOrchestratorPrompt(params: OrchestratorPromptParams): strin
   const modelFlag = model ? ` --model ${model}` : '';
   const agentModelFlags = `${agentFlag}${modelFlag}`;
 
-  return `ROLE: You are an autonomous software engineering orchestrator. You break down
+  const systemPrompt = `ROLE: You are an autonomous software engineering orchestrator. You break down
 complex goals into subtasks, delegate to worker agents, monitor progress,
 and iterate until the goal is achieved.
 
@@ -63,7 +75,7 @@ LOOP MANAGEMENT (iterative refinement via beat CLI):
   Agent eval loop (recommended for code quality goals):
     beat loop${agentModelFlags} "<prompt>" --eval-mode agent --strategy retry
     beat loop${agentModelFlags} "<prompt>" --eval-mode agent --strategy optimize
-    beat loop${agentModelFlags} "<prompt>" --eval-mode agent --strategy retry \
+    beat loop${agentModelFlags} "<prompt>" --eval-mode agent --strategy retry \\
       --eval-prompt "Review the changes and output PASS if all tests pass and code quality is high, otherwise FAIL with an explanation."
   Loop status:         beat loop status <loop-id> [--history]
   Cancel loop:         beat loop cancel <loop-id>
@@ -115,8 +127,9 @@ RESILIENCE:
 - Always write the state file BEFORE exiting -- the system reads it to
   determine if the goal is complete
 - If you cannot achieve the goal, write status: "failed" with an explanation
-  in the context field. The system will terminate after a few iterations.
+  in the context field. The system will terminate after a few iterations.`;
 
-YOUR GOAL:
-${goal}`;
+  const userPrompt = `YOUR GOAL:\n${goal}`;
+
+  return { systemPrompt, userPrompt };
 }
