@@ -13,6 +13,9 @@
  */
 
 import { ChildProcess, spawn } from 'child_process';
+import { mkdirSync, writeFileSync } from 'fs';
+import os from 'os';
+import path from 'path';
 import {
   AGENT_AUTH,
   AGENT_BASE_URL_ENV,
@@ -50,6 +53,25 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
   protected get envExactMatchesToStrip(): readonly string[] {
     return [];
   }
+
+  /**
+   * Declare how this adapter injects a system prompt into the spawned agent.
+   *
+   * @design Each agent CLI has a different mechanism for system prompts (inline flag,
+   * config override, env var + file). This pattern lets each adapter declare its needs;
+   * base class handles file lifecycle and prompt prepending.
+   *
+   * @param systemPrompt - The system prompt text to inject
+   * @param systemPromptPath - Resolved temp file path (use if adapter needs a file)
+   * @returns Injection configuration:
+   *   - args: Additional CLI args to append (e.g. ['--append-system-prompt', text])
+   *   - env: Additional env vars to inject (e.g. { GEMINI_SYSTEM_MD: path })
+   *   - prependToPrompt: If true, base class prepends systemPrompt to user prompt instead
+   */
+  protected abstract getSystemPromptConfig(
+    systemPrompt: string,
+    systemPromptPath: string,
+  ): { args: readonly string[]; env: Record<string, string>; prependToPrompt: boolean };
 
   /**
    * Optional prompt transformation before passing to the CLI.
@@ -138,6 +160,7 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
     model,
     orchestratorId,
     jsonSchema,
+    systemPrompt,
   }: SpawnOptions): Result<{ process: ChildProcess; pid: number }> {
     try {
       // Pre-spawn: verify CLI binary exists before anything else
@@ -159,8 +182,35 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
       if (!authResult.ok) return authResult;
 
       const resolvedModel = this.resolveModel(agentConfig, model);
-      const finalPrompt = this.transformPrompt(prompt);
-      const args = this.buildArgs(finalPrompt, resolvedModel, jsonSchema);
+
+      // Resolve system prompt injection (v1.4.0)
+      let effectivePrompt = prompt;
+      let systemPromptArgs: readonly string[] = [];
+      let systemPromptEnv: Record<string, string> = {};
+
+      if (systemPrompt) {
+        // Compute temp file path (used by adapters that write to file, e.g. Gemini)
+        const systemPromptDir = path.join(os.homedir(), '.autobeat', 'system-prompts');
+        const systemPromptPath = path.join(systemPromptDir, `${taskId ?? 'unknown'}.md`);
+
+        const config = this.getSystemPromptConfig(systemPrompt, systemPromptPath);
+
+        if (config.prependToPrompt) {
+          // Adapter cannot inject via CLI args/env — prepend to user prompt as fallback
+          effectivePrompt = `${systemPrompt}\n\n${prompt}`;
+        } else {
+          // Adapter needs file on disk — write it now
+          if (config.env && Object.values(config.env).some((v) => v === systemPromptPath)) {
+            mkdirSync(systemPromptDir, { recursive: true });
+            writeFileSync(systemPromptPath, systemPrompt, 'utf8');
+          }
+          systemPromptArgs = config.args;
+          systemPromptEnv = config.env;
+        }
+      }
+
+      const finalPrompt = this.transformPrompt(effectivePrompt);
+      const args = [...this.buildArgs(finalPrompt, resolvedModel, jsonSchema), ...systemPromptArgs];
 
       const exactMatches = this.envExactMatchesToStrip;
       const cleanEnv = Object.fromEntries(
@@ -196,6 +246,7 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
         ...cleanEnv,
         ...authResult.value.injectedEnv,
         ...baseUrlEnv,
+        ...systemPromptEnv,
         AUTOBEAT_WORKER: 'true',
         ...(taskId && { AUTOBEAT_TASK_ID: taskId }),
         ...(safeOrchestratorId && { AUTOBEAT_ORCHESTRATOR_ID: safeOrchestratorId }),

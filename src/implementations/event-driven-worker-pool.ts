@@ -7,6 +7,9 @@
  */
 
 import { ChildProcess } from 'child_process';
+import { unlinkSync } from 'fs';
+import os from 'os';
+import path from 'path';
 
 import { AgentRegistry } from '../core/agents.js';
 import { Task, TaskId, Worker, WorkerId } from '../core/domain.js';
@@ -105,7 +108,7 @@ export class EventDrivenWorkerPool implements WorkerPool {
     const adapter = adapterResult.value;
     const finalWorkingDirectory = task.workingDirectory || process.cwd();
 
-    // Spawn the process using the resolved adapter (pass model, orchestratorId, and jsonSchema)
+    // Spawn the process using the resolved adapter (pass model, orchestratorId, jsonSchema, systemPrompt)
     const spawnResult = adapter.spawn({
       prompt: task.prompt,
       workingDirectory: finalWorkingDirectory,
@@ -113,6 +116,7 @@ export class EventDrivenWorkerPool implements WorkerPool {
       model: task.model,
       orchestratorId: task.orchestratorId,
       jsonSchema: task.jsonSchema,
+      systemPrompt: task.systemPrompt,
     });
 
     if (!spawnResult.ok) {
@@ -296,6 +300,15 @@ export class EventDrivenWorkerPool implements WorkerPool {
     const unregResult = this.workerRepository.unregister(workerId);
     if (!unregResult.ok) {
       this.logger.error('Failed to unregister worker from DB', unregResult.error, { workerId });
+    }
+
+    // Best-effort cleanup of system-prompt temp file written during spawn (v1.4.0).
+    // Failures are non-fatal — orphan files are small and harmless.
+    const systemPromptPath = path.join(os.homedir(), '.autobeat', 'system-prompts', `${taskId}.md`);
+    try {
+      unlinkSync(systemPromptPath);
+    } catch {
+      // File may not exist (task had no system prompt, or Gemini used prependToPrompt fallback)
     }
   }
 
