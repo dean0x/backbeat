@@ -102,6 +102,18 @@ export const DelegateTaskSchema = z.object({
    * Max 16000 chars to stay well within typical schema sizes.
    */
   jsonSchema: z.string().max(16000).optional().describe('JSON schema for structured output (Claude only)'),
+  /**
+   * v1.4.0: System prompt to inject into the agent.
+   * Per-agent mechanism: Claude --append-system-prompt, Codex -c developer_instructions,
+   * Gemini GEMINI_SYSTEM_MD (combined with base). Max 16000 chars.
+   */
+  systemPrompt: z
+    .string()
+    .max(16000)
+    .optional()
+    .describe(
+      'System prompt to inject into the agent (Claude: --append-system-prompt, Codex: developer_instructions, Gemini: combined GEMINI_SYSTEM_MD)',
+    ),
 });
 
 const TaskStatusSchema = z.object({
@@ -262,6 +274,19 @@ const CreateOrchestratorSchema = z.object({
   maxDepth: z.number().min(1).max(10).optional().default(3).describe('Max delegation depth'),
   maxWorkers: z.number().min(1).max(20).optional().default(5).describe('Max concurrent workers'),
   maxIterations: z.number().min(1).max(200).optional().default(50).describe('Max orchestrator iterations'),
+  /**
+   * v1.4.0: Custom system prompt for the orchestrator agent.
+   * DECISION: When provided, replaces the auto-generated role instructions entirely —
+   * appending would create confusing duplication (two conflicting ROLE sections).
+   * Max 16000 chars.
+   */
+  systemPrompt: z
+    .string()
+    .max(16000)
+    .optional()
+    .describe(
+      'Custom system prompt for the orchestrator (overrides auto-generated role instructions when provided)',
+    ),
 });
 
 const OrchestratorStatusSchema = z.object({
@@ -361,6 +386,16 @@ const CreateLoopSchema = z.object({
     .optional()
     .describe('Agent for judge decisions (judge evalType only — defaults to loop agent if omitted)'),
   judgePrompt: z.string().max(8000).optional().describe('Custom judge instructions (judge evalType only)'),
+  /**
+   * v1.4.0: System prompt for each iteration task.
+   * Per-agent mechanism: Claude --append-system-prompt, Codex -c developer_instructions,
+   * Gemini GEMINI_SYSTEM_MD (combined with base). Max 16000 chars.
+   */
+  systemPrompt: z
+    .string()
+    .max(16000)
+    .optional()
+    .describe('System prompt injected into each iteration task agent'),
 });
 
 const LoopStatusSchema = z.object({
@@ -665,6 +700,12 @@ export class MCPAdapter {
                     description: 'Model override for this task (overrides agent-config default)',
                     minLength: 1,
                     maxLength: 200,
+                  },
+                  systemPrompt: {
+                    type: 'string',
+                    description:
+                      'System prompt to inject into the agent (Claude: --append-system-prompt, Codex: developer_instructions, Gemini: combined GEMINI_SYSTEM_MD)',
+                    maxLength: 16000,
                   },
                 },
                 required: ['prompt'],
@@ -1189,6 +1230,11 @@ export class MCPAdapter {
                     type: 'string',
                     description: 'Git branch name for loop iteration work (v0.8.0)',
                   },
+                  systemPrompt: {
+                    type: 'string',
+                    description: 'System prompt injected into each iteration task agent (max 16000 chars)',
+                    maxLength: 16000,
+                  },
                 },
                 required: ['strategy'],
               },
@@ -1405,6 +1451,12 @@ export class MCPAdapter {
                     minimum: 1,
                     maximum: 200,
                   },
+                  systemPrompt: {
+                    type: 'string',
+                    description:
+                      'Custom system prompt for the orchestrator (overrides auto-generated role instructions when provided)',
+                    maxLength: 16000,
+                  },
                 },
                 required: ['goal'],
               },
@@ -1572,6 +1624,7 @@ export class MCPAdapter {
       model: data.model,
       orchestratorId,
       jsonSchema: data.jsonSchema,
+      systemPrompt: data.systemPrompt,
     };
 
     // Delegate task using our new architecture
@@ -2406,6 +2459,7 @@ export class MCPAdapter {
       evalType: data.evalType,
       judgeAgent: data.judgeAgent as AgentProvider | undefined,
       judgePrompt: data.judgePrompt,
+      systemPrompt: data.systemPrompt,
     };
 
     const result = await this.loopService.createLoop(request);
@@ -2868,6 +2922,7 @@ export class MCPAdapter {
       maxDepth: data.maxDepth,
       maxWorkers: data.maxWorkers,
       maxIterations: data.maxIterations,
+      systemPrompt: data.systemPrompt,
     });
 
     return match(result, {

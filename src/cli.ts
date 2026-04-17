@@ -77,6 +77,7 @@ if (mainCommand === 'mcp') {
       maxOutputBuffer?: number;
       agent?: string;
       model?: string;
+      systemPrompt?: string;
     } = {};
 
     let promptWords: string[] = [];
@@ -175,6 +176,15 @@ if (mainCommand === 'mcp') {
           ui.error('--model requires a model name (e.g. claude-opus-4-5)');
           process.exit(1);
         }
+      } else if (arg === '--system-prompt') {
+        const next = foregroundArgs[i + 1];
+        if (next && !next.startsWith('-')) {
+          options.systemPrompt = next;
+          i++;
+        } else {
+          ui.error('--system-prompt requires a prompt string');
+          process.exit(1);
+        }
       } else if (arg.startsWith('-')) {
         ui.error(`Unknown flag: ${arg}`);
         process.exit(1);
@@ -194,6 +204,7 @@ if (mainCommand === 'mcp') {
           '  -w, --working-directory DIR   Working directory for task execution',
           '  -a, --agent AGENT            AI agent to use (claude, codex, gemini)',
           '  -m, --model MODEL            Model override (e.g. claude-opus-4-5)',
+          '  --system-prompt TEXT          System prompt to inject into the agent',
           '  -t, --timeout MS              Task timeout in milliseconds',
           '  --max-output-buffer BYTES     Maximum output buffer size',
           '',
