@@ -937,6 +937,14 @@ export class Database implements TransactionRunner {
           db.exec(`CREATE INDEX IF NOT EXISTS idx_loops_updated_at ON loops(updated_at)`);
         },
       },
+      {
+        version: 23,
+        description: 'Add system_prompt column to tasks table (v1.4.0)',
+        up: (db) => {
+          // Nullable TEXT — no data migration needed. Existing tasks have NULL system_prompt.
+          db.exec(`ALTER TABLE tasks ADD COLUMN system_prompt TEXT`);
+        },
+      },
     ];
   }
 

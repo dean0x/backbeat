@@ -243,6 +243,14 @@ export interface SpawnOptions {
   readonly orchestratorId?: string;
   /** Optional JSON schema string for structured output (v1.3.0, Claude only) */
   readonly jsonSchema?: string;
+  /**
+   * Optional system prompt to inject into the agent (v1.4.0).
+   * Each agent CLI has a different mechanism:
+   *   Claude:  --append-system-prompt (appends to default, preserving tool definitions)
+   *   Codex:   -c developer_instructions=<text> (appends after default, preserves AGENTS.md)
+   *   Gemini:  GEMINI_SYSTEM_MD env var (combined with base prompt cache)
+   */
+  readonly systemPrompt?: string;
 }
 
 /**
