@@ -206,31 +206,13 @@ export class OrchestrationManagerService implements OrchestrationService {
     // Build prompt and create loop
     // ========================================================================
 
-    const {
-      systemPrompt: orchestratorSystemPrompt,
-      userPrompt,
-      operationalContract,
-    } = buildOrchestratorPrompt({
-      goal: request.goal,
+    const { finalSystemPrompt, finalUserPrompt } = this.buildFinalPrompts(
+      request,
+      orchestration,
       stateFilePath,
-      workingDirectory: validatedWorkingDirectory,
-      maxDepth: orchestration.maxDepth,
-      maxWorkers: orchestration.maxWorkers,
+      validatedWorkingDirectory,
       agent,
-      model: orchestration.model,
-    });
-
-    // DECISION: Users providing systemPrompt on CreateOrchestrator opt out of
-    // the default role instructions. Override entirely with the user-provided prompt.
-    // Operational essentials (state file, working dir, commands) are injected into
-    // the user prompt instead — see operationalContract.
-    const hasCustomSystemPrompt = Boolean(request.systemPrompt?.trim());
-    const finalSystemPrompt = hasCustomSystemPrompt ? request.systemPrompt! : orchestratorSystemPrompt;
-
-    // When custom systemPrompt replaces the auto-generated one, operational
-    // knowledge (state file path, working dir, delegation commands) is lost.
-    // Inject minimal contract into user prompt so the agent can still function.
-    const finalUserPrompt = hasCustomSystemPrompt ? `${operationalContract}\n\n${userPrompt}` : userPrompt;
+    );
 
     const loopResult = await this.loopService.createLoop({
       strategy: LoopStrategy.RETRY,
@@ -313,6 +295,44 @@ export class OrchestrationManagerService implements OrchestrationService {
     });
 
     return ok(updatedOrchestration);
+  }
+
+  /**
+   * Build finalSystemPrompt and finalUserPrompt from request + generated prompts.
+   *
+   * DECISION: When a custom systemPrompt is provided, it replaces the auto-generated
+   * role instructions entirely. The operationalContract (state file path, working dir,
+   * delegation commands) is injected into the user prompt so the agent can still
+   * function without the default system prompt.
+   */
+  private buildFinalPrompts(
+    request: OrchestratorCreateRequest,
+    orchestration: Orchestration,
+    stateFilePath: string,
+    workingDirectory: string,
+    agent: string,
+  ): { finalSystemPrompt: string; finalUserPrompt: string } {
+    const {
+      systemPrompt: orchestratorSystemPrompt,
+      userPrompt,
+      operationalContract,
+    } = buildOrchestratorPrompt({
+      goal: request.goal,
+      stateFilePath,
+      workingDirectory,
+      maxDepth: orchestration.maxDepth,
+      maxWorkers: orchestration.maxWorkers,
+      agent,
+      model: orchestration.model,
+    });
+
+    const customSystemPrompt = request.systemPrompt?.trim();
+    const finalSystemPrompt = customSystemPrompt ?? orchestratorSystemPrompt;
+    const finalUserPrompt = customSystemPrompt
+      ? `${operationalContract}\n\n${userPrompt}`
+      : userPrompt;
+
+    return { finalSystemPrompt, finalUserPrompt };
   }
 
   async getOrchestration(id: OrchestratorId): Promise<Result<Orchestration>> {

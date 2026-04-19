@@ -53,15 +53,35 @@ export function buildOrchestratorPrompt(params: OrchestratorPromptParams): {
   const modelFlag = model ? ` --model ${model}` : '';
   const agentModelFlags = `${agentFlag}${modelFlag}`;
 
+  // ── Shared fragments ─────────────────────────────────────────────────────────
+  // Each appears verbatim in both systemPrompt and operationalContract so that
+  // updating one location keeps both in sync.
+
+  const stateFileSection = `STATE FILE: ${stateFilePath}
+Read this file at the START of every iteration to understand current progress.
+Write updated state BEFORE exiting each iteration.`;
+
+  const workingDirectorySection = `WORKING DIRECTORY: ${workingDirectory}`;
+
+  const delegationSection = `DELEGATION (via beat CLI):
+  Delegate work:    beat run${agentModelFlags} "<prompt>"
+  Check status:     beat status <task-id>
+  Read output:      beat logs <task-id>
+  Cancel:           beat cancel <task-id>`;
+
+  const constraintsSection = `CONSTRAINTS:
+- Max concurrent workers: ${maxWorkers}
+- Max delegation depth: ${maxDepth}`;
+
+  // ── Full system prompt ────────────────────────────────────────────────────────
+
   const systemPrompt = `ROLE: You are an autonomous software engineering orchestrator. You break down
 complex goals into subtasks, delegate to worker agents, monitor progress,
 and iterate until the goal is achieved.
 
-STATE FILE: ${stateFilePath}
-Read this file at the START of every iteration to understand current progress.
-Write updated state BEFORE exiting each iteration.
+${stateFileSection}
 
-WORKING DIRECTORY: ${workingDirectory}
+${workingDirectorySection}
 
 WORKER MANAGEMENT (via beat CLI):
   To delegate work:    beat run${agentModelFlags} "<prompt>"
@@ -92,9 +112,7 @@ AGENT EVAL MODE:
   For --strategy retry: evaluator last line must be "PASS" or "FAIL"
   For --strategy optimize: evaluator last line must be a numeric score
 
-CONSTRAINTS:
-- Max concurrent workers: ${maxWorkers}
-- Max delegation depth: ${maxDepth}
+${constraintsSection}
 - Prefer sequential work for tasks touching overlapping files
 - Max 3 workers modifying the same module simultaneously
 
@@ -135,28 +153,22 @@ RESILIENCE:
 
   const userPrompt = `YOUR GOAL:\n${goal}`;
 
-  // Minimal operational knowledge the agent needs to function, regardless of
-  // whether the user provides a custom systemPrompt. Extracted from the full
-  // system prompt above — covers state file, working dir, CLI commands, constraints.
+  // ── Operational contract ──────────────────────────────────────────────────────
+  // Minimal operational knowledge the agent needs to function when a custom
+  // systemPrompt replaces the auto-generated one. Built from the same shared
+  // fragments as systemPrompt above — covers state file, working dir, CLI
+  // commands, and constraints.
   const operationalContract = `REQUIRED — ORCHESTRATOR CONTRACT:
 
-STATE FILE: ${stateFilePath}
-Read this file at the START of every iteration to understand current progress.
-Write updated state BEFORE exiting each iteration.
+${stateFileSection}
 When the goal is complete, set status: "complete" in the state file.
 If you cannot achieve the goal, set status: "failed" with an explanation in the context field.
 
-WORKING DIRECTORY: ${workingDirectory}
+${workingDirectorySection}
 
-DELEGATION (via beat CLI):
-  Delegate work:    beat run${agentModelFlags} "<prompt>"
-  Check status:     beat status <task-id>
-  Read output:      beat logs <task-id>
-  Cancel:           beat cancel <task-id>
+${delegationSection}
 
-CONSTRAINTS:
-- Max concurrent workers: ${maxWorkers}
-- Max delegation depth: ${maxDepth}`;
+${constraintsSection}`;
 
   return { systemPrompt, userPrompt, operationalContract };
 }
