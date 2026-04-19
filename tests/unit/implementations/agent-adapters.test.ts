@@ -118,7 +118,6 @@ describe('ClaudeAdapter', () => {
       expect(spawnOptions.env.CLAUDE_CODE_SESSION).toBeUndefined();
       expect(spawnOptions.env.AUTOBEAT_WORKER).toBe('true');
     } finally {
-      // Restore env
       delete process.env.CLAUDECODE;
       delete process.env.CLAUDE_CODE_SESSION;
     }

@@ -943,10 +943,7 @@ describe('MCPAdapter - CreatePipeline Tool', () => {
 
   it('should pass per-step systemPrompt through to service', async () => {
     await simulateCreatePipeline(mockScheduleService, {
-      steps: [
-        { prompt: 'Step one', systemPrompt: 'You are a linter.' },
-        { prompt: 'Step two' },
-      ],
+      steps: [{ prompt: 'Step one', systemPrompt: 'You are a linter.' }, { prompt: 'Step two' }],
     });
 
     expect(mockScheduleService.createPipelineCalls).toHaveLength(1);
