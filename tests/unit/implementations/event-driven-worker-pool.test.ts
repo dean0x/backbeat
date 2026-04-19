@@ -875,6 +875,39 @@ describe('EventDrivenWorkerPool', () => {
       expect(cleanupFn).not.toHaveBeenCalled();
     });
 
+    it('should still fire cleanup after adapter is deregistered from registry post-spawn', async () => {
+      const cleanupFn = vi.fn();
+      const deregAdapter = {
+        provider: 'claude' as const,
+        spawn: vi.fn().mockReturnValue(ok({ process: mockProcess, pid: mockProcess.pid })),
+        kill: vi.fn().mockReturnValue(ok(undefined)),
+        cleanup: cleanupFn,
+        dispose: vi.fn(),
+      };
+      const deregRegistry = new InMemoryAgentRegistry([deregAdapter]);
+      const deregPool = new EventDrivenWorkerPool({
+        agentRegistry: deregRegistry,
+        monitor,
+        logger,
+        eventBus,
+        outputCapture,
+        workerRepository,
+        outputRepository,
+      });
+
+      const task = { ...buildTask(), systemPrompt: 'You are a helpful assistant.' } as Task;
+      await deregPool.spawn(task);
+
+      // Deregister the adapter after spawn — cleanup closure should still fire
+      deregRegistry.dispose();
+
+      mockProcess.emit('exit', 0);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(cleanupFn).toHaveBeenCalledOnce();
+      expect(cleanupFn).toHaveBeenCalledWith(task.id);
+    });
+
     it('should complete worker cleanup even if adapter cleanup() throws', async () => {
       const throwingAdapter = {
         provider: 'claude' as const,

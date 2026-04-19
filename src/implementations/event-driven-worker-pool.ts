@@ -26,6 +26,7 @@ import { ProcessConnector } from '../services/process-connector.js';
 interface WorkerState extends Worker {
   process: ChildProcess;
   task: Task;
+  cleanupFn?: (taskId: string) => void;
   timeoutTimer?: NodeJS.Timeout;
   heartbeatTimer?: NodeJS.Timeout;
 }
@@ -122,7 +123,14 @@ export class EventDrivenWorkerPool implements WorkerPool {
 
     const { process: childProcess, pid } = spawnResult.value;
 
-    const registerResult = this.registerWorker(task, childProcess, pid, agentProvider);
+    // Capture adapter cleanup at spawn time so cleanupWorkerState doesn't need
+    // a runtime registry lookup (P3: eliminates silent ?? 'claude' fallback and
+    // silent failure if registry is disposed after spawn).
+    const cleanupFn = task.systemPrompt
+      ? (taskId: string) => adapter.cleanup(taskId)
+      : undefined;
+
+    const registerResult = this.registerWorker(task, childProcess, pid, agentProvider, cleanupFn);
     if (!registerResult.ok) {
       return registerResult;
     }
@@ -243,6 +251,7 @@ export class EventDrivenWorkerPool implements WorkerPool {
     childProcess: ChildProcess,
     pid: number,
     agentProvider: string,
+    cleanupFn?: (taskId: string) => void,
   ): Result<WorkerState> {
     const workerId = WorkerId(`worker-${pid}`);
     const worker: WorkerState = {
@@ -254,6 +263,7 @@ export class EventDrivenWorkerPool implements WorkerPool {
       memoryUsage: 0,
       process: childProcess,
       task,
+      cleanupFn,
     };
 
     this.workers.set(workerId, worker);
@@ -301,20 +311,16 @@ export class EventDrivenWorkerPool implements WorkerPool {
       this.logger.error('Failed to unregister worker from DB', unregResult.error, { workerId });
     }
 
-    // Best-effort cleanup of task-scoped resources via the agent adapter (e.g. Gemini temp files).
-    // Only attempted when a system prompt was set — other agents and tasks without systemPrompt
-    // have nothing to clean up. Each adapter's cleanup() is a no-op by default.
-    if (worker?.task.systemPrompt) {
-      const agentResult = this.agentRegistry.get(worker.task.agent ?? 'claude');
-      if (agentResult.ok) {
-        try {
-          agentResult.value.cleanup(taskId);
-        } catch (cleanupErr) {
-          this.logger.warn('Adapter cleanup() threw — task-scoped resources may not be freed', {
-            taskId,
-            error: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
-          });
-        }
+    // Best-effort cleanup of task-scoped resources via the adapter closure captured at spawn time.
+    // Only present when task.systemPrompt was set — other tasks have nothing to clean up.
+    if (worker?.cleanupFn) {
+      try {
+        worker.cleanupFn(taskId);
+      } catch (cleanupErr) {
+        this.logger.warn('Adapter cleanup() threw — task-scoped resources may not be freed', {
+          taskId,
+          error: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
+        });
       }
     }
   }
