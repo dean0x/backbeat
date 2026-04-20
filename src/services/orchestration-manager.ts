@@ -8,7 +8,7 @@
 import { mkdirSync, unlinkSync } from 'fs';
 import os from 'os';
 import path from 'path';
-import { resolveDefaultAgent } from '../core/agents.js';
+import { type AgentProvider, resolveDefaultAgent } from '../core/agents.js';
 import type { Configuration } from '../core/configuration.js';
 import {
   createOrchestration,
@@ -302,7 +302,7 @@ export class OrchestrationManagerService implements OrchestrationService {
     orchestration: Orchestration,
     stateFilePath: string,
     workingDirectory: string,
-    agent: string,
+    agent: AgentProvider,
   ): { finalSystemPrompt: string; finalUserPrompt: string } {
     const {
       systemPrompt: orchestratorSystemPrompt,
@@ -319,7 +319,7 @@ export class OrchestrationManagerService implements OrchestrationService {
     });
 
     const customSystemPrompt = request.systemPrompt?.trim();
-    const finalSystemPrompt = customSystemPrompt ?? orchestratorSystemPrompt;
+    const finalSystemPrompt = customSystemPrompt || orchestratorSystemPrompt;
     const finalUserPrompt = customSystemPrompt ? `${operationalContract}\n\n${userPrompt}` : userPrompt;
 
     return { finalSystemPrompt, finalUserPrompt };

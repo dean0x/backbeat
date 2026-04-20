@@ -99,7 +99,6 @@ export const DelegateTaskSchema = z.object({
    * v1.3.0: JSON schema for structured output (Claude only).
    * DECISION: Passed through to TaskRequest unchanged — validation at boundary.
    * Why: Claude --json-schema enables deterministic structured responses.
-   * Max 16000 chars to stay well within typical schema sizes.
    */
   jsonSchema: z.string().optional().describe('JSON schema for structured output (Claude only)'),
   /**
@@ -250,6 +249,7 @@ const SchedulePipelineSchema = z.object({
         workingDirectory: z.string().optional().describe('Working directory override (absolute path)'),
         agent: z.enum(AGENT_PROVIDERS_TUPLE).optional().describe('Agent override for this step'),
         model: z.string().min(1).max(200).optional().describe('Model override for this step'),
+        systemPrompt: z.string().optional().describe('System prompt override for this step'),
       }),
     )
     .min(2, 'Pipeline requires at least 2 steps')
@@ -1101,6 +1101,10 @@ export class MCPAdapter {
                           description: 'Model override for this step',
                           minLength: 1,
                           maxLength: 200,
+                        },
+                        systemPrompt: {
+                          type: 'string',
+                          description: 'System prompt override for this step',
                         },
                       },
                       required: ['prompt'],
@@ -2406,6 +2410,7 @@ export class MCPAdapter {
         workingDirectory: s.workingDirectory,
         agent: s.agent as AgentProvider | undefined,
         model: s.model ?? data.model,
+        systemPrompt: s.systemPrompt ?? data.systemPrompt,
       })),
       scheduleType: data.scheduleType === 'cron' ? ScheduleType.CRON : ScheduleType.ONE_TIME,
       cronExpression: data.cronExpression,

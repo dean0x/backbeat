@@ -836,6 +836,32 @@ describe('ScheduleManagerService - Unit Tests', () => {
       expect(events[0].schedule.taskTemplate.model).toBe('claude-haiku-3');
       expect(events[1].schedule.taskTemplate.model).toBe('claude-opus-4-5');
     });
+
+    it('should thread shared systemPrompt to all steps as default', async () => {
+      const result = await service.createPipeline(pipelineRequest({ systemPrompt: 'Be concise' }));
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const events = eventBus.getEmittedEvents('ScheduleCreated');
+      for (const event of events) {
+        expect(event.schedule.taskTemplate.systemPrompt).toBe('Be concise');
+      }
+    });
+
+    it('should allow per-step systemPrompt override', async () => {
+      const result = await service.createPipeline({
+        steps: [{ prompt: 'Step one', systemPrompt: 'Step-specific' }, { prompt: 'Step two' }],
+        systemPrompt: 'Shared default',
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const events = eventBus.getEmittedEvents('ScheduleCreated');
+      expect(events[0].schedule.taskTemplate.systemPrompt).toBe('Step-specific');
+      expect(events[1].schedule.taskTemplate.systemPrompt).toBe('Shared default');
+    });
   });
 
   describe('createScheduledPipeline()', () => {
