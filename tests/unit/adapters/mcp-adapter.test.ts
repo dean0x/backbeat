@@ -27,6 +27,8 @@ import type {
   PipelineResult,
   PipelineStepRequest,
   Schedule,
+  ScheduleCreateRequest,
+  ScheduledLoopCreateRequest,
   ScheduledPipelineCreateRequest,
   Task,
   TaskRequest,
@@ -1251,6 +1253,8 @@ describe('MCPAdapter - SchedulePipeline & Enhanced Schedule Tools', () => {
  * Mock ScheduleService for CreatePipeline / SchedulePipeline testing
  */
 class MockScheduleService {
+  createScheduleCalls: ScheduleCreateRequest[] = [];
+  createScheduledLoopCalls: ScheduledLoopCreateRequest[] = [];
   createPipelineCalls: PipelineCreateRequest[] = [];
   createScheduledPipelineCalls: ScheduledPipelineCreateRequest[] = [];
   cancelScheduleCalls: Array<{ scheduleId: string; reason?: string; cancelTasks?: boolean }> = [];
@@ -1271,8 +1275,24 @@ class MockScheduleService {
   shouldFailListSchedules = false;
   shouldFailScheduleStatus = false;
 
-  async createSchedule() {
-    return ok(null);
+  async createSchedule(request: ScheduleCreateRequest) {
+    this.createScheduleCalls.push(request);
+    const now = Date.now();
+    return ok(
+      Object.freeze({
+        id: ScheduleId('schedule-mock-task'),
+        taskTemplate: { prompt: request.prompt, systemPrompt: request.systemPrompt },
+        scheduleType: request.scheduleType,
+        cronExpression: request.cronExpression,
+        timezone: request.timezone ?? 'UTC',
+        missedRunPolicy: request.missedRunPolicy ?? MissedRunPolicy.SKIP,
+        status: ScheduleStatus.ACTIVE,
+        runCount: 0,
+        nextRunAt: now + 60000,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
   }
 
   async listSchedules(): Promise<Result<readonly Schedule[]>> {
@@ -1339,16 +1359,21 @@ class MockScheduleService {
     });
   }
 
-  async createScheduledLoop(): Promise<Result<Schedule>> {
+  async createScheduledLoop(request: ScheduledLoopCreateRequest): Promise<Result<Schedule>> {
+    this.createScheduledLoopCalls.push(request);
     const now = Date.now();
     return ok(
       Object.freeze({
         id: ScheduleId('schedule-mock-loop'),
-        taskTemplate: { prompt: 'loop prompt', workingDirectory: '/tmp' },
-        scheduleType: ScheduleType.CRON,
-        cronExpression: '0 9 * * *',
-        timezone: 'UTC',
-        missedRunPolicy: MissedRunPolicy.SKIP,
+        taskTemplate: {
+          prompt: request.loopConfig.prompt ?? 'loop prompt',
+          workingDirectory: request.loopConfig.workingDirectory ?? '/tmp',
+          systemPrompt: request.loopConfig.systemPrompt,
+        },
+        scheduleType: request.scheduleType,
+        cronExpression: request.cronExpression ?? '0 9 * * *',
+        timezone: request.timezone ?? 'UTC',
+        missedRunPolicy: request.missedRunPolicy ?? MissedRunPolicy.SKIP,
         status: ScheduleStatus.ACTIVE,
         runCount: 0,
         nextRunAt: now + 60000,
@@ -2433,6 +2458,108 @@ describe('MCPAdapter - Loop Tools', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Validation error');
+    });
+  });
+
+  describe('Schedule tools systemPrompt passthrough via callTool()', () => {
+    it('should pass systemPrompt through ScheduleTask to service', async () => {
+      const scheduleService = new MockScheduleService();
+      const adapter = new MCPAdapter({
+        taskManager: new MockTaskManager(),
+        logger: new MockLogger(),
+        scheduleService,
+        loopService: mockLoopService,
+        agentRegistry: undefined,
+        config: testConfig,
+      });
+
+      const result = await adapter.callTool('ScheduleTask', {
+        prompt: 'Run daily check',
+        scheduleType: 'cron',
+        cronExpression: '0 9 * * *',
+        systemPrompt: 'You are a monitoring agent',
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(scheduleService.createScheduleCalls).toHaveLength(1);
+      expect(scheduleService.createScheduleCalls[0].systemPrompt).toBe('You are a monitoring agent');
+    });
+
+    it('should pass shared systemPrompt through SchedulePipeline to service', async () => {
+      const scheduleService = new MockScheduleService();
+      const adapter = new MCPAdapter({
+        taskManager: new MockTaskManager(),
+        logger: new MockLogger(),
+        scheduleService,
+        loopService: mockLoopService,
+        agentRegistry: undefined,
+        config: testConfig,
+      });
+
+      const result = await adapter.callTool('SchedulePipeline', {
+        steps: [{ prompt: 'Lint' }, { prompt: 'Test' }],
+        scheduleType: 'cron',
+        cronExpression: '0 9 * * *',
+        systemPrompt: 'Be thorough',
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(scheduleService.createScheduledPipelineCalls).toHaveLength(1);
+      expect(scheduleService.createScheduledPipelineCalls[0].systemPrompt).toBe('Be thorough');
+    });
+
+    it('should pass per-step systemPrompt through SchedulePipeline with shared fallback', async () => {
+      const scheduleService = new MockScheduleService();
+      const adapter = new MCPAdapter({
+        taskManager: new MockTaskManager(),
+        logger: new MockLogger(),
+        scheduleService,
+        loopService: mockLoopService,
+        agentRegistry: undefined,
+        config: testConfig,
+      });
+
+      const result = await adapter.callTool('SchedulePipeline', {
+        steps: [
+          { prompt: 'Lint', systemPrompt: 'Step-specific prompt' },
+          { prompt: 'Test' },
+        ],
+        scheduleType: 'cron',
+        cronExpression: '0 9 * * *',
+        systemPrompt: 'Shared default',
+      });
+
+      expect(result.isError).toBeFalsy();
+      const call = scheduleService.createScheduledPipelineCalls[0];
+      expect(call.steps[0].systemPrompt).toBe('Step-specific prompt');
+      expect(call.steps[1].systemPrompt).toBe('Shared default');
+    });
+
+    it('should pass systemPrompt through ScheduleLoop to service', async () => {
+      const scheduleService = new MockScheduleService();
+      const adapter = new MCPAdapter({
+        taskManager: new MockTaskManager(),
+        logger: new MockLogger(),
+        scheduleService,
+        loopService: mockLoopService,
+        agentRegistry: undefined,
+        config: testConfig,
+      });
+
+      const result = await adapter.callTool('ScheduleLoop', {
+        prompt: 'Fix tests',
+        strategy: 'retry',
+        exitCondition: 'npm test passes',
+        scheduleType: 'cron',
+        cronExpression: '0 9 * * *',
+        systemPrompt: 'Focus on unit tests only',
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(scheduleService.createScheduledLoopCalls).toHaveLength(1);
+      expect(scheduleService.createScheduledLoopCalls[0].loopConfig.systemPrompt).toBe(
+        'Focus on unit tests only',
+      );
     });
   });
 
