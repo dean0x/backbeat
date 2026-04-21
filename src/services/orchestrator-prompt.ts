@@ -7,6 +7,12 @@
  * DECISION: Separation enables proper prompt routing per agent's native mechanism
  * (e.g., --append-system-prompt for Claude). Callers that cannot use a system
  * prompt can concatenate: systemPrompt + "\n\n" + userPrompt.
+ *
+ * DECISION (2026-04-22): Three exported snippet builders (buildDelegationInstructions,
+ * buildStateManagementInstructions, buildConstraintInstructions) expose reusable text
+ * blocks for external callers (e.g., InitCustomOrchestrator). buildOrchestratorPrompt
+ * continues to use its own internal template variables — no risk of output drift.
+ * The snippet builders are pure functions with no side effects.
  */
 
 /**
@@ -26,6 +32,124 @@ export interface OrchestratorPromptParams {
   /** Model to thread through to worker delegation commands */
   readonly model?: string;
 }
+
+// ── Reusable snippet builder interfaces ────────────────────────────────────────
+
+/**
+ * Parameters for building delegation instruction snippets.
+ * Optional agent/model are threaded into beat CLI delegation examples.
+ */
+export interface DelegationInstructionParams {
+  readonly agent?: string;
+  readonly model?: string;
+}
+
+/**
+ * Parameters for building state management instruction snippets.
+ * stateFilePath is the absolute path to the orchestrator state JSON file.
+ */
+export interface StateManagementInstructionParams {
+  readonly stateFilePath: string;
+}
+
+/**
+ * Parameters for building constraint instruction snippets.
+ */
+export interface ConstraintInstructionParams {
+  readonly maxWorkers: number;
+  readonly maxDepth: number;
+}
+
+/**
+ * Build the full delegation instructions block.
+ * Covers WORKER MANAGEMENT + LOOP MANAGEMENT + AGENT EVAL MODE sections.
+ *
+ * DECISION: Returns the complete text for external callers (e.g. InitCustomOrchestrator)
+ * building custom orchestrators. Identical to what buildOrchestratorPrompt inlines —
+ * kept in sync as a single source of truth via this exported function.
+ */
+export function buildDelegationInstructions(params: DelegationInstructionParams): string {
+  const { agent, model } = params;
+  const agentFlag = agent ? ` --agent ${agent}` : '';
+  const modelFlag = model ? ` --model ${model}` : '';
+  const agentModelFlags = `${agentFlag}${modelFlag}`;
+
+  return `WORKER MANAGEMENT (via beat CLI):
+  To delegate work:    beat run${agentModelFlags} "<prompt>"
+    Returns task ID (detaches automatically, worker runs independently)
+  To check status:     beat status <task-id>
+  To read output:      beat logs <task-id>
+  To cancel a worker:  beat cancel <task-id>
+
+All commands share the same database. Workers persist across iterations.
+
+LOOP MANAGEMENT (iterative refinement via beat CLI):
+  Shell eval loop:
+    beat loop${agentModelFlags} "<prompt>" --until "npm test"
+    beat loop${agentModelFlags} "<prompt>" --eval "npm run score" --maximize
+  Agent eval loop (recommended for code quality goals):
+    beat loop${agentModelFlags} "<prompt>" --eval-mode agent --strategy retry
+    beat loop${agentModelFlags} "<prompt>" --eval-mode agent --strategy optimize
+    beat loop${agentModelFlags} "<prompt>" --eval-mode agent --strategy retry \\
+      --eval-prompt "Review the changes and output PASS if all tests pass and code quality is high, otherwise FAIL with an explanation."
+  Loop status:         beat loop status <loop-id> [--history]
+  Cancel loop:         beat loop cancel <loop-id>
+
+AGENT EVAL MODE:
+  Use --eval-mode agent when the exit condition requires judgment that cannot
+  be expressed as a shell exit code (e.g., code quality, design correctness,
+  test coverage adequacy). The evaluator agent reads the task output and git
+  diff, then returns PASS/FAIL (retry) or a numeric score (optimize).
+  For --strategy retry: evaluator last line must be "PASS" or "FAIL"
+  For --strategy optimize: evaluator last line must be a numeric score`;
+}
+
+/**
+ * Build the state management instructions block.
+ * Covers STATE FILE read/write requirements, completion/failure semantics,
+ * and resilience guidance.
+ *
+ * DECISION: Includes the full state management contract so external callers
+ * can embed it directly into a custom orchestrator system prompt without
+ * losing the completion/failure protocol or resilience guidance.
+ */
+export function buildStateManagementInstructions(params: StateManagementInstructionParams): string {
+  const { stateFilePath } = params;
+
+  return `STATE FILE: ${stateFilePath}
+Read this file at the START of every iteration to understand current progress.
+Write updated state BEFORE exiting each iteration.
+When the goal is complete, set status: "complete" in the state file.
+If you cannot achieve the goal, set status: "failed" with an explanation in the context field.
+
+RESILIENCE:
+- If the state file is missing or corrupted, reconstruct from active tasks
+  (run beat status for each known task ID, rebuild plan from results)
+- Always write the state file BEFORE exiting -- the system reads it to
+  determine if the goal is complete
+- If you cannot achieve the goal, write status: "failed" with an explanation
+  in the context field. The system will terminate after a few iterations.`;
+}
+
+/**
+ * Build the constraints instructions block.
+ * Covers max workers, max depth, and file-conflict guidance.
+ *
+ * DECISION: Includes additional qualitative constraints (sequential work for
+ * overlapping files, per-module worker cap) alongside the numeric limits
+ * so the snippet is self-contained for custom orchestrator prompts.
+ */
+export function buildConstraintInstructions(params: ConstraintInstructionParams): string {
+  const { maxWorkers, maxDepth } = params;
+
+  return `CONSTRAINTS:
+- Max concurrent workers: ${maxWorkers}
+- Max delegation depth: ${maxDepth}
+- Prefer sequential work for tasks touching overlapping files
+- Max 3 workers modifying the same module simultaneously`;
+}
+
+// ── Main prompt builder ────────────────────────────────────────────────────────
 
 /**
  * Build the orchestrator agent prompts
