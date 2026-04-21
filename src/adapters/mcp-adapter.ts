@@ -38,6 +38,7 @@ import {
   TaskRequest,
 } from '../core/domain.js';
 import { Logger, LoopService, OrchestrationService, ScheduleService, TaskManager } from '../core/interfaces.js';
+import { scaffoldCustomOrchestrator } from '../core/orchestrator-scaffold.js';
 import { match } from '../core/result.js';
 import { toMissedRunPolicy, toOptimizeDirection, truncatePrompt } from '../utils/format.js';
 import { validatePath } from '../utils/validation.js';
@@ -324,6 +325,22 @@ const ListOrchestratorsSchema = z.object({
 const CancelOrchestratorSchema = z.object({
   orchestratorId: z.string().describe('Orchestrator ID to cancel'),
   reason: z.string().optional().describe('Reason for cancellation'),
+});
+
+/**
+ * DECISION: Single tool returns everything needed for a custom orchestrator
+ * (state file + exit script + instruction snippets). Not split into separate
+ * tools because these are always needed together — splitting would add
+ * roundtrips without benefit. See InitCustomOrchestrator for building custom
+ * orchestrators from scratch; CreateOrchestrator uses a pre-built system prompt.
+ */
+const InitCustomOrchestratorSchema = z.object({
+  goal: z.string().min(1).describe('High-level goal for the custom orchestrator'),
+  workingDirectory: z.string().optional().describe('Working directory (absolute path, default: server cwd)'),
+  agent: z.enum(AGENT_PROVIDERS_TUPLE).optional().describe('AI agent for delegation commands'),
+  model: z.string().min(1).max(200).optional().describe('Model for delegation commands'),
+  maxWorkers: z.number().min(1).max(20).optional().describe('Max concurrent workers (1-20, default: 5)'),
+  maxDepth: z.number().min(1).max(10).optional().describe('Max delegation depth (1-10, default: 3)'),
 });
 
 const ConfigureAgentSchema = z.object({
@@ -617,6 +634,8 @@ export class MCPAdapter {
         return await this.handleListOrchestrators(args);
       case 'CancelOrchestrator':
         return await this.handleCancelOrchestrator(args);
+      case 'InitCustomOrchestrator':
+        return this.handleInitCustomOrchestrator(args);
       case 'ConfigureAgent':
         return this.handleConfigureAgent(args);
       default:
@@ -1560,6 +1579,49 @@ export class MCPAdapter {
                   },
                 },
                 required: ['orchestratorId'],
+              },
+            },
+            {
+              name: 'InitCustomOrchestrator',
+              description:
+                'Initialize scaffolding for a custom orchestrator — creates a state file, exit condition script, and returns reusable instruction snippets. Use the output with CreateLoop to build a custom orchestration pattern.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  goal: {
+                    type: 'string',
+                    description: 'High-level goal for the custom orchestrator',
+                    minLength: 1,
+                  },
+                  workingDirectory: {
+                    type: 'string',
+                    description: 'Working directory (absolute path, default: server cwd)',
+                  },
+                  agent: {
+                    type: 'string',
+                    enum: [...AGENT_PROVIDERS],
+                    description: 'AI agent for delegation commands',
+                  },
+                  model: {
+                    type: 'string',
+                    description: 'Model for delegation commands',
+                    minLength: 1,
+                    maxLength: 200,
+                  },
+                  maxWorkers: {
+                    type: 'number',
+                    description: 'Max concurrent workers (1-20, default: 5)',
+                    minimum: 1,
+                    maximum: 20,
+                  },
+                  maxDepth: {
+                    type: 'number',
+                    description: 'Max delegation depth (1-10, default: 3)',
+                    minimum: 1,
+                    maximum: 10,
+                  },
+                },
+                required: ['goal'],
               },
             },
             {
@@ -3154,6 +3216,116 @@ export class MCPAdapter {
       return 'Warning: Claude requires an API key when using a custom baseUrl. The base URL will be ignored with login-based auth.';
     }
     return undefined;
+  }
+
+  /**
+   * Handle InitCustomOrchestrator tool call.
+   * Creates state file + exit condition script, returns instruction snippets.
+   *
+   * DECISION: Synchronous handler — all I/O is synchronous (fs.writeFileSync,
+   * fs.mkdirSync) and string generation is pure. No event bus or DB access needed.
+   * Follows ConfigureAgent precedent for stateless file creation + string generation.
+   */
+  private handleInitCustomOrchestrator(args: unknown): MCPToolResponse {
+    const parseResult = InitCustomOrchestratorSchema.safeParse(args);
+    if (!parseResult.success) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify(
+              {
+                success: false,
+                error: parseResult.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; '),
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const data = parseResult.data;
+
+    // SECURITY: Validate workingDirectory if provided (defense-in-depth)
+    if (data.workingDirectory) {
+      const pathResult = validatePath(data.workingDirectory, undefined, true);
+      if (!pathResult.ok) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(
+                { success: false, error: `Invalid working directory: ${pathResult.error.message}` },
+                null,
+                2,
+              ),
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+
+    const workingDirectory = data.workingDirectory ?? process.cwd();
+    const result = scaffoldCustomOrchestrator({
+      goal: data.goal,
+      workingDirectory,
+      agent: data.agent,
+      model: data.model,
+      maxWorkers: data.maxWorkers,
+      maxDepth: data.maxDepth,
+    });
+
+    if (!result.ok) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({ success: false, error: result.error.message }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const scaffold = result.value;
+    const agentFlag = data.agent ? ` --agent ${data.agent}` : '';
+    const modelFlag = data.model ? ` --model ${data.model}` : '';
+
+    const usage = [
+      'CreateLoop with:',
+      '  prompt: "<your orchestrator prompt>"',
+      '  strategy: "retry"',
+      `  exitCondition: "${scaffold.suggestedExitCondition}"`,
+      '  systemPrompt: "<include delegation + state management + constraints instructions>"',
+      `  workingDirectory: "${workingDirectory}"`,
+      ...(data.agent ? [`  agent: "${data.agent}"`] : []),
+      ...(data.model ? [`  model: "${data.model}"`] : []),
+    ].join('\n');
+
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(
+            {
+              success: true,
+              stateFilePath: scaffold.stateFilePath,
+              exitConditionScript: scaffold.exitConditionScript,
+              suggestedExitCondition: scaffold.suggestedExitCondition,
+              instructions: scaffold.instructions,
+              agentFlags: `${agentFlag}${modelFlag}`.trim() || undefined,
+              usage,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+    };
   }
 
   /**
