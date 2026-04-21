@@ -26,7 +26,6 @@ import { type Result, tryCatch } from './result.js';
 
 export interface ScaffoldParams {
   readonly goal: string;
-  readonly workingDirectory: string;
   readonly agent?: string;
   readonly model?: string;
   readonly maxWorkers?: number;
@@ -58,7 +57,7 @@ export interface ScaffoldResult {
  */
 export function scaffoldCustomOrchestrator(params: ScaffoldParams): Result<ScaffoldResult> {
   return tryCatch(() => {
-    const { goal, workingDirectory, agent, model, maxWorkers = 5, maxDepth = 3 } = params;
+    const { goal, agent, model, maxWorkers = 5, maxDepth = 3 } = params;
 
     const stateDir = getStateDir();
     const filename = `state-${Date.now()}-${randomUUID().substring(0, 8)}.json`;

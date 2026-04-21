@@ -3272,7 +3272,6 @@ export class MCPAdapter {
     const workingDirectory = data.workingDirectory ?? process.cwd();
     const result = scaffoldCustomOrchestrator({
       goal: data.goal,
-      workingDirectory,
       agent: data.agent,
       model: data.model,
       maxWorkers: data.maxWorkers,

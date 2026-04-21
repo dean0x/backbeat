@@ -587,7 +587,6 @@ function handleOrchestrateInit(parsed: OrchestrateInitParsed): void {
   const workingDirectory = parsed.workingDirectory ?? process.cwd();
   const result = scaffoldCustomOrchestrator({
     goal: parsed.goal,
-    workingDirectory,
     agent: parsed.agent,
     model: parsed.model,
     maxWorkers: parsed.maxWorkers,

@@ -36,7 +36,6 @@ describe('scaffoldCustomOrchestrator', () => {
   it('returns ok result with all required fields', () => {
     const result = scaffoldCustomOrchestrator({
       goal: 'Build auth system',
-      workingDirectory: '/workspace',
     });
 
     expect(result.ok).toBe(true);
@@ -53,7 +52,6 @@ describe('scaffoldCustomOrchestrator', () => {
   it('creates state file on disk with initial content', () => {
     const result = scaffoldCustomOrchestrator({
       goal: 'Test goal',
-      workingDirectory: '/workspace',
     });
 
     expect(result.ok).toBe(true);
@@ -75,7 +73,6 @@ describe('scaffoldCustomOrchestrator', () => {
   it('creates exit condition script on disk', () => {
     const result = scaffoldCustomOrchestrator({
       goal: 'Test goal',
-      workingDirectory: '/workspace',
     });
 
     expect(result.ok).toBe(true);
@@ -91,7 +88,6 @@ describe('scaffoldCustomOrchestrator', () => {
   it('suggestedExitCondition is "node <scriptPath>"', () => {
     const result = scaffoldCustomOrchestrator({
       goal: 'Test goal',
-      workingDirectory: '/workspace',
     });
 
     expect(result.ok).toBe(true);
@@ -103,7 +99,6 @@ describe('scaffoldCustomOrchestrator', () => {
   it('defaults maxWorkers to 5 and maxDepth to 3 in constraints snippet', () => {
     const result = scaffoldCustomOrchestrator({
       goal: 'Test goal',
-      workingDirectory: '/workspace',
     });
 
     expect(result.ok).toBe(true);
@@ -116,7 +111,6 @@ describe('scaffoldCustomOrchestrator', () => {
   it('respects explicit maxWorkers and maxDepth', () => {
     const result = scaffoldCustomOrchestrator({
       goal: 'Test goal',
-      workingDirectory: '/workspace',
       maxWorkers: 10,
       maxDepth: 2,
     });
@@ -131,7 +125,6 @@ describe('scaffoldCustomOrchestrator', () => {
   it('threads agent flag into delegation snippet', () => {
     const result = scaffoldCustomOrchestrator({
       goal: 'Test goal',
-      workingDirectory: '/workspace',
       agent: 'claude',
     });
 
@@ -144,7 +137,6 @@ describe('scaffoldCustomOrchestrator', () => {
   it('threads model flag into delegation snippet', () => {
     const result = scaffoldCustomOrchestrator({
       goal: 'Test goal',
-      workingDirectory: '/workspace',
       model: 'claude-opus-4-5',
     });
 
@@ -157,7 +149,6 @@ describe('scaffoldCustomOrchestrator', () => {
   it('threads both agent and model flags into delegation snippet', () => {
     const result = scaffoldCustomOrchestrator({
       goal: 'Test goal',
-      workingDirectory: '/workspace',
       agent: 'gemini',
       model: 'gemini-2.5-pro',
     });
@@ -171,7 +162,6 @@ describe('scaffoldCustomOrchestrator', () => {
   it('includes state file path in state management snippet', () => {
     const result = scaffoldCustomOrchestrator({
       goal: 'Test goal',
-      workingDirectory: '/workspace',
     });
 
     expect(result.ok).toBe(true);
@@ -181,8 +171,8 @@ describe('scaffoldCustomOrchestrator', () => {
   });
 
   it('generates unique state files for concurrent calls', () => {
-    const result1 = scaffoldCustomOrchestrator({ goal: 'Goal 1', workingDirectory: '/workspace' });
-    const result2 = scaffoldCustomOrchestrator({ goal: 'Goal 2', workingDirectory: '/workspace' });
+    const result1 = scaffoldCustomOrchestrator({ goal: 'Goal 1' });
+    const result2 = scaffoldCustomOrchestrator({ goal: 'Goal 2' });
 
     expect(result1.ok).toBe(true);
     expect(result2.ok).toBe(true);
@@ -197,7 +187,7 @@ describe('scaffoldCustomOrchestrator', () => {
     // We verify this by calling with valid input — the Result type is always returned.
     // Testing the error branch via module mocking is avoided here because vitest's
     // isolate:false config causes doMock() to pollute the module cache across files.
-    const result = scaffoldCustomOrchestrator({ goal: 'Test', workingDirectory: '/workspace' });
+    const result = scaffoldCustomOrchestrator({ goal: 'Test' });
     expect(typeof result).toBe('object');
     expect('ok' in result).toBe(true);
   });
