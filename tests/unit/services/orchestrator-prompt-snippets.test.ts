@@ -138,6 +138,160 @@ describe('buildConstraintInstructions', () => {
   });
 });
 
+describe('snippet-vs-prompt drift detection', () => {
+  // Guards against the snippet builders and buildOrchestratorPrompt accidentally
+  // diverging on the key markers that callers depend on. Design keeps them separate
+  // (intentional); this test ensures their shared conceptual content stays in sync.
+
+  const stateFilePath = '/home/user/.autobeat/orchestrator-state/state-drift.json';
+  const maxWorkers = 8;
+  const maxDepth = 4;
+
+  it('buildDelegationInstructions and systemPrompt share beat CLI command markers', () => {
+    const snippet = buildDelegationInstructions({});
+    const { systemPrompt } = buildOrchestratorPrompt({
+      goal: 'drift test',
+      stateFilePath,
+      workingDirectory: '/workspace',
+      maxDepth,
+      maxWorkers,
+    });
+
+    const sharedMarkers = [
+      'beat run',
+      'beat status',
+      'beat logs',
+      'beat cancel',
+      'beat loop',
+      '--eval-mode agent',
+    ];
+
+    for (const marker of sharedMarkers) {
+      expect(snippet, `snippet missing marker: "${marker}"`).toContain(marker);
+      expect(systemPrompt, `systemPrompt missing marker: "${marker}"`).toContain(marker);
+    }
+  });
+
+  it('buildDelegationInstructions and operationalContract share beat CLI command markers', () => {
+    const snippet = buildDelegationInstructions({});
+    const { operationalContract } = buildOrchestratorPrompt({
+      goal: 'drift test',
+      stateFilePath,
+      workingDirectory: '/workspace',
+      maxDepth,
+      maxWorkers,
+    });
+
+    // operationalContract uses a condensed delegation block — verify the core commands
+    const sharedMarkers = ['beat run', 'beat status', 'beat logs', 'beat cancel'];
+
+    for (const marker of sharedMarkers) {
+      expect(snippet, `snippet missing marker: "${marker}"`).toContain(marker);
+      expect(operationalContract, `operationalContract missing marker: "${marker}"`).toContain(marker);
+    }
+  });
+
+  it('buildStateManagementInstructions and operationalContract share state-file markers', () => {
+    const snippet = buildStateManagementInstructions({ stateFilePath });
+    const { operationalContract } = buildOrchestratorPrompt({
+      goal: 'drift test',
+      stateFilePath,
+      workingDirectory: '/workspace',
+      maxDepth,
+      maxWorkers,
+    });
+
+    const sharedMarkers = [stateFilePath, 'status: "complete"', 'status: "failed"'];
+
+    for (const marker of sharedMarkers) {
+      expect(snippet, `snippet missing marker: "${marker}"`).toContain(marker);
+      expect(operationalContract, `operationalContract missing marker: "${marker}"`).toContain(marker);
+    }
+  });
+
+  it('buildStateManagementInstructions and systemPrompt share state-file markers', () => {
+    const snippet = buildStateManagementInstructions({ stateFilePath });
+    const { systemPrompt } = buildOrchestratorPrompt({
+      goal: 'drift test',
+      stateFilePath,
+      workingDirectory: '/workspace',
+      maxDepth,
+      maxWorkers,
+    });
+
+    const sharedMarkers = [stateFilePath, 'status: "complete"', 'status: "failed"'];
+
+    for (const marker of sharedMarkers) {
+      expect(snippet, `snippet missing marker: "${marker}"`).toContain(marker);
+      expect(systemPrompt, `systemPrompt missing marker: "${marker}"`).toContain(marker);
+    }
+  });
+
+  it('buildConstraintInstructions and systemPrompt share constraint markers', () => {
+    const snippet = buildConstraintInstructions({ maxWorkers, maxDepth });
+    const { systemPrompt } = buildOrchestratorPrompt({
+      goal: 'drift test',
+      stateFilePath,
+      workingDirectory: '/workspace',
+      maxDepth,
+      maxWorkers,
+    });
+
+    const sharedMarkers = [
+      `Max concurrent workers: ${maxWorkers}`,
+      `Max delegation depth: ${maxDepth}`,
+    ];
+
+    for (const marker of sharedMarkers) {
+      expect(snippet, `snippet missing marker: "${marker}"`).toContain(marker);
+      expect(systemPrompt, `systemPrompt missing marker: "${marker}"`).toContain(marker);
+    }
+  });
+
+  it('buildConstraintInstructions and operationalContract share constraint markers', () => {
+    const snippet = buildConstraintInstructions({ maxWorkers, maxDepth });
+    const { operationalContract } = buildOrchestratorPrompt({
+      goal: 'drift test',
+      stateFilePath,
+      workingDirectory: '/workspace',
+      maxDepth,
+      maxWorkers,
+    });
+
+    const sharedMarkers = [
+      `Max concurrent workers: ${maxWorkers}`,
+      `Max delegation depth: ${maxDepth}`,
+    ];
+
+    for (const marker of sharedMarkers) {
+      expect(snippet, `snippet missing marker: "${marker}"`).toContain(marker);
+      expect(operationalContract, `operationalContract missing marker: "${marker}"`).toContain(marker);
+    }
+  });
+
+  it('agent/model flags thread consistently across snippet builders and buildOrchestratorPrompt', () => {
+    const agent = 'codex';
+    const model = 'o4-mini';
+
+    const snippet = buildDelegationInstructions({ agent, model });
+    const { systemPrompt, operationalContract } = buildOrchestratorPrompt({
+      goal: 'drift test',
+      stateFilePath,
+      workingDirectory: '/workspace',
+      maxDepth,
+      maxWorkers,
+      agent,
+      model,
+    });
+
+    const flagMarker = `--agent ${agent} --model ${model}`;
+
+    expect(snippet, `snippet missing agent/model flags`).toContain(flagMarker);
+    expect(systemPrompt, `systemPrompt missing agent/model flags`).toContain(flagMarker);
+    expect(operationalContract, `operationalContract missing agent/model flags`).toContain(flagMarker);
+  });
+});
+
 describe('buildOrchestratorPrompt - non-regression snapshot', () => {
   // This test verifies that the refactoring did NOT change the output of
   // buildOrchestratorPrompt. The three snippet builders are new exports;
