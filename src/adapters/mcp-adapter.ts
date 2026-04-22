@@ -38,6 +38,7 @@ import {
   TaskRequest,
 } from '../core/domain.js';
 import { Logger, LoopService, OrchestrationService, ScheduleService, TaskManager } from '../core/interfaces.js';
+import { scaffoldCustomOrchestrator } from '../core/orchestrator-scaffold.js';
 import { match } from '../core/result.js';
 import { toMissedRunPolicy, toOptimizeDirection, truncatePrompt } from '../utils/format.js';
 import { validatePath } from '../utils/validation.js';
@@ -45,6 +46,15 @@ import { MCP_INSTRUCTIONS } from './mcp-instructions.js';
 
 // Zod schemas for MCP protocol validation
 // Exported for unit-testing schema validation independently of the MCP protocol layer
+
+// Reusable model schema — enforces safe characters to prevent shell injection via agent flags.
+// Pattern: letters, digits, dots, underscores, and hyphens only (e.g. "claude-opus-4-5").
+const modelSchema = z
+  .string()
+  .min(1)
+  .max(200)
+  .regex(/^[a-zA-Z0-9._-]+$/, 'Model name must contain only letters, digits, dots, underscores, and hyphens');
+
 export const DelegateTaskSchema = z.object({
   prompt: z.string().min(1),
   priority: z.enum(['P0', 'P1', 'P2']).optional(),
@@ -63,12 +73,7 @@ export const DelegateTaskSchema = z.object({
     .enum(AGENT_PROVIDERS_TUPLE)
     .optional()
     .describe('AI agent to execute the task (uses configured default if omitted)'),
-  model: z
-    .string()
-    .min(1)
-    .max(200)
-    .optional()
-    .describe('Model override for this task (overrides agent-config default)'),
+  model: modelSchema.optional().describe('Model override for this task (overrides agent-config default)'),
   /**
    * v1.3.0: Orchestration attribution metadata.
    * IMPORTANT (Risk #8): This is intentionally per-request metadata, NOT an env var.
@@ -160,12 +165,7 @@ const ScheduleTaskSchema = z.object({
     .enum(AGENT_PROVIDERS_TUPLE)
     .optional()
     .describe('AI agent to execute the task (uses configured default if omitted)'),
-  model: z
-    .string()
-    .min(1)
-    .max(200)
-    .optional()
-    .describe('Model override for this task (overrides agent-config default)'),
+  model: modelSchema.optional().describe('Model override for this task (overrides agent-config default)'),
   /**
    * System prompt injected into the agent on every scheduled run.
    * Per-agent mechanism: Claude --append-system-prompt, Codex -c developer_instructions,
@@ -217,7 +217,7 @@ const CreatePipelineSchema = z.object({
         priority: z.enum(['P0', 'P1', 'P2']).optional().describe('Priority override for this step'),
         workingDirectory: z.string().optional().describe('Working directory override (absolute path)'),
         agent: z.enum(AGENT_PROVIDERS_TUPLE).optional().describe('Agent override for this step'),
-        model: z.string().min(1).max(200).optional().describe('Model override for this step'),
+        model: modelSchema.optional().describe('Model override for this step'),
         systemPrompt: z.string().optional().describe('System prompt override for this step'),
       }),
     )
@@ -236,7 +236,7 @@ const CreatePipelineSchema = z.object({
     .enum(AGENT_PROVIDERS_TUPLE)
     .optional()
     .describe('Default agent for all steps (individual steps can override)'),
-  model: z.string().min(1).max(200).optional().describe('Default model for all steps (individual steps can override)'),
+  model: modelSchema.optional().describe('Default model for all steps (individual steps can override)'),
   systemPrompt: z.string().optional().describe('Default system prompt for all steps (individual steps can override)'),
 });
 
@@ -248,7 +248,7 @@ const SchedulePipelineSchema = z.object({
         priority: z.enum(['P0', 'P1', 'P2']).optional().describe('Priority override for this step'),
         workingDirectory: z.string().optional().describe('Working directory override (absolute path)'),
         agent: z.enum(AGENT_PROVIDERS_TUPLE).optional().describe('Agent override for this step'),
-        model: z.string().min(1).max(200).optional().describe('Model override for this step'),
+        model: modelSchema.optional().describe('Model override for this step'),
         systemPrompt: z.string().optional().describe('System prompt override for this step'),
       }),
     )
@@ -272,7 +272,7 @@ const SchedulePipelineSchema = z.object({
     .enum(AGENT_PROVIDERS_TUPLE)
     .optional()
     .describe('Default agent for all steps (individual steps can override)'),
-  model: z.string().min(1).max(200).optional().describe('Default model for all steps (individual steps can override)'),
+  model: modelSchema.optional().describe('Default model for all steps (individual steps can override)'),
   /**
    * System prompt injected into every step task agent on each scheduled trigger.
    * Per-agent mechanism: Claude --append-system-prompt, Codex -c developer_instructions,
@@ -291,12 +291,7 @@ const CreateOrchestratorSchema = z.object({
   goal: z.string().min(1).describe('High-level goal for the orchestrator to achieve'),
   workingDirectory: z.string().optional().describe('Working directory for workers (absolute path)'),
   agent: z.enum(AGENT_PROVIDERS_TUPLE).optional().describe('AI agent for the orchestrator loop'),
-  model: z
-    .string()
-    .min(1)
-    .max(200)
-    .optional()
-    .describe('Model override for the orchestrator (overrides agent-config default)'),
+  model: modelSchema.optional().describe('Model override for the orchestrator (overrides agent-config default)'),
   maxDepth: z.number().min(1).max(10).optional().default(3).describe('Max delegation depth'),
   maxWorkers: z.number().min(1).max(20).optional().default(5).describe('Max concurrent workers'),
   maxIterations: z.number().min(1).max(200).optional().default(50).describe('Max orchestrator iterations'),
@@ -304,6 +299,7 @@ const CreateOrchestratorSchema = z.object({
    * Custom system prompt for the orchestrator agent.
    * DECISION: When provided, replaces the auto-generated role instructions entirely —
    * appending would create confusing duplication (two conflicting ROLE sections).
+   * See InitCustomOrchestrator for building custom orchestrators from scratch.
    */
   systemPrompt: z
     .string()
@@ -326,6 +322,22 @@ const CancelOrchestratorSchema = z.object({
   reason: z.string().optional().describe('Reason for cancellation'),
 });
 
+/**
+ * DECISION: Single tool returns everything needed for a custom orchestrator
+ * (state file + exit script + instruction snippets). Not split into separate
+ * tools because these are always needed together — splitting would add
+ * roundtrips without benefit. See InitCustomOrchestrator for building custom
+ * orchestrators from scratch; CreateOrchestrator uses a pre-built system prompt.
+ */
+const InitCustomOrchestratorSchema = z.object({
+  goal: z.string().min(1).describe('High-level goal for the custom orchestrator'),
+  workingDirectory: z.string().optional().describe('Working directory (absolute path, default: server cwd)'),
+  agent: z.enum(AGENT_PROVIDERS_TUPLE).optional().describe('AI agent for delegation commands'),
+  model: modelSchema.optional().describe('Model for delegation commands'),
+  maxWorkers: z.number().min(1).max(20).optional().describe('Max concurrent workers (1-20, default: 5)'),
+  maxDepth: z.number().min(1).max(10).optional().describe('Max delegation depth (1-10, default: 3)'),
+});
+
 const ConfigureAgentSchema = z.object({
   agent: z.enum(AGENT_PROVIDERS_TUPLE).describe('Agent provider to configure'),
   action: z
@@ -334,7 +346,7 @@ const ConfigureAgentSchema = z.object({
     .describe('Action: set config values, check auth status, or reset all stored config'),
   apiKey: z.string().min(1).optional().describe('API key to store (set action)'),
   baseUrl: z.string().url().optional().describe('Base URL override (set action, e.g. https://proxy.example.com/v1)'),
-  model: z.string().min(1).max(200).optional().describe('Default model override for this agent (set action)'),
+  model: modelSchema.optional().describe('Default model override for this agent (set action)'),
 });
 
 // Loop-related Zod schemas (v0.7.0 Task/Pipeline Loops)
@@ -377,12 +389,7 @@ const CreateLoopSchema = z.object({
     .describe('Pipeline step prompts (creates pipeline loop)'),
   priority: z.enum(['P0', 'P1', 'P2']).optional().describe('Task priority'),
   agent: z.enum(AGENT_PROVIDERS_TUPLE).optional().describe('Agent provider'),
-  model: z
-    .string()
-    .min(1)
-    .max(200)
-    .optional()
-    .describe('Model override for each iteration task (overrides agent-config default)'),
+  model: modelSchema.optional().describe('Model override for each iteration task (overrides agent-config default)'),
   gitBranch: z.string().optional().describe('Git branch name for loop iteration work'),
   /**
    * v1.3.0: Agent eval sub-strategy.
@@ -464,12 +471,7 @@ const ScheduleLoopSchema = z.object({
   gitBranch: z.string().optional().describe('Git branch name for loop iteration work'),
   priority: z.enum(['P0', 'P1', 'P2']).optional().describe('Task priority'),
   agent: z.enum(AGENT_PROVIDERS_TUPLE).optional().describe('Agent provider'),
-  model: z
-    .string()
-    .min(1)
-    .max(200)
-    .optional()
-    .describe('Model override for each iteration task (overrides agent-config default)'),
+  model: modelSchema.optional().describe('Model override for each iteration task (overrides agent-config default)'),
   // Schedule fields
   scheduleType: z.enum(['cron', 'one_time']).describe('Schedule type'),
   cronExpression: z.string().optional().describe('Cron expression (5-field) for recurring loops'),
@@ -617,13 +619,15 @@ export class MCPAdapter {
         return await this.handleListOrchestrators(args);
       case 'CancelOrchestrator':
         return await this.handleCancelOrchestrator(args);
+      case 'InitCustomOrchestrator':
+        return this.handleInitCustomOrchestrator(args);
       case 'ConfigureAgent':
         return this.handleConfigureAgent(args);
       default:
         return {
           content: [
             {
-              type: 'text' as const,
+              type: 'text',
               text: JSON.stringify({ error: `Unknown tool: ${name}`, code: 'INVALID_TOOL' }, null, 2),
             },
           ],
@@ -1560,6 +1564,49 @@ export class MCPAdapter {
                   },
                 },
                 required: ['orchestratorId'],
+              },
+            },
+            {
+              name: 'InitCustomOrchestrator',
+              description:
+                'Initialize scaffolding for a custom orchestrator — creates a state file, exit condition script, and returns reusable instruction snippets. Use the output with CreateLoop to build a custom orchestration pattern.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  goal: {
+                    type: 'string',
+                    description: 'High-level goal for the custom orchestrator',
+                    minLength: 1,
+                  },
+                  workingDirectory: {
+                    type: 'string',
+                    description: 'Working directory (absolute path, default: server cwd)',
+                  },
+                  agent: {
+                    type: 'string',
+                    enum: [...AGENT_PROVIDERS],
+                    description: 'AI agent for delegation commands',
+                  },
+                  model: {
+                    type: 'string',
+                    description: 'Model for delegation commands',
+                    minLength: 1,
+                    maxLength: 200,
+                  },
+                  maxWorkers: {
+                    type: 'number',
+                    description: 'Max concurrent workers (1-20, default: 5)',
+                    minimum: 1,
+                    maximum: 20,
+                  },
+                  maxDepth: {
+                    type: 'number',
+                    description: 'Max delegation depth (1-10, default: 3)',
+                    minimum: 1,
+                    maximum: 10,
+                  },
+                },
+                required: ['goal'],
               },
             },
             {
@@ -3154,6 +3201,101 @@ export class MCPAdapter {
       return 'Warning: Claude requires an API key when using a custom baseUrl. The base URL will be ignored with login-based auth.';
     }
     return undefined;
+  }
+
+  /**
+   * Handle InitCustomOrchestrator tool call.
+   * Creates state file + exit condition script, returns instruction snippets.
+   *
+   * DECISION: Synchronous handler — all I/O is synchronous (fs.writeFileSync,
+   * fs.mkdirSync) and string generation is pure. No event bus or DB access needed.
+   * Follows ConfigureAgent precedent for stateless file creation + string generation.
+   */
+  private handleInitCustomOrchestrator(args: unknown): MCPToolResponse {
+    const parseResult = InitCustomOrchestratorSchema.safeParse(args);
+    if (!parseResult.success) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: false,
+                error: parseResult.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; '),
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const data = parseResult.data;
+
+    // DECISION: workingDirectory is NOT validated with validatePath here. The value is only
+    // embedded in the output usage text (the CreateLoop snippet) — it is never used for file
+    // I/O. validatePath enforces a cwd-relative traversal check that rejects absolute paths
+    // outside the server cwd, which would incorrectly reject all valid working directories.
+    // Handlers that actually write to the path (DelegateTask, CreateOrchestrator) validate it;
+    // this handler has no such I/O so validation adds user friction with no security benefit.
+    const workingDirectory = data.workingDirectory ?? process.cwd();
+    const result = scaffoldCustomOrchestrator({
+      goal: data.goal,
+      agent: data.agent,
+      model: data.model,
+      maxWorkers: data.maxWorkers,
+      maxDepth: data.maxDepth,
+    });
+
+    if (!result.ok) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ success: false, error: result.error.message }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const scaffold = result.value;
+    const agentFlag = data.agent ? ` --agent ${data.agent}` : '';
+    const modelFlag = data.model ? ` --model ${data.model}` : '';
+
+    const usage = [
+      'CreateLoop with:',
+      '  prompt: "<your orchestrator prompt>"',
+      '  strategy: "retry"',
+      `  exitCondition: "${scaffold.suggestedExitCondition}"`,
+      '  systemPrompt: "<include delegation + state management + constraints instructions>"',
+      `  workingDirectory: "${workingDirectory}"`,
+      ...(data.agent ? [`  agent: "${data.agent}"`] : []),
+      ...(data.model ? [`  model: "${data.model}"`] : []),
+    ].join('\n');
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(
+            {
+              success: true,
+              stateFilePath: scaffold.stateFilePath,
+              exitConditionScript: scaffold.exitConditionScript,
+              suggestedExitCondition: scaffold.suggestedExitCondition,
+              instructions: scaffold.instructions,
+              agentFlags: `${agentFlag}${modelFlag}`.trim() || undefined,
+              usage,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+    };
   }
 
   /**

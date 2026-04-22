@@ -60,6 +60,16 @@ Use for complex, open-ended goals. The orchestrator autonomously breaks the goal
 - "Add comprehensive test coverage to all service modules"
 The orchestrator manages its own task graph — you just provide the goal and guardrails.
 
+### Custom Orchestrators (InitCustomOrchestrator + CreateLoop)
+Use when you want full control over orchestration strategy, prompt structure, or evaluation criteria.
+Two-step pattern:
+1. InitCustomOrchestrator with goal → returns state file, exit script, and instruction snippets
+2. CreateLoop with your custom systemPrompt (include the delegation + state management snippets),
+   strategy: "retry", exitCondition from step 1
+
+The built-in CreateOrchestrator is this pattern with a pre-built system prompt.
+InitCustomOrchestrator gives you the building blocks to create your own.
+
 ## Monitoring Patterns
 
 ### Check on work

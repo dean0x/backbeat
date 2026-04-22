@@ -295,7 +295,9 @@ export class OrchestrationManagerService implements OrchestrationService {
    * DECISION: When a custom systemPrompt is provided, it replaces the auto-generated
    * role instructions entirely. The operationalContract (state file path, working dir,
    * delegation commands) is injected into the user prompt so the agent can still
-   * function without the default system prompt.
+   * function without the default system prompt. For building custom orchestrators
+   * outside this codepath, InitCustomOrchestrator provides the same instruction
+   * snippets (via orchestrator-prompt.ts snippet builders) plus state file scaffolding.
    */
   private buildFinalPrompts(
     request: OrchestratorCreateRequest,
