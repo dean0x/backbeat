@@ -139,76 +139,116 @@ type OrchestrateParsed =
   | OrchestrateCancelParsed
   | OrchestrateInitParsed;
 
+/** Shared mutable state accumulated by parseCommonOrchestrateFlag. */
+interface CommonOrchestrateFlags {
+  workingDirectory: string | undefined;
+  agent: AgentProvider | undefined;
+  model: string | undefined;
+  maxDepth: number | undefined;
+  maxWorkers: number | undefined;
+  goalWords: string[];
+}
+
+/**
+ * Parse a single arg from the common flag set shared between `create` and `init`.
+ * Returns the new index (incremented when the flag consumed a following value),
+ * or an Err if the flag is invalid. Returns `null` when the arg is not a common
+ * flag — the caller should then handle it as a subcommand-specific flag or error.
+ *
+ * DECISION: Single-arg dispatch rather than a full loop keeps each caller in
+ * control of its own iteration and unique flags (--foreground, --system-prompt, etc.).
+ */
+function parseCommonOrchestrateFlag(
+  arg: string,
+  args: readonly string[],
+  i: number,
+  state: CommonOrchestrateFlags,
+): Result<number, string> | null {
+  if (arg === '--working-directory' || arg === '-w') {
+    const next = args[i + 1];
+    if (!next || next.startsWith('-')) return err('--working-directory requires a path');
+    state.workingDirectory = next;
+    return ok(i + 1);
+  }
+  if (arg === '--agent' || arg === '-a') {
+    const next = args[i + 1];
+    if (!next || next.startsWith('-')) return err(`--agent requires a name (${AGENT_PROVIDERS.join(', ')})`);
+    if (!isAgentProvider(next)) return err(`Unknown agent: "${next}". Available: ${AGENT_PROVIDERS.join(', ')}`);
+    state.agent = next;
+    return ok(i + 1);
+  }
+  if (arg === '--model' || arg === '-m') {
+    const next = args[i + 1];
+    if (!next || next.startsWith('-')) return err('--model requires a model name (e.g. claude-opus-4-5)');
+    state.model = next;
+    return ok(i + 1);
+  }
+  if (arg === '--max-depth') {
+    const parsed = parseIntFlag('--max-depth', args[i + 1], 1, 10);
+    if (!parsed.ok) return parsed;
+    state.maxDepth = parsed.value;
+    return ok(i + 1);
+  }
+  if (arg === '--max-workers') {
+    const parsed = parseIntFlag('--max-workers', args[i + 1], 1, 20);
+    if (!parsed.ok) return parsed;
+    state.maxWorkers = parsed.value;
+    return ok(i + 1);
+  }
+  if (!arg.startsWith('-')) {
+    state.goalWords.push(arg);
+    return ok(i);
+  }
+  return null; // not a common flag — caller decides
+}
+
 export function parseOrchestrateCreateArgs(args: readonly string[]): Result<OrchestrateCreateParsed, string> {
-  let workingDirectory: string | undefined;
-  let agent: AgentProvider | undefined;
-  let model: string | undefined;
-  let maxDepth: number | undefined;
-  let maxWorkers: number | undefined;
+  const state: CommonOrchestrateFlags = {
+    workingDirectory: undefined,
+    agent: undefined,
+    model: undefined,
+    maxDepth: undefined,
+    maxWorkers: undefined,
+    goalWords: [],
+  };
   let maxIterations: number | undefined;
   let foreground = false;
   let systemPrompt: string | undefined;
-  const goalWords: string[] = [];
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
     if (arg === '--foreground' || arg === '-f') {
       foreground = true;
-    } else if (arg === '--working-directory' || arg === '-w') {
-      const next = args[i + 1];
-      if (!next || next.startsWith('-')) return err('--working-directory requires a path');
-      workingDirectory = next;
-      i++;
-    } else if (arg === '--agent' || arg === '-a') {
-      const next = args[i + 1];
-      if (!next || next.startsWith('-')) return err(`--agent requires a name (${AGENT_PROVIDERS.join(', ')})`);
-      if (!isAgentProvider(next)) return err(`Unknown agent: "${next}". Available: ${AGENT_PROVIDERS.join(', ')}`);
-      agent = next;
-      i++;
-    } else if (arg === '--model' || arg === '-m') {
-      const next = args[i + 1];
-      if (!next || next.startsWith('-')) return err('--model requires a model name (e.g. claude-opus-4-5)');
-      model = next;
-      i++;
     } else if (arg === '--system-prompt') {
       const next = args[i + 1];
       if (next === undefined) return err('--system-prompt requires a prompt string');
       systemPrompt = next;
-      i++;
-    } else if (arg === '--max-depth') {
-      const parsed = parseIntFlag('--max-depth', args[i + 1], 1, 10);
-      if (!parsed.ok) return parsed;
-      maxDepth = parsed.value;
-      i++;
-    } else if (arg === '--max-workers') {
-      const parsed = parseIntFlag('--max-workers', args[i + 1], 1, 20);
-      if (!parsed.ok) return parsed;
-      maxWorkers = parsed.value;
       i++;
     } else if (arg === '--max-iterations') {
       const parsed = parseIntFlag('--max-iterations', args[i + 1], 1, 200);
       if (!parsed.ok) return parsed;
       maxIterations = parsed.value;
       i++;
-    } else if (arg.startsWith('-')) {
-      return err(`Unknown flag: ${arg}`);
     } else {
-      goalWords.push(arg);
+      const commonResult = parseCommonOrchestrateFlag(arg, args, i, state);
+      if (commonResult === null) return err(`Unknown flag: ${arg}`);
+      if (!commonResult.ok) return commonResult;
+      i = commonResult.value;
     }
   }
 
-  const goal = goalWords.join(' ');
+  const goal = state.goalWords.join(' ');
   if (!goal) return err('goal is required');
 
   return ok({
     kind: 'create',
     goal,
-    workingDirectory,
-    agent,
-    model,
-    maxDepth,
-    maxWorkers,
+    workingDirectory: state.workingDirectory,
+    agent: state.agent,
+    model: state.model,
+    maxDepth: state.maxDepth,
+    maxWorkers: state.maxWorkers,
     maxIterations,
     foreground,
     systemPrompt,
@@ -224,53 +264,35 @@ export function parseOrchestrateCreateArgs(args: readonly string[]): Result<Orch
  * No bootstrap() call needed — purely file I/O + string generation, no DB/event bus required.
  */
 export function parseOrchestrateInitArgs(args: readonly string[]): Result<OrchestrateInitParsed, string> {
-  let workingDirectory: string | undefined;
-  let agent: AgentProvider | undefined;
-  let model: string | undefined;
-  let maxDepth: number | undefined;
-  let maxWorkers: number | undefined;
-  const goalWords: string[] = [];
+  const state: CommonOrchestrateFlags = {
+    workingDirectory: undefined,
+    agent: undefined,
+    model: undefined,
+    maxDepth: undefined,
+    maxWorkers: undefined,
+    goalWords: [],
+  };
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-
-    if (arg === '--working-directory' || arg === '-w') {
-      const next = args[i + 1];
-      if (!next || next.startsWith('-')) return err('--working-directory requires a path');
-      workingDirectory = next;
-      i++;
-    } else if (arg === '--agent' || arg === '-a') {
-      const next = args[i + 1];
-      if (!next || next.startsWith('-')) return err(`--agent requires a name (${AGENT_PROVIDERS.join(', ')})`);
-      if (!isAgentProvider(next)) return err(`Unknown agent: "${next}". Available: ${AGENT_PROVIDERS.join(', ')}`);
-      agent = next;
-      i++;
-    } else if (arg === '--model' || arg === '-m') {
-      const next = args[i + 1];
-      if (!next || next.startsWith('-')) return err('--model requires a model name (e.g. claude-opus-4-5)');
-      model = next;
-      i++;
-    } else if (arg === '--max-depth') {
-      const parsed = parseIntFlag('--max-depth', args[i + 1], 1, 10);
-      if (!parsed.ok) return parsed;
-      maxDepth = parsed.value;
-      i++;
-    } else if (arg === '--max-workers') {
-      const parsed = parseIntFlag('--max-workers', args[i + 1], 1, 20);
-      if (!parsed.ok) return parsed;
-      maxWorkers = parsed.value;
-      i++;
-    } else if (arg.startsWith('-')) {
-      return err(`Unknown flag: ${arg}`);
-    } else {
-      goalWords.push(arg);
-    }
+    const commonResult = parseCommonOrchestrateFlag(arg, args, i, state);
+    if (commonResult === null) return err(`Unknown flag: ${arg}`);
+    if (!commonResult.ok) return commonResult;
+    i = commonResult.value;
   }
 
-  const goal = goalWords.join(' ');
+  const goal = state.goalWords.join(' ');
   if (!goal) return err('goal is required');
 
-  return ok({ kind: 'init', goal, workingDirectory, agent, model, maxWorkers, maxDepth });
+  return ok({
+    kind: 'init',
+    goal,
+    workingDirectory: state.workingDirectory,
+    agent: state.agent,
+    model: state.model,
+    maxWorkers: state.maxWorkers,
+    maxDepth: state.maxDepth,
+  });
 }
 
 function parseOrchestrateArgs(subCommand: string | undefined, subArgs: readonly string[]): OrchestrateParsed | null {
@@ -576,8 +598,11 @@ async function handleOrchestrateCancel(orchestratorId: string, reason?: string):
  * omitted to keep startup fast and avoid unnecessary DB connections.
  */
 function handleOrchestrateInit(parsed: OrchestrateInitParsed): void {
+  // DECISION: validatePath without mustExist — workingDirectory is only embedded in the
+  // printed usage snippet, not created on disk. Scaffold files go to ~/.autobeat/.
+  // Requiring existence would reject valid future directories with no security benefit.
   if (parsed.workingDirectory) {
-    const pathResult = validatePath(parsed.workingDirectory, undefined, true);
+    const pathResult = validatePath(parsed.workingDirectory);
     if (!pathResult.ok) {
       ui.error(`Invalid working directory: ${pathResult.error.message}`);
       process.exit(1);
@@ -601,6 +626,7 @@ function handleOrchestrateInit(parsed: OrchestrateInitParsed): void {
   const s = result.value;
   const agentFlag = parsed.agent ? ` --agent ${parsed.agent}` : '';
   const modelFlag = parsed.model ? ` --model ${parsed.model}` : '';
+  const workingDirectoryFlag = parsed.workingDirectory ? ` --working-directory ${parsed.workingDirectory}` : '';
 
   ui.success('Custom orchestrator scaffolding created');
   process.stdout.write(
@@ -611,7 +637,7 @@ function handleOrchestrateInit(parsed: OrchestrateInitParsed): void {
       '',
       'Ready-to-use loop command:',
       '',
-      `  beat loop${agentFlag}${modelFlag} "<your orchestrator prompt>" \\`,
+      `  beat loop${agentFlag}${modelFlag}${workingDirectoryFlag} "<your orchestrator prompt>" \\`,
       `    --strategy retry \\`,
       `    --until "${s.suggestedExitCondition}" \\`,
       `    --system-prompt "$(cat <<'PROMPT'`,
@@ -698,5 +724,9 @@ export async function handleOrchestrateCommand(
     case 'cancel':
       await handleOrchestrateCancel(parsed.orchestratorId, parsed.reason);
       break;
+    default: {
+      const _exhaustive: never = parsed;
+      throw new Error(`Unhandled orchestrate kind: ${String(_exhaustive)}`);
+    }
   }
 }
