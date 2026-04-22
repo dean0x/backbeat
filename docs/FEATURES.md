@@ -2,7 +2,20 @@
 
 This document lists all features that are **currently implemented and working** in Autobeat.
 
-Last Updated: April 2026 (2026-04-16)
+Last Updated: April 2026 (2026-04-22)
+
+## ✅ System Prompts & Custom Orchestrators (v1.4.0)
+
+- **System prompt support**: `--system-prompt` flag on `beat run`, `beat loop`, `beat orchestrate`; `systemPrompt` param on MCP `DelegateTask`, `CreateLoop`, `CreateOrchestrator`, `ScheduleTask`, `SchedulePipeline`, `ScheduleLoop` tools
+- **Per-agent injection**: Claude (`--append-system-prompt`), Codex (`-c developer_instructions`), Gemini (`GEMINI_SYSTEM_MD` env var)
+- **System prompt persistence**: Stored per-task in database; survives retry/resume — `TaskStatus` returns it via `includeSystemPrompt: true`
+- **Custom orchestrator scaffolding**: `beat orchestrate init <goal>` CLI command and `InitCustomOrchestrator` MCP tool
+- **Generated artifacts**: State file, exit condition script, and system prompt snippets for delegation, state management, and constraint enforcement
+- **Agent configuration documentation**: README section covering API keys, base URLs, model selection, and local LLM usage
+
+### Database (v1.4.0)
+
+- **Migration 23**: Adds `system_prompt TEXT` column to `tasks` table (nullable, auto-applied)
 
 ## ✅ Dashboard Redesign, Eval Redesign & Reliability (v1.3.0)
 

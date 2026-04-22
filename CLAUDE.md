@@ -242,6 +242,10 @@ Safety nets that exist in the codebase but are not part of the manual release st
 - `loop_iterations` table: per-iteration execution records with scores and results (migration v10)
 - `tasks.orchestrator_id` column: nullable FK for sub-task attribution to an orchestration (migration v18)
 - `task_usage` table: one row per task with input/output/cache tokens and total_cost_usd (migration v19)
+- Performance indexes for dashboard polling (migration v20)
+- `workers.last_heartbeat`, loops eval columns: `eval_type`, `judge_agent`, `judge_prompt`, `eval_prompt` (migration v21)
+- CHECK constraints on `eval_type` and `judge_agent` in loops table (migration v22)
+- `tasks.system_prompt` column: nullable TEXT for per-task system prompt injection (migration v23)
 
 ### Dependencies
 

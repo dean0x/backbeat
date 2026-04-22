@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [1.4.0] - 2026-04-22
+
+### Added
+- **System prompt support**: `--system-prompt` flag on `beat run`, `beat loop`, `beat orchestrate`; `systemPrompt` param on MCP `DelegateTask`, `CreateLoop`, `CreateOrchestrator` tools; wired through Claude (`--append-system-prompt`), Codex (`-c developer_instructions`), and Gemini (`GEMINI_SYSTEM_MD` env var) adapters (#134, #147)
+- **Custom orchestrator scaffolding**: `beat orchestrate init <goal>` CLI command and `InitCustomOrchestrator` MCP tool; generates state file, exit condition script, and ready-to-copy system prompt snippets (#135, #148)
+- **Agent configuration docs**: New README section covering API keys, base URLs, model selection, and local LLM usage (#150)
+
+### Database
+- **Migration v23**: Adds `system_prompt TEXT` column to `tasks` table (nullable, auto-applied)
+
+---
+
 ## [1.3.1] - 2026-04-16
 
 ### Fixed

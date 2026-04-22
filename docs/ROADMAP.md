@@ -1,12 +1,17 @@
 # Autobeat Development Roadmap
 
-## Current Status: v1.3.0 RELEASED (2026-04-16)
+## Current Status: v1.4.0 RELEASED (2026-04-22)
 
-Dashboard redesign (Metrics + Workspace views), live agent output streaming, cost/token tracking, three eval strategies (feedforward, judge, schema), atomic PID file locking, SpawnOptions refactor, and extracted pure functions. Includes database migrations v18-v22.
+System prompt support across all three agent adapters (Claude, Codex, Gemini) and custom orchestrator scaffolding (`beat orchestrate init` + `InitCustomOrchestrator` MCP tool). Includes database migration v23.
 
 ---
 
 ## Released Versions
+
+### v1.4.0 - System Prompts & Custom Orchestrators ✅
+**Status**: **RELEASED** (2026-04-22)
+
+System prompt injection for tasks, loops, and orchestrators across Claude, Codex, and Gemini adapters. Custom orchestrator scaffolding via CLI and MCP tool. Agent configuration documentation. Database migration v23.
 
 ### v1.3.0 - Dashboard Redesign, Eval Redesign & Reliability ✅
 **Status**: **RELEASED** (2026-04-16)
@@ -156,6 +161,7 @@ Multi-server support, shared state (Redis backend), fault tolerance, task affini
 | **v1.1.0** | ✅ Released | **Agent Eval Mode & Skill System** |
 | **v1.2.0** | ✅ Released | **Terminal Dashboard & Agent Config** |
 | **v1.3.0** | ✅ Released | **Dashboard Redesign, Eval Redesign & Reliability** |
+| **v1.4.0** | ✅ Released | **System Prompts & Custom Orchestrators** |
 
 ---
 
