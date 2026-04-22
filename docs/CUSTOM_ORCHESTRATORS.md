@@ -56,7 +56,7 @@ beat loop "You are a security auditor. ..." \
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-w, --working-directory DIR` | cwd | Working directory embedded in state path |
+| `-w, --working-directory DIR` | cwd | Working directory for the subsequent loop command |
 | `-a, --agent AGENT` | system default | Agent name threaded into delegation examples |
 | `-m, --model MODEL` | agent default | Model threaded into delegation examples |
 | `--max-workers N` | 5 | Max concurrent workers in constraint snippet |

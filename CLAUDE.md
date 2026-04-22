@@ -303,6 +303,7 @@ Quick reference for common operations:
 - `README.md` - User-facing quick start
 - `docs/FEATURES.md` - Complete feature list
 - `docs/TASK-DEPENDENCIES.md` - Task dependencies API
+- `docs/CUSTOM_ORCHESTRATORS.md` - Custom orchestrator scaffolding guide
 - `docs/architecture/` - Architecture documentation
 - `docs/releases/` - Release notes by version
 - `docs/ROADMAP.md` - Future plans
