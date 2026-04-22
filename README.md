@@ -206,6 +206,89 @@ beat schedule resume <id>
 beat schedule cancel <id>
 ```
 
+## Agent Configuration
+
+Three agents are supported: **Claude**, **Codex**, and **Gemini**. Each agent can be configured with an API key, base URL, and default model.
+
+```bash
+beat agents list                    # Show available agents
+beat agents check                   # Auth status for all agents
+```
+
+### API Keys
+
+By default, agents use CLI login-based auth (e.g., `claude login`). To use your own API key instead:
+
+```bash
+beat agents config set claude apiKey "sk-ant-your-key"
+beat agents config set codex apiKey "sk-your-openai-key"
+beat agents config set gemini apiKey "your-gemini-key"
+```
+
+Auth resolution order: **environment variable** > **stored config** > **CLI login**.
+
+| Agent | Env var (highest priority) |
+|-------|---------------------------|
+| claude | `ANTHROPIC_API_KEY` |
+| codex | `OPENAI_API_KEY` |
+| gemini | `GEMINI_API_KEY` |
+
+### Model Selection
+
+Set a default model per agent, or override per task:
+
+```bash
+# Default model for all Claude tasks
+beat agents config set claude model "claude-sonnet-4-5-20250514"
+
+# Override per task
+beat run "Fix the tests" --agent claude --model "claude-sonnet-4-5-20250514"
+beat orchestrate "Refactor auth" --agent claude --model "claude-sonnet-4-5-20250514"
+```
+
+Resolution order: **per-task `--model`** > **agent config model** > **CLI default**.
+
+### Custom Base URL
+
+Route requests through a proxy, gateway, or local endpoint:
+
+```bash
+beat agents config set claude baseUrl "https://my-proxy.example.com/v1"
+beat agents config set codex baseUrl "http://localhost:8080/v1"
+```
+
+Or via environment variables (takes precedence over config):
+
+| Agent | Env var |
+|-------|---------|
+| claude | `ANTHROPIC_BASE_URL` |
+| codex | `OPENAI_BASE_URL` |
+| gemini | `GEMINI_BASE_URL` |
+
+**Note**: Claude's login-based auth does not work with a custom `baseUrl` — you must also set an `apiKey`. Autobeat warns if `baseUrl` is set without one.
+
+### Using Local LLMs
+
+Most local inference servers (Ollama, llama.cpp, vLLM, LM Studio) expose an OpenAI-compatible API. Point the codex agent at your local server:
+
+```bash
+beat agents config set codex baseUrl "http://localhost:11434/v1"
+beat agents config set codex apiKey "any-string"
+beat agents config set codex model "llama3"
+
+beat run --agent codex --prompt "Refactor the utils module" --dir ./project
+```
+
+### Manage Config
+
+```bash
+beat agents config show              # Show all agent configs
+beat agents config show claude       # Show config for one agent
+beat agents config reset claude      # Clear all stored config for an agent
+```
+
+Config is stored in `~/.autobeat/config.json`.
+
 ## All MCP Tools
 
 | Tool | What It Does |
@@ -232,6 +315,8 @@ beat schedule cancel <id>
 | **ListSchedules** / **ScheduleStatus** | Schedule management |
 | **PauseSchedule** / **ResumeSchedule** | Schedule lifecycle |
 | **CancelSchedule** | Cancel schedule and optionally in-flight tasks |
+| **ListAgents** | List agents with auth status and config |
+| **ConfigureAgent** | Check, set, or reset agent config (apiKey, baseUrl, model) |
 
 ## All CLI Commands
 
@@ -261,6 +346,13 @@ beat schedule status <id>             Schedule details
 beat schedule pause/resume/cancel     Schedule lifecycle
 
 beat pipeline <prompt> --step ...     Create pipeline
+
+beat agents list                      List available agents
+beat agents check                     Auth status for all agents
+beat agents config show [agent]       Show agent config
+beat agents config set <agent> <key> <value>  Set agent config
+beat agents config reset <agent>      Clear agent config
+
 beat init                             Interactive setup
 beat config show|set|reset|path       Configuration
 beat help                             Help
