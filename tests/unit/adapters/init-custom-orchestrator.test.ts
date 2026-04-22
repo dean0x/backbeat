@@ -11,8 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MCPAdapter } from '../../../src/adapters/mcp-adapter.js';
 import type { Configuration } from '../../../src/core/configuration.js';
 import type { Logger, LoopService, ScheduleService, TaskManager } from '../../../src/core/interfaces.js';
-import { err, ok } from '../../../src/core/result.js';
 import * as orchestratorScaffold from '../../../src/core/orchestrator-scaffold.js';
+import { err, ok } from '../../../src/core/result.js';
 import { createTestConfiguration } from '../../fixtures/factories.js';
 
 const TEST_STATE_DIR = path.join(tmpdir(), `autobeat-mcp-init-test-${process.pid}`);
@@ -220,6 +220,28 @@ describe('MCPAdapter - InitCustomOrchestrator tool', () => {
       expect(response.isError).toBe(true);
       const body = JSON.parse(response.content[0].text);
       expect(body.success).toBe(false);
+    });
+
+    it('returns error when model contains shell metacharacters', async () => {
+      const response = await adapter.callTool('InitCustomOrchestrator', {
+        goal: 'Test goal',
+        model: 'claude-opus; rm -rf /',
+      });
+
+      expect(response.isError).toBe(true);
+      const body = JSON.parse(response.content[0].text);
+      expect(body.success).toBe(false);
+    });
+
+    it('accepts valid model names with dots and hyphens', async () => {
+      const response = await adapter.callTool('InitCustomOrchestrator', {
+        goal: 'Test goal',
+        model: 'claude-opus-4-5',
+      });
+
+      expect(response.isError).toBeFalsy();
+      const body = JSON.parse(response.content[0].text);
+      expect(body.success).toBe(true);
     });
 
     it('accepts non-existent working directory (only used in output text, not created on disk)', async () => {

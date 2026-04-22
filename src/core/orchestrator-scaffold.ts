@@ -67,7 +67,7 @@ export function scaffoldCustomOrchestrator(params: ScaffoldParams): Result<Scaff
     writeStateFile(stateFilePath, state);
 
     const exitConditionScript = writeExitConditionScript(stateDir, stateFilePath);
-    const suggestedExitCondition = `node ${exitConditionScript}`;
+    const suggestedExitCondition = `node ${JSON.stringify(exitConditionScript)}`;
 
     const delegation = buildDelegationInstructions({ agent, model });
     const stateManagement = buildStateManagementInstructions({ stateFilePath });

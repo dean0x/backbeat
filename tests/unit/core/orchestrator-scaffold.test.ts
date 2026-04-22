@@ -85,7 +85,7 @@ describe('scaffoldCustomOrchestrator', () => {
     expect(scriptContent).toContain(result.value.stateFilePath);
   });
 
-  it('suggestedExitCondition is "node <scriptPath>"', () => {
+  it('suggestedExitCondition is "node <quoted scriptPath>"', () => {
     const result = scaffoldCustomOrchestrator({
       goal: 'Test goal',
     });
@@ -93,7 +93,8 @@ describe('scaffoldCustomOrchestrator', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.value.suggestedExitCondition).toBe(`node ${result.value.exitConditionScript}`);
+    // Path is JSON-quoted so spaces in home directory paths (e.g. /Users/John Doe/) don't break shell execution
+    expect(result.value.suggestedExitCondition).toBe(`node ${JSON.stringify(result.value.exitConditionScript)}`);
   });
 
   it('defaults maxWorkers to 5 and maxDepth to 3 in constraints snippet', () => {
