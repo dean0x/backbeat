@@ -358,6 +358,46 @@ export class TranslationProxy {
     }
   }
 
+  /**
+   * Parse, run middleware, serialize, and send a successful non-streaming backend response.
+   * Returns true on success, false if an error response was already sent.
+   */
+  private processNonStreamingResponse(
+    rawBody: string,
+    res: http.ServerResponse,
+    middlewares: readonly TranslationMiddleware[],
+  ): boolean {
+    let rawResponse: unknown;
+    try {
+      rawResponse = JSON.parse(rawBody);
+    } catch {
+      sendError(res, 502, 'api_error', 'Backend returned invalid JSON');
+      return false;
+    }
+
+    const parseResult = this.config.targetCodec.parseResponse(rawResponse);
+    if (!parseResult.ok) {
+      sendError(res, 502, 'api_error', 'Failed to parse backend response');
+      return false;
+    }
+
+    const processedResponse = runResponseMiddleware(middlewares, parseResult.value);
+
+    const serializeResult = this.config.sourceCodec.serializeResponse(processedResponse);
+    if (!serializeResult.ok) {
+      sendError(res, 500, 'api_error', 'Failed to serialize response');
+      return false;
+    }
+
+    const responseBody = JSON.stringify(serializeResult.value);
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(responseBody),
+    });
+    res.end(responseBody);
+    return true;
+  }
+
   private async handleNonStreamingRequest(
     inboundReq: http.IncomingMessage,
     res: http.ServerResponse,
@@ -406,39 +446,7 @@ export class TranslationProxy {
           backendRes.on('data', (chunk: Buffer) => chunks.push(chunk));
           backendRes.on('end', () => {
             clearTimeout(responseTimeout);
-
-            const body = Buffer.concat(chunks).toString();
-            let rawResponse: unknown;
-            try {
-              rawResponse = JSON.parse(body);
-            } catch {
-              sendError(res, 502, 'api_error', 'Backend returned invalid JSON');
-              resolve();
-              return;
-            }
-
-            const parseResult = this.config.targetCodec.parseResponse(rawResponse);
-            if (!parseResult.ok) {
-              sendError(res, 502, 'api_error', 'Failed to parse backend response');
-              resolve();
-              return;
-            }
-
-            const processedResponse = runResponseMiddleware(middlewares, parseResult.value);
-
-            const serializeResult = this.config.sourceCodec.serializeResponse(processedResponse);
-            if (!serializeResult.ok) {
-              sendError(res, 500, 'api_error', 'Failed to serialize response');
-              resolve();
-              return;
-            }
-
-            const responseBody = JSON.stringify(serializeResult.value);
-            res.writeHead(200, {
-              'Content-Type': 'application/json',
-              'Content-Length': Buffer.byteLength(responseBody),
-            });
-            res.end(responseBody);
+            this.processNonStreamingResponse(Buffer.concat(chunks).toString(), res, middlewares);
             resolve();
           });
         },
@@ -465,6 +473,103 @@ export class TranslationProxy {
     });
   }
 
+  /** Handle a 4xx/5xx backend response for a streaming request. */
+  private handleStreamingError(
+    backendRes: http.IncomingMessage,
+    res: http.ServerResponse,
+    statusCode: number,
+    clearIdleTimer: () => void,
+    resolve: () => void,
+  ): void {
+    const errChunks: Buffer[] = [];
+    backendRes.on('data', (chunk: Buffer) => errChunks.push(chunk));
+    backendRes.on('end', () => {
+      clearIdleTimer();
+      const errorType = mapStatusToErrorType(statusCode);
+      if (!res.headersSent) {
+        sendError(res, statusCode, errorType, 'Backend returned error');
+      }
+      resolve();
+    });
+  }
+
+  /**
+   * Handle a JSON (non-streaming) fallback response when SSE was expected.
+   * Some backends return application/json even when the request asked for streaming.
+   */
+  private handleJsonFallback(
+    backendRes: http.IncomingMessage,
+    res: http.ServerResponse,
+    middlewares: readonly TranslationMiddleware[],
+    clearIdleTimer: () => void,
+    resolve: () => void,
+  ): void {
+    const chunks: Buffer[] = [];
+    backendRes.on('data', (chunk: Buffer) => chunks.push(chunk));
+    backendRes.on('end', () => {
+      clearIdleTimer();
+      if (!res.headersSent) {
+        this.processNonStreamingResponse(Buffer.concat(chunks).toString(), res, middlewares);
+      }
+      resolve();
+    });
+  }
+
+  /** Stream SSE lines from the backend to the client, batching writes per chunk to reduce syscalls. */
+  private handleSseStream(
+    backendRes: http.IncomingMessage,
+    res: http.ServerResponse,
+    translator: StreamTranslator,
+    lineBuffer: LineBuffer,
+    resetIdleTimer: () => void,
+    clearIdleTimer: () => void,
+    resolve: () => void,
+  ): void {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+
+    resetIdleTimer();
+
+    backendRes.on('data', (chunk: Buffer) => {
+      resetIdleTimer();
+      const lines = lineBuffer.feed(chunk.toString('utf-8'));
+
+      // Collect all translated SSE lines from this backend chunk and write once
+      // to avoid a separate syscall per line (PERF: batched writes).
+      const output: string[] = [];
+      for (const line of lines) {
+        for (const sseLine of translator.processLine(line)) {
+          output.push(sseLine + '\n');
+        }
+      }
+      if (output.length > 0) {
+        res.write(output.join(''));
+      }
+    });
+
+    backendRes.on('end', () => {
+      clearIdleTimer();
+
+      // Flush any lines still buffered in the translator
+      const flushLines = translator.flush();
+      if (flushLines.length > 0) {
+        res.write(flushLines.map((l) => l + '\n').join(''));
+      }
+
+      res.end();
+      resolve();
+    });
+
+    backendRes.on('error', () => {
+      clearIdleTimer();
+      res.end();
+      resolve();
+    });
+  }
+
   private async handleStreamingRequest(
     inboundReq: http.IncomingMessage,
     res: http.ServerResponse,
@@ -480,6 +585,9 @@ export class TranslationProxy {
     const resetIdleTimer = () => {
       if (streamIdleTimer) clearTimeout(streamIdleTimer);
       streamIdleTimer = setTimeout(() => abort.abort(), STREAM_IDLE_TIMEOUT_MS);
+    };
+    const clearIdleTimer = () => {
+      if (streamIdleTimer) clearTimeout(streamIdleTimer);
     };
 
     inboundReq.on('close', () => abort.abort());
@@ -510,16 +618,7 @@ export class TranslationProxy {
           const contentType = backendRes.headers['content-type'] ?? '';
 
           if (statusCode >= 400) {
-            const errChunks: Buffer[] = [];
-            backendRes.on('data', (chunk: Buffer) => errChunks.push(chunk));
-            backendRes.on('end', () => {
-              if (streamIdleTimer) clearTimeout(streamIdleTimer);
-              const errorType = mapStatusToErrorType(statusCode);
-              if (!res.headersSent) {
-                sendError(res, statusCode, errorType, 'Backend returned error');
-              }
-              resolve();
-            });
+            this.handleStreamingError(backendRes, res, statusCode, clearIdleTimer, resolve);
             return;
           }
 
@@ -527,93 +626,17 @@ export class TranslationProxy {
           const isJsonFallback = contentType.includes('application/json') && !contentType.includes('event-stream');
 
           if (isJsonFallback) {
-            // Non-streaming fallback: parse as JSON response
-            const chunks: Buffer[] = [];
-            backendRes.on('data', (chunk: Buffer) => chunks.push(chunk));
-            backendRes.on('end', () => {
-              if (streamIdleTimer) clearTimeout(streamIdleTimer);
-
-              let rawResponse: unknown;
-              try {
-                rawResponse = JSON.parse(Buffer.concat(chunks).toString());
-              } catch {
-                if (!res.headersSent) sendError(res, 502, 'api_error', 'Backend returned invalid JSON');
-                resolve();
-                return;
-              }
-
-              const parseResult = this.config.targetCodec.parseResponse(rawResponse);
-              if (!parseResult.ok) {
-                if (!res.headersSent) sendError(res, 502, 'api_error', 'Failed to parse backend response');
-                resolve();
-                return;
-              }
-
-              const processedResponse = runResponseMiddleware(middlewares, parseResult.value);
-              const serializeResult = this.config.sourceCodec.serializeResponse(processedResponse);
-              if (!serializeResult.ok) {
-                if (!res.headersSent) sendError(res, 500, 'api_error', 'Failed to serialize response');
-                resolve();
-                return;
-              }
-
-              const responseBody = JSON.stringify(serializeResult.value);
-              res.writeHead(200, {
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(responseBody),
-              });
-              res.end(responseBody);
-              resolve();
-            });
+            this.handleJsonFallback(backendRes, res, middlewares, clearIdleTimer, resolve);
             return;
           }
 
-          // Start SSE response
-          res.writeHead(200, {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            Connection: 'keep-alive',
-          });
-
-          resetIdleTimer();
-
-          backendRes.on('data', (chunk: Buffer) => {
-            resetIdleTimer();
-            const text = chunk.toString('utf-8');
-            const lines = lineBuffer.feed(text);
-
-            for (const line of lines) {
-              const sseLines = translator.processLine(line);
-              for (const sseLine of sseLines) {
-                res.write(sseLine + '\n');
-              }
-            }
-          });
-
-          backendRes.on('end', () => {
-            if (streamIdleTimer) clearTimeout(streamIdleTimer);
-
-            // Flush remaining
-            const flushLines = translator.flush();
-            for (const sseLine of flushLines) {
-              res.write(sseLine + '\n');
-            }
-
-            res.end();
-            resolve();
-          });
-
-          backendRes.on('error', () => {
-            if (streamIdleTimer) clearTimeout(streamIdleTimer);
-            res.end();
-            resolve();
-          });
+          this.handleSseStream(backendRes, res, translator, lineBuffer, resetIdleTimer, clearIdleTimer, resolve);
         },
       );
 
       outbound.on('error', (e: NodeJS.ErrnoException) => {
         clearTimeout(connectTimeout);
-        if (streamIdleTimer) clearTimeout(streamIdleTimer);
+        clearIdleTimer();
 
         if (!res.headersSent) {
           const msg = e.code === 'ECONNREFUSED' ? 'Backend connection refused' : 'Backend connection error';

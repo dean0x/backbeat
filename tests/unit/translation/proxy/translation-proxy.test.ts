@@ -52,7 +52,7 @@ function makeProxy(targetPort: number, logger: Logger) {
     targetModel: 'gpt-4o',
     sourceCodec: new AnthropicCodec(),
     targetCodec: new OpenAICodec(),
-    middlewares: [],
+    middlewareFactory: () => [],
     logger,
   });
 }
