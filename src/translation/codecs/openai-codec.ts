@@ -75,91 +75,76 @@ interface OpenAIMessage {
   name?: string;
 }
 
+/** Each tool_result becomes a separate OpenAI 'tool' message. */
+function buildToolResultMessages(toolResults: CanonicalContent[]): OpenAIMessage[] {
+  return toolResults.flatMap((tr) => {
+    if (tr.type !== 'tool_result') return [];
+    let content: string;
+    if (tr.content.length === 1 && tr.content[0].type === 'text') {
+      content = tr.content[0].text;
+    } else {
+      content = tr.content
+        .filter((c): c is Extract<CanonicalContent, { type: 'text' }> => c.type === 'text')
+        .map((c) => c.text)
+        .join('\n');
+    }
+    return [{ role: 'tool' as const, tool_call_id: tr.toolUseId, content }];
+  });
+}
+
+/** Assistant turn with optional text and tool_calls. */
+function buildAssistantMessage(msg: { content: CanonicalContent[] }): OpenAIMessage {
+  const textBlocks = msg.content.filter((c) => c.type === 'text');
+  const toolUses = msg.content.filter((c) => c.type === 'tool_use');
+
+  const assistantMsg: OpenAIMessage = {
+    role: 'assistant',
+    content: textBlocks.length > 0 ? serializeContentForOpenAI(textBlocks) : null,
+  };
+
+  if (toolUses.length > 0) {
+    assistantMsg.tool_calls = toolUses
+      .filter((c): c is Extract<CanonicalContent, { type: 'tool_use' }> => c.type === 'tool_use')
+      .map((c) => ({
+        id: c.id,
+        type: 'function' as const,
+        function: { name: c.name, arguments: JSON.stringify(c.input) },
+      }));
+  }
+
+  return assistantMsg;
+}
+
 function buildOpenAIMessages(canonical: CanonicalRequest): OpenAIMessage[] {
   const messages: OpenAIMessage[] = [];
 
   // System blocks → system message
   if (canonical.system && canonical.system.length > 0) {
-    const systemText = canonical.system.map((b) => b.text).join('\n\n');
-    messages.push({ role: 'system', content: systemText });
+    messages.push({ role: 'system', content: canonical.system.map((b) => b.text).join('\n\n') });
   }
 
-  // Canonical messages
   for (const msg of canonical.messages) {
-    // Check if message has only tool_result blocks → becomes 'tool' messages
     const toolResults = msg.content.filter((c) => c.type === 'tool_result');
     const nonToolResults = msg.content.filter((c) => c.type !== 'tool_result');
 
     if (toolResults.length > 0) {
-      // Emit each tool_result as a separate tool message
-      for (const tr of toolResults) {
-        if (tr.type === 'tool_result') {
-          let content: string;
-          if (tr.content.length === 1 && tr.content[0].type === 'text') {
-            content = tr.content[0].text;
-          } else {
-            content = tr.content
-              .filter((c) => c.type === 'text')
-              .map((c) => (c.type === 'text' ? c.text : ''))
-              .join('\n');
-          }
-          messages.push({
-            role: 'tool',
-            tool_call_id: tr.toolUseId,
-            content,
-          });
-        }
-      }
+      // Emit each tool_result as a separate 'tool' message
+      messages.push(...buildToolResultMessages(toolResults));
       // If also has non-tool-result content, emit as user message
       if (nonToolResults.length > 0) {
-        messages.push({
-          role: 'user',
-          content: serializeContentForOpenAI(nonToolResults),
-        });
+        messages.push({ role: 'user', content: serializeContentForOpenAI(nonToolResults) });
       }
       continue;
     }
 
-    // Check if assistant message has tool_use blocks → becomes tool_calls
+    // Assistant message: may include tool_calls
     if (msg.role === 'assistant') {
-      const toolUses = msg.content.filter((c) => c.type === 'tool_use');
-      const textBlocks = msg.content.filter((c) => c.type === 'text');
-
-      const assistantMsg: OpenAIMessage = { role: 'assistant' };
-
-      if (textBlocks.length > 0) {
-        assistantMsg.content = serializeContentForOpenAI(textBlocks);
-      } else {
-        assistantMsg.content = null;
-      }
-
-      if (toolUses.length > 0) {
-        assistantMsg.tool_calls = toolUses
-          .filter((c) => c.type === 'tool_use')
-          .map((c) => {
-            if (c.type === 'tool_use') {
-              return {
-                id: c.id,
-                type: 'function' as const,
-                function: {
-                  name: c.name,
-                  arguments: JSON.stringify(c.input),
-                },
-              };
-            }
-            return { id: '', type: 'function' as const, function: { name: '', arguments: '{}' } };
-          });
-      }
-
-      messages.push(assistantMsg);
+      messages.push(buildAssistantMessage(msg));
       continue;
     }
 
     // Regular user message
-    messages.push({
-      role: 'user',
-      content: serializeContentForOpenAI(msg.content),
-    });
+    messages.push({ role: 'user', content: serializeContentForOpenAI(msg.content) });
   }
 
   return messages;
@@ -227,16 +212,12 @@ class OpenAIStreamParser implements StreamParser {
     // Usage chunk (no choices)
     const usageRaw = chunk['usage'] as Record<string, unknown> | undefined;
     if (usageRaw && (chunk['choices'] as unknown[])?.length === 0) {
-      events.push({
-        type: 'usage',
-        usage: parseOpenAIUsage(usageRaw),
-      });
+      events.push({ type: 'usage', usage: parseOpenAIUsage(usageRaw) });
       return events;
     }
 
     const choices = chunk['choices'] as Array<Record<string, unknown>> | undefined;
     if (!choices || choices.length === 0) {
-      // Might be a usage-only chunk
       if (usageRaw) {
         events.push({ type: 'usage', usage: parseOpenAIUsage(usageRaw) });
       }
@@ -270,20 +251,7 @@ class OpenAIStreamParser implements StreamParser {
     // Text content delta
     const content = delta['content'] as string | null | undefined;
     if (content !== null && content !== undefined && content !== '') {
-      // Close any active tool call block first
-      if (this.lastActiveToolIndex >= 0) {
-        const tc = this.activeToolCalls.get(this.lastActiveToolIndex);
-        if (tc && tc.started) {
-          events.push({
-            type: 'tool_call_stop',
-            index: this.lastActiveToolIndex,
-            arguments: tc.argumentsAccumulator,
-          });
-          this.currentContentIndex++;
-          this.lastActiveToolIndex = -1;
-        }
-      }
-
+      events.push(...this.closeActiveToolCall());
       if (!this.hasActiveTextBlock) {
         events.push({ type: 'content_start', index: this.currentContentIndex, contentType: 'text' });
         this.hasActiveTextBlock = true;
@@ -300,74 +268,91 @@ class OpenAIStreamParser implements StreamParser {
     // Tool calls delta
     const toolCalls = delta['tool_calls'] as Array<Record<string, unknown>> | undefined;
     if (toolCalls) {
-      // Close text block if open
-      if (this.hasActiveTextBlock) {
-        events.push({ type: 'content_stop', index: this.currentContentIndex });
-        this.currentContentIndex++;
-        this.hasActiveTextBlock = false;
-      }
-
-      for (const tc of toolCalls) {
-        const tcIndex = tc['index'] as number;
-        const func = tc['function'] as Record<string, unknown> | undefined;
-        const tcId = tc['id'] as string | undefined;
-        const tcName = func?.['name'] as string | undefined;
-        const tcArgs = func?.['arguments'] as string | undefined;
-
-        if (!this.activeToolCalls.has(tcIndex)) {
-          // New tool call
-          const toolCallData: ActiveToolCall = {
-            id: tcId ?? '',
-            name: tcName ?? '',
-            argumentsAccumulator: tcArgs ?? '',
-            started: false,
-          };
-          this.activeToolCalls.set(tcIndex, toolCallData);
-
-          if (tcId && tcName) {
-            toolCallData.started = true;
-            events.push({
-              type: 'tool_call_start',
-              index: this.currentContentIndex,
-              id: tcId,
-              name: tcName,
-            });
-            this.lastActiveToolIndex = this.currentContentIndex;
-            // Store with the content index as key for lookup
-            this.activeToolCalls.delete(tcIndex);
-            this.activeToolCalls.set(this.currentContentIndex, toolCallData);
-          }
-        } else {
-          // Continuing tool call
-          const existing = this.activeToolCalls.get(tcIndex)!;
-          if (!existing.started && tcId && tcName) {
-            existing.id = tcId;
-            existing.name = tcName;
-            existing.started = true;
-            events.push({
-              type: 'tool_call_start',
-              index: this.currentContentIndex,
-              id: tcId,
-              name: tcName,
-            });
-            this.lastActiveToolIndex = this.currentContentIndex;
-          }
-
-          if (tcArgs) {
-            existing.argumentsAccumulator += tcArgs;
-            events.push({
-              type: 'tool_call_delta',
-              index: this.lastActiveToolIndex >= 0 ? this.lastActiveToolIndex : this.currentContentIndex,
-              arguments: tcArgs,
-            });
-          }
-        }
-      }
+      events.push(...this.closeActiveTextBlock());
+      events.push(...this.processToolCallDeltas(toolCalls));
     }
 
     // Finish reason
     if (finishReason) {
       events.push(...this.handleFinishReason(finishReason, chunk));
+    }
+
+    return events;
+  }
+
+  /** Closes the active text block if one is open, advancing the content index. */
+  private closeActiveTextBlock(): CanonicalStreamEvent[] {
+    if (!this.hasActiveTextBlock) return [];
+    const events: CanonicalStreamEvent[] = [{ type: 'content_stop', index: this.currentContentIndex }];
+    this.currentContentIndex++;
+    this.hasActiveTextBlock = false;
+    return events;
+  }
+
+  /** Closes the active tool call block if one is started, advancing the content index. */
+  private closeActiveToolCall(): CanonicalStreamEvent[] {
+    if (this.lastActiveToolIndex < 0) return [];
+    const tc = this.activeToolCalls.get(this.lastActiveToolIndex);
+    if (!tc?.started) return [];
+    const events: CanonicalStreamEvent[] = [
+      { type: 'tool_call_stop', index: this.lastActiveToolIndex, arguments: tc.argumentsAccumulator },
+    ];
+    this.currentContentIndex++;
+    this.lastActiveToolIndex = -1;
+    return events;
+  }
+
+  /** Processes an array of tool call deltas from a single stream chunk. */
+  private processToolCallDeltas(toolCalls: Array<Record<string, unknown>>): CanonicalStreamEvent[] {
+    const events: CanonicalStreamEvent[] = [];
+
+    for (const tc of toolCalls) {
+      const tcIndex = tc['index'] as number;
+      const func = tc['function'] as Record<string, unknown> | undefined;
+      const tcId = tc['id'] as string | undefined;
+      const tcName = func?.['name'] as string | undefined;
+      const tcArgs = func?.['arguments'] as string | undefined;
+
+      if (!this.activeToolCalls.has(tcIndex)) {
+        // New tool call
+        const toolCallData: ActiveToolCall = {
+          id: tcId ?? '',
+          name: tcName ?? '',
+          argumentsAccumulator: tcArgs ?? '',
+          started: false,
+        };
+        this.activeToolCalls.set(tcIndex, toolCallData);
+
+        if (tcId && tcName) {
+          toolCallData.started = true;
+          events.push({ type: 'tool_call_start', index: this.currentContentIndex, id: tcId, name: tcName });
+          this.lastActiveToolIndex = this.currentContentIndex;
+          // Re-key from OpenAI tcIndex to canonical content index for later lookup
+          this.activeToolCalls.delete(tcIndex);
+          this.activeToolCalls.set(this.currentContentIndex, toolCallData);
+        }
+      } else {
+        // Continuing tool call
+        const existing = this.activeToolCalls.get(tcIndex);
+        if (!existing) continue;
+
+        if (!existing.started && tcId && tcName) {
+          existing.id = tcId;
+          existing.name = tcName;
+          existing.started = true;
+          events.push({ type: 'tool_call_start', index: this.currentContentIndex, id: tcId, name: tcName });
+          this.lastActiveToolIndex = this.currentContentIndex;
+        }
+
+        if (tcArgs) {
+          existing.argumentsAccumulator += tcArgs;
+          events.push({
+            type: 'tool_call_delta',
+            index: this.lastActiveToolIndex >= 0 ? this.lastActiveToolIndex : this.currentContentIndex,
+            arguments: tcArgs,
+          });
+        }
+      }
     }
 
     return events;
