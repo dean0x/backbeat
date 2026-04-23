@@ -136,8 +136,8 @@ describe('PromptCacheMiddleware', () => {
     };
     // Should not double-count
     const processed = middleware.processResponse!(responseWithCache);
-    // If backend already reported cache hits, we should not add more
-    // The middleware's estimate should be 0 when backend reports
-    expect(processed.usage.cacheReadInputTokens).toBeGreaterThanOrEqual(0);
+    // Backend reported 15 cache tokens — middleware must preserve this exact value,
+    // not add its own estimate on top.
+    expect(processed.usage.cacheReadInputTokens).toBe(15);
   });
 });

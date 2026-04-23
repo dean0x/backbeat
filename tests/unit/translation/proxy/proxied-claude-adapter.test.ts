@@ -12,7 +12,10 @@ import { describe, expect, it } from 'vitest';
 import type { AgentConfig, Configuration } from '../../../../src/core/configuration.js';
 import { ProxiedClaudeAdapter } from '../../../../src/translation/proxy/proxied-claude-adapter.js';
 
-/** Expose protected resolveBaseUrl for testing */
+/**
+ * Expose protected resolveBaseUrl for testing.
+ * DECISION: Subclass exposure chosen over child_process mocking due to isolate:false constraint.
+ */
 class TestableProxiedClaudeAdapter extends ProxiedClaudeAdapter {
   testResolveBaseUrl(agentConfig: AgentConfig): Record<string, string> {
     return this.resolveBaseUrl(agentConfig);

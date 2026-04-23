@@ -559,4 +559,285 @@ describe('TranslationProxy', () => {
     expect(response.body).toContain('message_stop');
     expect(response.body).toContain('Hello');
   });
+
+  describe('error paths', () => {
+    it('returns 405 for non-POST requests', async () => {
+      const { server: backend, port: backendPort } = await makeBackend((_req, res) => {
+        res.writeHead(200);
+        res.end('{}');
+      });
+      backendServers.push(backend);
+
+      const logger = makeLogger();
+      const proxy = makeProxy(backendPort, logger);
+      proxies.push(proxy);
+
+      const startResult = await proxy.start();
+      if (!startResult.ok) return;
+      const { port } = startResult.value;
+
+      const response = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+        const req = http.request(
+          { hostname: '127.0.0.1', port, path: '/v1/messages', method: 'GET' },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+            res.on('end', () => resolve({ statusCode: res.statusCode ?? 0, body: Buffer.concat(chunks).toString() }));
+          },
+        );
+        req.on('error', reject);
+        req.end();
+      });
+
+      expect(response.statusCode).toBe(405);
+      const body = JSON.parse(response.body);
+      expect(body.error.type).toBe('invalid_request_error');
+    });
+
+    it('returns 404 for unknown endpoints', async () => {
+      const { server: backend, port: backendPort } = await makeBackend((_req, res) => {
+        res.writeHead(200);
+        res.end('{}');
+      });
+      backendServers.push(backend);
+
+      const logger = makeLogger();
+      const proxy = makeProxy(backendPort, logger);
+      proxies.push(proxy);
+
+      const startResult = await proxy.start();
+      if (!startResult.ok) return;
+      const { port } = startResult.value;
+
+      const response = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: '127.0.0.1',
+            port,
+            path: '/v1/unknown-endpoint',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': '2' },
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+            res.on('end', () => resolve({ statusCode: res.statusCode ?? 0, body: Buffer.concat(chunks).toString() }));
+          },
+        );
+        req.on('error', reject);
+        req.write('{}');
+        req.end();
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.error.type).toBe('invalid_request_error');
+    });
+
+    it('returns 400 for invalid JSON body', async () => {
+      const { server: backend, port: backendPort } = await makeBackend((_req, res) => {
+        res.writeHead(200);
+        res.end('{}');
+      });
+      backendServers.push(backend);
+
+      const logger = makeLogger();
+      const proxy = makeProxy(backendPort, logger);
+      proxies.push(proxy);
+
+      const startResult = await proxy.start();
+      if (!startResult.ok) return;
+      const { port } = startResult.value;
+
+      const invalidJson = 'this is not json at all!!!';
+
+      const response = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: '127.0.0.1',
+            port,
+            path: '/v1/messages',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(invalidJson),
+            },
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+            res.on('end', () => resolve({ statusCode: res.statusCode ?? 0, body: Buffer.concat(chunks).toString() }));
+          },
+        );
+        req.on('error', reject);
+        req.write(invalidJson);
+        req.end();
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.error.type).toBe('invalid_request_error');
+    });
+
+    it('returns 502 when backend connection is refused', async () => {
+      const logger = makeLogger();
+      // Point proxy at a port with no server (connection refused)
+      const proxy = makeProxy(1, logger);
+      proxies.push(proxy);
+
+      const startResult = await proxy.start();
+      if (!startResult.ok) return;
+      const { port } = startResult.value;
+
+      const requestBody = JSON.stringify({
+        model: 'claude-3-5-sonnet-20241022',
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 512,
+      });
+
+      const response = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: '127.0.0.1',
+            port,
+            path: '/v1/messages',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(requestBody) },
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+            res.on('end', () => resolve({ statusCode: res.statusCode ?? 0, body: Buffer.concat(chunks).toString() }));
+          },
+        );
+        req.on('error', reject);
+        req.write(requestBody);
+        req.end();
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body);
+      expect(body.error.type).toBe('api_error');
+    });
+
+    it('returns 502 when backend returns invalid JSON', async () => {
+      const { server: backend, port: backendPort } = await makeBackend((_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end('this is not valid json!!!');
+      });
+      backendServers.push(backend);
+
+      const logger = makeLogger();
+      const proxy = makeProxy(backendPort, logger);
+      proxies.push(proxy);
+
+      const startResult = await proxy.start();
+      if (!startResult.ok) return;
+      const { port } = startResult.value;
+
+      const requestBody = JSON.stringify({
+        model: 'claude-3-5-sonnet-20241022',
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 512,
+      });
+
+      const response = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: '127.0.0.1',
+            port,
+            path: '/v1/messages',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(requestBody) },
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+            res.on('end', () => resolve({ statusCode: res.statusCode ?? 0, body: Buffer.concat(chunks).toString() }));
+          },
+        );
+        req.on('error', reject);
+        req.write(requestBody);
+        req.end();
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body);
+      expect(body.error.type).toBe('api_error');
+    });
+  });
+
+  describe('streaming JSON fallback', () => {
+    it('handles backend returning application/json when streaming was requested', async () => {
+      // Some backends downgrade streaming and return a JSON completion instead of SSE.
+      // The proxy must detect this via Content-Type and translate the JSON response normally.
+      const { server: backend, port: backendPort } = await makeBackend(async (req, res) => {
+        await readBody(req);
+        const responseBody = {
+          id: 'chatcmpl-fallback-1',
+          model: 'gpt-4o',
+          choices: [
+            {
+              message: { role: 'assistant', content: 'Fallback response.' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 },
+        };
+        // Return JSON instead of SSE even though the request asked for streaming
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(responseBody));
+      });
+      backendServers.push(backend);
+
+      const logger = makeLogger();
+      const proxy = makeProxy(backendPort, logger);
+      proxies.push(proxy);
+
+      const startResult = await proxy.start();
+      if (!startResult.ok) return;
+      const { port } = startResult.value;
+
+      // Send a streaming request (stream: true)
+      const requestBody = JSON.stringify({
+        model: 'claude-3-5-sonnet-20241022',
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 512,
+        stream: true,
+      });
+
+      const response = await new Promise<{ statusCode: number; body: string; contentType: string }>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: '127.0.0.1',
+            port,
+            path: '/v1/messages',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(requestBody) },
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+            res.on('end', () =>
+              resolve({
+                statusCode: res.statusCode ?? 0,
+                body: Buffer.concat(chunks).toString(),
+                contentType: res.headers['content-type'] ?? '',
+              }),
+            );
+          },
+        );
+        req.on('error', reject);
+        req.write(requestBody);
+        req.end();
+      });
+
+      // Proxy should translate the JSON fallback as a normal non-streaming response
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.type).toBe('message');
+      expect(body.role).toBe('assistant');
+      expect(body.content[0].text).toBe('Fallback response.');
+    });
+  });
 });
