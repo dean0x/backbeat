@@ -49,6 +49,7 @@ export interface ModeFlags {
   skipResourceMonitoring: boolean;
   skipScheduleExecutor: boolean;
   skipRecovery: boolean;
+  skipProxy: boolean;
 }
 
 /**
@@ -63,6 +64,11 @@ export function deriveModeFlags(mode: BootstrapMode): ModeFlags {
     skipResourceMonitoring: false,
     skipScheduleExecutor: mode === 'cli' || mode === 'run',
     skipRecovery: mode === 'cli',
+    // DECISION (DD1): Proxy starts in any mode that spawns workers ('server', 'run').
+    // Skipped in 'cli' mode (management commands that never spawn workers).
+    // The processSpawner guard is separate — checked at the call site because
+    // it's an options check, not a mode-derived flag.
+    skipProxy: mode === 'cli',
   };
 }
 
@@ -165,7 +171,7 @@ const getFromContainerSafe = <T>(container: Container, key: string): Result<T> =
  */
 export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<Container>> {
   const mode = options.mode ?? 'server';
-  const { skipResourceMonitoring, skipScheduleExecutor, skipRecovery } = deriveModeFlags(mode);
+  const { skipResourceMonitoring, skipScheduleExecutor, skipRecovery, skipProxy } = deriveModeFlags(mode);
 
   const container = new Container();
   const config = loadConfiguration();
@@ -353,7 +359,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
   container.registerSingleton('taskQueue', () => new PriorityTaskQueue());
 
   // ============================================================================
-  // Translation proxy — optional, activated by agents.claude.translate in config.json
+  // Translation proxy — optional, activated by agents.claude.translate config
   //
   // ARCHITECTURE: If proxy config exists, start a local TranslationProxy that
   // routes Anthropic Messages API requests to an OpenAI-compatible backend.
@@ -369,32 +375,33 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
   // Rationale: The port must be known before the agentRegistry factory runs,
   // and factory functions are synchronous. Eager start ensures consistency.
   //
-  // DECISION: Proxy is only started in 'server' mode (MCP daemon). CLI modes
-  // ('cli', 'run') skip proxy startup — spawned claude processes read their own
-  // config and start their own proxy when needed.
+  // DECISION (DD1): Proxy starts in server and run modes (both spawn workers).
+  // Skipped in cli mode (management commands that never spawn workers) and
+  // when a processSpawner is injected (tests with mock spawners).
   //
-  // Failure handling: A proxy start failure is non-fatal — bootstrap falls back
-  // to the standard ClaudeAdapter (direct Anthropic API). This keeps the server
-  // operational even if the target backend is temporarily unreachable.
+  // DECISION (DD2): Proxy failure is fatal when config exists. The user
+  // explicitly configured translate — falling back to direct Anthropic API
+  // would fail (wrong key/model) and produce confusing downstream errors.
+  // Error message includes remediation steps for working without the proxy.
   // ============================================================================
   let proxyPort: number | undefined;
 
-  if (!options.processSpawner && (options.mode ?? 'server') === 'server') {
+  if (!options.processSpawner && !skipProxy) {
     const proxyConfig = loadProxyConfig('claude');
     if (proxyConfig !== null) {
       const proxyManager = new ProxyManager(proxyConfig, logger.child({ module: 'ProxyManager' }));
       const proxyResult = await proxyManager.start();
       if (proxyResult.ok) {
         proxyPort = proxyResult.value.port;
-        // ARCHITECTURE: Optional registration — only present when proxy is active.
-        // Resolved by key in src/index.ts shutdown handler; callers must handle
-        // the missing-key case (container.get returns Err when unregistered).
         container.registerValue('proxyManager', proxyManager);
         logger.info('Translation proxy active', { port: proxyPort, targetBaseUrl: proxyConfig.targetBaseUrl });
       } else {
-        logger.warn('Translation proxy failed to start — falling back to direct Anthropic API', {
-          error: proxyResult.error.message,
-        });
+        return err(
+          new Error(
+            `Translation proxy failed to start: ${proxyResult.error.message}. ` +
+              'To work without the proxy, run: beat agents config set claude translate ""',
+          ),
+        );
       }
     }
   }

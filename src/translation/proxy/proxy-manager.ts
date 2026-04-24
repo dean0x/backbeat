@@ -27,7 +27,7 @@ import { err, ok, type Result } from '../../core/result.js';
 import { AnthropicCodec } from '../codecs/anthropic-codec.js';
 import { OpenAICodec } from '../codecs/openai-codec.js';
 import { LoggingMiddleware } from '../middleware/logging.js';
-import { PromptCacheMiddleware } from '../middleware/prompt-cache.js';
+import { PromptCacheMiddleware, type PromptCacheState } from '../middleware/prompt-cache.js';
 import { ToolNameMappingMiddleware } from '../middleware/tool-name-mapping.js';
 import { TranslationProxy } from './translation-proxy.js';
 
@@ -121,6 +121,8 @@ export class ProxyManager {
 
     const proxyLogger = this.logger.child({ module: 'TranslationProxy' });
 
+    const promptCacheState: PromptCacheState = { lastPrefixHash: null };
+
     const proxy = new TranslationProxy({
       targetBaseUrl: this.config.targetBaseUrl,
       targetApiKey: this.config.targetApiKey,
@@ -128,11 +130,12 @@ export class ProxyManager {
       sourceCodec: new AnthropicCodec(),
       targetCodec: new OpenAICodec(),
       // ARCHITECTURE: Factory produces fresh middleware instances per request so
-      // concurrent requests do not share mutable middleware state (see middlewareFactory
-      // DECISION comment in TranslationProxyConfig).
+      // concurrent requests do not share mutable per-request state (see middlewareFactory
+      // DECISION comment in TranslationProxyConfig). PromptCacheMiddleware receives a
+      // shared PromptCacheState for cross-request cache tracking.
       middlewareFactory: () => [
         new ToolNameMappingMiddleware(),
-        new PromptCacheMiddleware(),
+        new PromptCacheMiddleware(promptCacheState),
         new LoggingMiddleware(proxyLogger),
       ],
       logger: proxyLogger,

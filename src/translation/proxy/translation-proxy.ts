@@ -37,9 +37,10 @@ export interface TranslationProxyConfig {
    *
    * DECISION: Per-request factory (not a shared instance array) so each
    * concurrent request gets its own middleware state. Shared instances would
-   * cause data races: LoggingMiddleware would corrupt elapsed-time metrics,
-   * PromptCacheMiddleware would cross-contaminate prefix hashes, and
-   * ToolNameMappingMiddleware would bleed tool name maps across requests.
+   * cause data races: LoggingMiddleware would corrupt elapsed-time metrics
+   * and ToolNameMappingMiddleware would bleed tool name maps across requests.
+   * PromptCacheMiddleware uses constructor-injected shared state for cross-request
+   * cache tracking while keeping per-request fields isolated.
    */
   readonly middlewareFactory: () => readonly TranslationMiddleware[];
   readonly logger: Logger;

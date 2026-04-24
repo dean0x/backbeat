@@ -20,6 +20,11 @@ import { createHash } from 'node:crypto';
 import type { CanonicalRequest, CanonicalResponse } from '../ir.js';
 import type { TranslationMiddleware } from './middleware.js';
 
+/** Cross-request state shared across per-request PromptCacheMiddleware instances. */
+export interface PromptCacheState {
+  lastPrefixHash: string | null;
+}
+
 const PREFIX_MESSAGES_TO_HASH = 3;
 const CHARS_PER_TOKEN = 4;
 
@@ -74,9 +79,10 @@ function estimatePrefixTokens(request: CanonicalRequest): number {
 export class PromptCacheMiddleware implements TranslationMiddleware {
   readonly name = 'prompt-cache';
 
-  private lastPrefixHash: string | null = null;
   private currentPrefixHash: string | null = null;
   private currentPrefixTokens = 0;
+
+  constructor(private readonly sharedState: PromptCacheState = { lastPrefixHash: null }) {}
 
   processRequest(request: CanonicalRequest): CanonicalRequest {
     const hash = hashPrefix(request);
@@ -87,10 +93,12 @@ export class PromptCacheMiddleware implements TranslationMiddleware {
 
   processResponse(response: CanonicalResponse): CanonicalResponse {
     const isStablePrefix =
-      this.currentPrefixHash !== null && this.lastPrefixHash !== null && this.currentPrefixHash === this.lastPrefixHash;
+      this.currentPrefixHash !== null &&
+      this.sharedState.lastPrefixHash !== null &&
+      this.currentPrefixHash === this.sharedState.lastPrefixHash;
 
-    // Update last hash for next request
-    this.lastPrefixHash = this.currentPrefixHash;
+    // Update last hash for next request (persists via shared state)
+    this.sharedState.lastPrefixHash = this.currentPrefixHash;
 
     // If backend already reported cache tokens, don't double-count
     if (response.usage.cacheReadInputTokens) {
