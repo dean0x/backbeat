@@ -32,7 +32,7 @@ function makeResponse(overrides: Partial<CanonicalResponse> = {}): CanonicalResp
 }
 
 function makeStreamEvent(text: string): CanonicalStreamEvent {
-  return { type: 'content_delta', index: 0, delta: { type: 'text_delta', text } };
+  return { type: 'content_delta', index: 0, text };
 }
 
 /** Create a middleware that appends a tag to the model field of a request */
@@ -60,8 +60,8 @@ function makeStreamTagger(tag: string): TranslationMiddleware {
   return {
     name: `stream-tagger-${tag}`,
     processStreamEvent(event: CanonicalStreamEvent): CanonicalStreamEvent {
-      if (event.type === 'content_delta' && event.delta.type === 'text_delta') {
-        return { ...event, delta: { ...event.delta, text: `${event.delta.text}:${tag}` } };
+      if (event.type === 'content_delta') {
+        return { ...event, text: `${event.text}:${tag}` };
       }
       return event;
     },
@@ -130,10 +130,10 @@ describe('runStreamEventMiddleware', () => {
     const result = runStreamEventMiddleware(middlewares, event);
     // Reverse: hello → hello:C → hello:C:B → hello:C:B:A
     expect(result).not.toBeNull();
-    if (result?.type === 'content_delta' && result.delta.type === 'text_delta') {
-      expect(result.delta.text).toBe('hello:C:B:A');
+    if (result?.type === 'content_delta') {
+      expect(result.text).toBe('hello:C:B:A');
     } else {
-      throw new Error('Expected content_delta with text_delta');
+      throw new Error('Expected content_delta');
     }
   });
 
@@ -174,10 +174,10 @@ describe('runStreamEventMiddleware', () => {
     const event = makeStreamEvent('hello');
     const result = runStreamEventMiddleware([noOpMiddleware, tagger], event);
     expect(result).not.toBeNull();
-    if (result?.type === 'content_delta' && result.delta.type === 'text_delta') {
-      expect(result.delta.text).toBe('hello:A');
+    if (result?.type === 'content_delta') {
+      expect(result.text).toBe('hello:A');
     } else {
-      throw new Error('Expected content_delta with text_delta');
+      throw new Error('Expected content_delta');
     }
   });
 });
