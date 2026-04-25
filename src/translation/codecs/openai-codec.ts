@@ -335,47 +335,86 @@ class OpenAIStreamParser implements StreamParser {
       } else {
         const pending = this.pendingToolCalls.get(tcIndex);
         if (pending !== undefined) {
-          // Seen before but id/name not yet arrived — accumulate args and promote when ready
-          if (tcArgs) {
-            pending.argumentsAccumulator += tcArgs;
-          }
-          if (tcId && tcName) {
-            pending.id = tcId;
-            pending.name = tcName;
-            pending.started = true;
-            this.pendingToolCalls.delete(tcIndex);
-            this.activeToolCalls.set(this.currentContentIndex, pending);
-            this.openaiToCanonicalIndex.set(tcIndex, this.currentContentIndex);
-            events.push({ type: 'tool_call_start', index: this.currentContentIndex, id: tcId, name: tcName });
-            this.lastActiveToolIndex = this.currentContentIndex;
-            this.currentContentIndex++;
-          }
+          events.push(...this.promoteOrAccumulatePending(pending, tcIndex, tcId, tcName, tcArgs));
         } else {
-          // Brand new tool call — first time we see this OpenAI tcIndex
-          const toolCallData: ActiveToolCall = {
-            id: tcId ?? '',
-            name: tcName ?? '',
-            argumentsAccumulator: tcArgs ?? '',
-            started: false,
-          };
-
-          if (tcId && tcName) {
-            // Can start immediately
-            toolCallData.started = true;
-            this.activeToolCalls.set(this.currentContentIndex, toolCallData);
-            this.openaiToCanonicalIndex.set(tcIndex, this.currentContentIndex);
-            events.push({ type: 'tool_call_start', index: this.currentContentIndex, id: tcId, name: tcName });
-            this.lastActiveToolIndex = this.currentContentIndex;
-            this.currentContentIndex++;
-          } else {
-            // No id/name yet — park in pending
-            this.pendingToolCalls.set(tcIndex, toolCallData);
-          }
+          events.push(...this.registerNewToolCall(tcIndex, tcId, tcName, tcArgs));
         }
       }
     }
 
     return events;
+  }
+
+  /**
+   * Handles a tool call seen before but whose id/name has not yet arrived.
+   * Accumulates args unconditionally; promotes to active when both id and name are present.
+   */
+  private promoteOrAccumulatePending(
+    pending: ActiveToolCall,
+    tcIndex: number,
+    tcId: string | undefined,
+    tcName: string | undefined,
+    tcArgs: string | undefined,
+  ): CanonicalStreamEvent[] {
+    if (tcArgs) {
+      pending.argumentsAccumulator += tcArgs;
+    }
+    if (tcId && tcName) {
+      pending.id = tcId;
+      pending.name = tcName;
+      pending.started = true;
+      this.pendingToolCalls.delete(tcIndex);
+      this.activeToolCalls.set(this.currentContentIndex, pending);
+      this.openaiToCanonicalIndex.set(tcIndex, this.currentContentIndex);
+      const event: CanonicalStreamEvent = {
+        type: 'tool_call_start',
+        index: this.currentContentIndex,
+        id: tcId,
+        name: tcName,
+      };
+      this.lastActiveToolIndex = this.currentContentIndex;
+      this.currentContentIndex++;
+      return [event];
+    }
+    return [];
+  }
+
+  /**
+   * Handles the first occurrence of an OpenAI tool call index.
+   * Starts immediately when id and name are present; parks in pending otherwise.
+   */
+  private registerNewToolCall(
+    tcIndex: number,
+    tcId: string | undefined,
+    tcName: string | undefined,
+    tcArgs: string | undefined,
+  ): CanonicalStreamEvent[] {
+    const toolCallData: ActiveToolCall = {
+      id: tcId ?? '',
+      name: tcName ?? '',
+      argumentsAccumulator: tcArgs ?? '',
+      started: false,
+    };
+
+    if (tcId && tcName) {
+      // Can start immediately
+      toolCallData.started = true;
+      this.activeToolCalls.set(this.currentContentIndex, toolCallData);
+      this.openaiToCanonicalIndex.set(tcIndex, this.currentContentIndex);
+      const event: CanonicalStreamEvent = {
+        type: 'tool_call_start',
+        index: this.currentContentIndex,
+        id: tcId,
+        name: tcName,
+      };
+      this.lastActiveToolIndex = this.currentContentIndex;
+      this.currentContentIndex++;
+      return [event];
+    }
+
+    // No id/name yet — park in pending
+    this.pendingToolCalls.set(tcIndex, toolCallData);
+    return [];
   }
 
   private handleFinishReason(finishReason: string, chunk: Record<string, unknown>): CanonicalStreamEvent[] {
