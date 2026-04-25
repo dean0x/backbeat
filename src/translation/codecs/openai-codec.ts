@@ -389,16 +389,14 @@ class OpenAIStreamParser implements StreamParser {
     tcName: string | undefined,
     tcArgs: string | undefined,
   ): CanonicalStreamEvent[] {
-    const toolCallData: ActiveToolCall = {
-      id: tcId ?? '',
-      name: tcName ?? '',
-      argumentsAccumulator: tcArgs ?? '',
-      started: false,
-    };
-
     if (tcId && tcName) {
-      // Can start immediately
-      toolCallData.started = true;
+      // Can start immediately — id and name are present in the first chunk
+      const toolCallData: ActiveToolCall = {
+        id: tcId,
+        name: tcName,
+        argumentsAccumulator: tcArgs ?? '',
+        started: true,
+      };
       this.activeToolCalls.set(this.currentContentIndex, toolCallData);
       this.openaiToCanonicalIndex.set(tcIndex, this.currentContentIndex);
       const event: CanonicalStreamEvent = {
@@ -413,7 +411,12 @@ class OpenAIStreamParser implements StreamParser {
     }
 
     // No id/name yet — park in pending
-    this.pendingToolCalls.set(tcIndex, toolCallData);
+    this.pendingToolCalls.set(tcIndex, {
+      id: '',
+      name: '',
+      argumentsAccumulator: tcArgs ?? '',
+      started: false,
+    });
     return [];
   }
 
