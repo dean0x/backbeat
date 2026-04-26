@@ -53,9 +53,8 @@ function serializeContentForOpenAI(content: CanonicalContent[]): Array<Record<st
       } else {
         parts.push({ type: 'image_url', image_url: { url: block.source.data } });
       }
-    }
-    // document: convert to text (lossy but functional)
-    else if (block.type === 'document') {
+    } else if (block.type === 'document') {
+      // document: convert to text (lossy but functional)
       parts.push({ type: 'text', text: `[Document: ${block.source.mediaType}]` });
     }
     // Other content types (tool_use, tool_result, thinking, etc.) are handled at message level

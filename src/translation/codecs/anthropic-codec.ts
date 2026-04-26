@@ -146,41 +146,39 @@ function parseToolChoice(raw: unknown): CanonicalToolChoice | undefined {
 // ==========================================
 
 function serializeContentBlock(content: CanonicalContent): Record<string, unknown> {
-  if (content.type === 'text') {
-    return {
-      type: 'text',
-      text: content.text,
-      ...(content.cacheControl ? { cache_control: content.cacheControl } : {}),
-    };
-  }
+  switch (content.type) {
+    case 'text':
+      return {
+        type: 'text',
+        text: content.text,
+        ...(content.cacheControl ? { cache_control: content.cacheControl } : {}),
+      };
 
-  if (content.type === 'tool_use') {
-    return {
-      type: 'tool_use',
-      id: content.id,
-      name: content.name,
-      input: content.input,
-    };
-  }
+    case 'tool_use':
+      return {
+        type: 'tool_use',
+        id: content.id,
+        name: content.name,
+        input: content.input,
+      };
 
-  if (content.type === 'thinking') {
-    return {
-      type: 'thinking',
-      thinking: content.thinking,
-      ...(content.signature ? { signature: content.signature } : {}),
-    };
-  }
+    case 'thinking':
+      return {
+        type: 'thinking',
+        thinking: content.thinking,
+        ...(content.signature ? { signature: content.signature } : {}),
+      };
 
-  if (content.type === 'redacted_thinking') {
-    return { type: 'redacted_thinking' };
-  }
+    case 'redacted_thinking':
+      return { type: 'redacted_thinking' };
 
-  if (content.type === 'refusal') {
-    return { type: 'text', text: `[Refusal] ${content.refusal}` };
-  }
+    case 'refusal':
+      return { type: 'text', text: `[Refusal] ${content.refusal}` };
 
-  // Fallback for other content types
-  return { type: 'text', text: '' };
+    default:
+      // Fallback for content types not representable in Anthropic wire format (image, document, json, tool_result)
+      return { type: 'text', text: '' };
+  }
 }
 
 function serializeUsage(usage: CanonicalUsage): Record<string, unknown> {
