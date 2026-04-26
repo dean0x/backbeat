@@ -6,7 +6,7 @@
  */
 
 import * as http from 'node:http';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { UrlProbeOptions } from '../../../src/utils/url-probe.js';
 import { probeUrl } from '../../../src/utils/url-probe.js';
 
