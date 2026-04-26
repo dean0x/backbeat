@@ -5,7 +5,7 @@
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import pkg from '../package.json' with { type: 'json' };
+import { VERSION } from './generated/version.js';
 import { MCPAdapter } from './adapters/mcp-adapter.js';
 import { bootstrap } from './bootstrap.js';
 import { Container } from './core/container.js';
@@ -53,7 +53,7 @@ async function main() {
     const mcpAdapter = mcpAdapterResult.value;
 
     // All logs go to stderr to keep stdout clean for MCP protocol
-    logger.info(`Starting Autobeat MCP Server v${pkg.version}`);
+    logger.info(`Starting Autobeat MCP Server v${VERSION}`);
 
     // Create and start MCP server
     const transport = new StdioServerTransport();

@@ -3,9 +3,9 @@
 // Set process title for easy identification in ps/pgrep/pkill
 process.title = 'beat-cli';
 
-import { readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { VERSION } from './generated/version.js';
 import {
   agentsConfigReset,
   agentsConfigSet,
@@ -44,7 +44,7 @@ const subCommand = args[1];
 // Early --help/-h interception for subcommands
 const subArgs = args.slice(1);
 if (mainCommand && (subArgs.includes('--help') || subArgs.includes('-h'))) {
-  showHelp(__dirname);
+  showHelp();
   process.exit(0);
 }
 
@@ -348,12 +348,11 @@ if (mainCommand === 'mcp') {
   const { startDashboard } = await import('./cli/dashboard/index.js');
   await startDashboard();
 } else if (mainCommand === 'help' || mainCommand === '--help' || mainCommand === '-h' || !mainCommand) {
-  showHelp(__dirname);
+  showHelp();
 } else if (mainCommand === '--version' || mainCommand === '-v') {
-  const pkg = JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
-  ui.stdout(pkg.version);
+  ui.stdout(VERSION);
 } else {
   ui.error(`Unknown command: ${mainCommand}`);
-  showHelp(__dirname);
+  showHelp();
   process.exit(1);
 }

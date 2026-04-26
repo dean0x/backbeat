@@ -5,7 +5,7 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { z } from 'zod';
-import pkg from '../../package.json' with { type: 'json' };
+import { VERSION } from '../generated/version.js';
 import {
   AGENT_DESCRIPTIONS,
   AGENT_PROVIDERS,
@@ -553,7 +553,7 @@ export class MCPAdapter {
     this.server = new Server(
       {
         name: 'autobeat',
-        version: pkg.version,
+        version: VERSION,
       },
       {
         capabilities: {
