@@ -390,7 +390,6 @@ export class TranslationProxy {
     }
 
     const targetBody = JSON.stringify(serializeResult.value);
-    const targetUrl = this.chatCompletionsUrl;
 
     // Build outbound headers (strip anthropic-specific, set auth)
     const outboundHeaders = stripAnthropicHeaders(req.headers);
@@ -398,12 +397,10 @@ export class TranslationProxy {
     outboundHeaders['Content-Type'] = 'application/json';
     outboundHeaders['Content-Length'] = String(Buffer.byteLength(targetBody));
 
-    const isStreaming = processedRequest.stream;
-
-    if (isStreaming) {
-      await this.handleStreamingRequest(req, res, targetUrl, outboundHeaders, targetBody, middlewares);
+    if (processedRequest.stream) {
+      await this.handleStreamingRequest(req, res, this.chatCompletionsUrl, outboundHeaders, targetBody, middlewares);
     } else {
-      await this.handleNonStreamingRequest(req, res, targetUrl, outboundHeaders, targetBody, middlewares);
+      await this.handleNonStreamingRequest(req, res, this.chatCompletionsUrl, outboundHeaders, targetBody, middlewares);
     }
   }
 

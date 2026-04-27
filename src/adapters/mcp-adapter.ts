@@ -3368,17 +3368,7 @@ export class MCPAdapter {
         }
 
         const checkWarning = this.getClaudeBaseUrlWarning(agent, agentConfig.baseUrl, agentConfig.apiKey);
-        const checkPayload: {
-          success: boolean;
-          ready: boolean;
-          method: string;
-          hint?: string;
-          storedKey?: string;
-          baseUrl?: string;
-          model?: string;
-          warning?: string;
-          connectivity?: UrlProbeResult;
-        } = {
+        const checkPayload = {
           success: true,
           ...status,
           ...(agentConfig.apiKey && { storedKey: maskApiKey(agentConfig.apiKey) }),

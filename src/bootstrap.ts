@@ -192,8 +192,8 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
   // If the caller provided a Logger instance (e.g. FileLogger from the dashboard),
   // use it directly. Otherwise construct the default logger based on NODE_ENV.
   if (options.logger) {
-    const providedLogger = options.logger;
-    container.registerSingleton('logger', () => providedLogger);
+    const injectedLogger = options.logger;
+    container.registerSingleton('logger', () => injectedLogger);
   } else {
     container.registerSingleton('logger', () => {
       if (process.env.NODE_ENV === 'production') {
@@ -204,25 +204,25 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
   }
 
   // Validate configuration against system (component-level validation)
-  const bootstrapLoggerResult = getFromContainerSafe<Logger>(container, 'logger');
-  if (!bootstrapLoggerResult.ok) {
-    return bootstrapLoggerResult;
+  const loggerResult = getFromContainerSafe<Logger>(container, 'logger');
+  if (!loggerResult.ok) {
+    return loggerResult;
   }
-  const bootstrapLogger = bootstrapLoggerResult.value;
+  const logger = loggerResult.value;
 
-  const validationWarnings = validateConfiguration(config, bootstrapLogger);
+  const validationWarnings = validateConfiguration(config, logger);
 
   // Log summary if warnings exist
   if (validationWarnings.length > 0) {
     const warningCount = validationWarnings.filter((w) => w.severity === 'warning').length;
     const infoCount = validationWarnings.filter((w) => w.severity === 'info').length;
-    bootstrapLogger.warn('Configuration validation complete', {
+    logger.warn('Configuration validation complete', {
       warnings: warningCount,
       info: infoCount,
       total: validationWarnings.length,
     });
   } else {
-    bootstrapLogger.debug('Configuration validation passed - no warnings');
+    logger.debug('Configuration validation passed - no warnings');
   }
 
   // Register EventBus as singleton - ALL components must use this shared instance
@@ -238,17 +238,6 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Result<
     const cfg = configResult.value as Configuration;
     return new InMemoryEventBus(cfg, (loggerResult.value as Logger).child({ module: 'SharedEventBus' }));
   });
-
-  // Get logger for bootstrap
-  const loggerResult = container.get<Logger>('logger');
-  if (!loggerResult.ok) {
-    return err(
-      new AutobeatError(ErrorCode.DEPENDENCY_INJECTION_FAILED, 'Failed to create logger', {
-        error: loggerResult.error.message,
-      }),
-    );
-  }
-  const logger = loggerResult.value;
 
   // All logs go to stderr to keep stdout clean for MCP protocol
   logger.info('Bootstrapping Autobeat', { config });

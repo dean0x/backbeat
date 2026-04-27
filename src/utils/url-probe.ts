@@ -135,7 +135,7 @@ function httpRequest(
 
 /**
  * Exact TLS error codes emitted by Node.js TLS/SSL machinery.
- * Checked before the ERR_TLS / ERR_SSL prefix guards below.
+ * Checked alongside the ERR_TLS / ERR_SSL prefix guards in isTlsError.
  */
 const TLS_ERROR_CODES = new Set([
   'CERT_HAS_EXPIRED',
