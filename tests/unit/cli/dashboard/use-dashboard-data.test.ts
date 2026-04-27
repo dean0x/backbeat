@@ -7,7 +7,12 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { ViewState } from '../../../../src/cli/dashboard/types.js';
-import { buildEntityCounts, FETCH_LIMIT, fetchAllData } from '../../../../src/cli/dashboard/use-dashboard-data.js';
+import {
+  buildEntityCounts,
+  FETCH_LIMIT,
+  fetchAllData,
+  POLL_INTERVAL_BY_VIEW,
+} from '../../../../src/cli/dashboard/use-dashboard-data.js';
 import type { ReadOnlyContext } from '../../../../src/cli/read-only-context.js';
 import { err, ok } from '../../../../src/core/result.js';
 
@@ -110,6 +115,26 @@ function makeCtx(overrides: Partial<ReadOnlyContext> = {}): ReadOnlyContext {
 }
 
 const MAIN_VIEW: ViewState = { kind: 'main' };
+
+// ============================================================================
+// POLL_INTERVAL_BY_VIEW — per-view cadence
+// ============================================================================
+
+describe('POLL_INTERVAL_BY_VIEW', () => {
+  it('main view polls at 1 000 ms', () => {
+    expect(POLL_INTERVAL_BY_VIEW.main).toBe(1_000);
+  });
+
+  it('workspace view polls at 750 ms (faster than main for live output)', () => {
+    expect(POLL_INTERVAL_BY_VIEW.workspace).toBe(750);
+    expect(POLL_INTERVAL_BY_VIEW.workspace).toBeLessThan(POLL_INTERVAL_BY_VIEW.main);
+  });
+
+  it('detail view polls at 2 000 ms (slower to reduce DB pressure)', () => {
+    expect(POLL_INTERVAL_BY_VIEW.detail).toBe(2_000);
+    expect(POLL_INTERVAL_BY_VIEW.detail).toBeGreaterThan(POLL_INTERVAL_BY_VIEW.main);
+  });
+});
 
 // ============================================================================
 // buildEntityCounts
