@@ -20,10 +20,11 @@ export function mainHints(hasMutations: boolean): string {
 }
 
 /**
- * Return the footer hint string for the workspace view.
+ * Return the footer hint string for the workspace view (grid mode in OrchestrationDetail).
+ * DECISION (Phase C): Workspace is now orchestration detail in grid mode — hints reflect grid navigation.
  */
 export function workspaceHints(): string {
-  return 'v metrics · ↑↓ orch · Enter commit/detail · Tab panel · f fullscreen · [/] scroll · G tail · c/d · Esc back';
+  return 'v metrics · ↑↓ orch · Enter grid · Tab panel · f fullscreen · [/] scroll · G tail · c/d · Esc back';
 }
 
 /**

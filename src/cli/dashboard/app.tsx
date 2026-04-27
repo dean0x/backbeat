@@ -27,7 +27,7 @@ import { useTaskOutputStream } from './use-task-output-stream.js';
 import { useTerminalSize } from './use-terminal-size.js';
 import { DetailView } from './views/detail-view.js';
 import { MetricsView } from './views/metrics-view.js';
-import { WorkspaceView } from './views/workspace-view.js';
+import { OrchestrationDetail } from './views/orchestration-detail.js';
 import { createInitialWorkspaceNavState } from './workspace-types.js';
 
 interface AppProps {
@@ -201,7 +201,39 @@ export const App: React.FC<AppProps> = React.memo(({ ctx, version, mutations, re
       if (!data) {
         return null;
       }
-      return <WorkspaceView data={data} layout={workspaceLayout} nav={workspaceNav} streams={streams} />;
+      // Phase C: workspace folded into OrchestrationDetail with viewMode='grid'
+      // DECISION: Eliminates WorkspaceView as a separate component — detail shows list, workspace shows grid.
+      const orchestrations = data.orchestrations;
+      const committedOrch = orchestrations[workspaceNav.committedOrchestratorIndex] ?? orchestrations[0];
+      const workspaceChildren = data.workspaceData?.children ?? [];
+      // Provide a sentinel orchestration when none exist — GridMode handles the empty state via EmptyWorkspace
+      const sentinelOrch = committedOrch ?? {
+        id: '' as never,
+        goal: '',
+        status: 'planning' as never,
+        agent: undefined,
+        model: undefined,
+        loopId: undefined,
+        maxDepth: 0,
+        maxWorkers: 0,
+        maxIterations: 0,
+        workingDirectory: '',
+        stateFilePath: '',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        completedAt: undefined,
+      };
+      return (
+        <OrchestrationDetail
+          orchestration={sentinelOrch as import('../../core/domain.js').Orchestration}
+          children={workspaceChildren}
+          viewMode="grid"
+          orchestrations={orchestrations}
+          workspaceNav={workspaceNav}
+          taskStreams={streams}
+          workspaceLayout={workspaceLayout}
+        />
+      );
     }
 
     if (view.kind === 'detail') {

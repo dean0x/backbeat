@@ -14,15 +14,27 @@
  *
  * Phase C additions:
  *  - Progress Indicators: depth/workers/children vs config limits
+ *  - Grid mode: folds WorkspaceView into this component via viewMode='grid'
+ *
+ * DECISION (Phase C): WorkspaceView folded into OrchestrationDetail via viewMode='grid'
+ * so the workspace is an enriched orchestration detail, not a separate view.
+ * When viewMode='grid', orchestration is determined from orchestrations[committedOrchestratorIndex]
+ * and the TaskPanel grid is rendered inline with OrchestratorNav.
  */
 
 import { Box, Text } from 'ink';
 import React from 'react';
-import type { Orchestration, OrchestratorChild, TaskUsage } from '../../../core/domain.js';
+import type { Orchestration, OrchestratorChild, TaskId, TaskUsage } from '../../../core/domain.js';
+import { EmptyWorkspace } from '../components/empty-workspace.js';
 import { Field, LongField, StatusField } from '../components/field.js';
+import { OrchestratorNav } from '../components/orchestrator-nav.js';
 import { ScrollableList } from '../components/scrollable-list.js';
 import { StatusBadge } from '../components/status-badge.js';
+import { TaskPanel } from '../components/task-panel.js';
 import { relativeTime, truncateCell } from '../format.js';
+import type { WorkspaceLayout } from '../layout.js';
+import type { OutputStreamState } from '../use-task-output-stream.js';
+import type { WorkspaceNavState } from '../workspace-types.js';
 
 /** Page size for the children list — matches ORCHESTRATION_CHILDREN_PAGE_SIZE in use-dashboard-data */
 export const ORCHESTRATION_CHILDREN_PAGE_SIZE = 15;
@@ -40,7 +52,204 @@ interface OrchestrationDetailProps {
   readonly currentPage?: number;
   /** Total count of all children (across all pages) for pagination footer */
   readonly childrenTotal?: number;
+  /**
+   * Grid mode: when 'grid', renders the workspace panel grid instead of the list detail view.
+   * Default: 'list' — existing behaviour unchanged.
+   * DECISION: Folding workspace into orchestration detail keeps view logic co-located
+   * and eliminates the separate WorkspaceView component.
+   */
+  readonly viewMode?: 'list' | 'grid';
+  /** All orchestrations — required for OrchestratorNav in grid mode */
+  readonly orchestrations?: readonly Orchestration[];
+  /** Workspace nav state — required for grid mode (panel focus, page, scroll offsets) */
+  readonly workspaceNav?: WorkspaceNavState;
+  /** Live output streams — required for grid mode */
+  readonly taskStreams?: ReadonlyMap<TaskId, OutputStreamState>;
+  /** Workspace layout — required for grid mode */
+  readonly workspaceLayout?: WorkspaceLayout;
 }
+
+// ============================================================================
+// Grid mode helpers (extracted from WorkspaceView, Phase C fold)
+// ============================================================================
+
+function getPanelAutoTail(nav: WorkspaceNavState, taskId: TaskId): boolean {
+  return nav.autoTailEnabled[taskId] !== false; // default true
+}
+
+function getPanelScrollOffset(nav: WorkspaceNavState, taskId: TaskId): number {
+  return nav.panelScrollOffsets[taskId] ?? 0;
+}
+
+interface GridModeProps {
+  readonly orchestrations: readonly Orchestration[];
+  readonly children: readonly OrchestratorChild[];
+  readonly layout: WorkspaceLayout;
+  readonly nav: WorkspaceNavState;
+  readonly streams: ReadonlyMap<TaskId, OutputStreamState>;
+}
+
+/**
+ * Render the TaskPanel grid (workspace mode).
+ * Mirrors the grid rendering logic from the former WorkspaceView component.
+ */
+function renderGrid({ orchestrations, children, layout, nav, streams }: GridModeProps): React.ReactNode {
+  const { gridPage } = nav;
+  const { visibleSlots, gridCols } = layout;
+
+  const pageStart = gridPage * visibleSlots;
+  const pageEnd = pageStart + visibleSlots;
+  const visibleChildren = children.slice(pageStart, pageEnd);
+  const totalPages = Math.ceil(children.length / visibleSlots);
+
+  // Build a null-valued cost map (per-child cost not yet available)
+  const costsByTask = new Map<TaskId, TaskUsage | null>(children.map((c) => [c.taskId, null] as [TaskId, null]));
+
+  // Determine focused orchestration from nav committed index
+  const focusedOrchestration = orchestrations[nav.committedOrchestratorIndex] ?? orchestrations[0];
+
+  // Fullscreen mode: render a single panel
+  const fullscreenIdx = nav.fullscreenPanelIndex;
+  if (fullscreenIdx !== null) {
+    const globalIdx = pageStart + fullscreenIdx;
+    const child = children[globalIdx];
+    if (child) {
+      return (
+        <Box flexGrow={1} flexDirection="column">
+          <TaskPanel
+            child={child}
+            stream={streams.get(child.taskId)}
+            cost={costsByTask.get(child.taskId) ?? null}
+            layout={layout}
+            focused={true}
+            scrollOffset={getPanelScrollOffset(nav, child.taskId)}
+            autoTail={getPanelAutoTail(nav, child.taskId)}
+          />
+        </Box>
+      );
+    }
+  }
+
+  // Header line: orchestration summary
+  const orchGoalShort = focusedOrchestration ? truncateCell(focusedOrchestration.goal, 40) : '';
+  const costText = ''; // per-child cost aggregate not yet available
+  const headerText = focusedOrchestration
+    ? `${focusedOrchestration.id.slice(-8)} · "${orchGoalShort}" · ${focusedOrchestration.status}${costText}`
+    : '';
+
+  // No children
+  if (children.length === 0) {
+    return (
+      <Box flexDirection="column" flexGrow={1}>
+        {headerText !== '' && (
+          <Box>
+            <Text dimColor>{headerText}</Text>
+          </Box>
+        )}
+        <EmptyWorkspace kind="no-children" layout={layout} />
+      </Box>
+    );
+  }
+
+  // Normal grid: rows of panels
+  const rows: React.ReactNode[] = [];
+  for (let row = 0; row < layout.displayedGridRows; row++) {
+    const rowCells: React.ReactNode[] = [];
+    for (let col = 0; col < gridCols; col++) {
+      const slotIdx = row * gridCols + col;
+      const child = visibleChildren[slotIdx];
+      const globalSlotIdx = pageStart + slotIdx;
+      const isFocused = nav.focusArea === 'grid' && globalSlotIdx === pageStart + nav.focusedPanelIndex;
+
+      if (!child) {
+        rowCells.push(<Box key={`empty-${col}`} width={layout.panelWidth} height={layout.panelHeight} />);
+        continue;
+      }
+
+      rowCells.push(
+        <TaskPanel
+          key={child.taskId}
+          child={child}
+          stream={streams.get(child.taskId)}
+          cost={costsByTask.get(child.taskId) ?? null}
+          layout={layout}
+          focused={isFocused}
+          scrollOffset={getPanelScrollOffset(nav, child.taskId)}
+          autoTail={getPanelAutoTail(nav, child.taskId)}
+        />,
+      );
+    }
+    rows.push(
+      <Box key={`row-${row}`} flexDirection="row">
+        {rowCells}
+      </Box>,
+    );
+  }
+
+  return (
+    <Box flexDirection="column" flexGrow={1}>
+      <Box>
+        <Text dimColor>{headerText}</Text>
+      </Box>
+      {rows}
+      {totalPages > 1 && (
+        <Box>
+          <Text dimColor>{`Page ${gridPage + 1}/${totalPages} — PgUp/PgDn to paginate`}</Text>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+/**
+ * Grid mode root — renders the workspace panel layout with optional nav.
+ * Mirrors WorkspaceView layout logic (nav+grid / grid-only / too-small).
+ */
+function GridMode({ orchestrations, children, layout, nav, streams }: GridModeProps): React.ReactElement {
+  if (layout.mode === 'too-small') {
+    return (
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <Text color="yellow">Resize terminal to view workspace (need ≥50 cols × 15 rows)</Text>
+      </Box>
+    );
+  }
+
+  if (orchestrations.length === 0) {
+    return <EmptyWorkspace kind="no-orchestrators" layout={layout} />;
+  }
+
+  const gridContent = renderGrid({ orchestrations, children, layout, nav, streams });
+
+  if (layout.mode === 'grid-only') {
+    return (
+      <Box flexDirection="column" flexGrow={1}>
+        {gridContent}
+      </Box>
+    );
+  }
+
+  // nav+grid mode: left nav + main grid
+  return (
+    <Box flexDirection="row" flexGrow={1}>
+      <Box width={layout.navWidth} flexDirection="column">
+        <OrchestratorNav
+          orchestrations={orchestrations}
+          focusedIndex={nav.selectedOrchestratorIndex}
+          committedIndex={nav.committedOrchestratorIndex}
+          width={layout.navWidth}
+          height={24}
+        />
+      </Box>
+      <Box flexDirection="column" flexGrow={1}>
+        {gridContent}
+      </Box>
+    </Box>
+  );
+}
+
+// ============================================================================
+// List mode helpers
+// ============================================================================
 
 /**
  * Render a single child row with optional selection highlight.
@@ -138,7 +347,31 @@ export const OrchestrationDetail: React.FC<OrchestrationDetailProps> = React.mem
     childSelectedTaskId,
     currentPage = 0,
     childrenTotal,
+    viewMode = 'list',
+    orchestrations,
+    workspaceNav,
+    taskStreams,
+    workspaceLayout,
   }) => {
+    // Grid mode: render workspace panel layout
+    if (
+      viewMode === 'grid' &&
+      orchestrations !== undefined &&
+      workspaceNav !== undefined &&
+      taskStreams !== undefined &&
+      workspaceLayout !== undefined
+    ) {
+      return (
+        <GridMode
+          orchestrations={orchestrations}
+          children={children}
+          layout={workspaceLayout}
+          nav={workspaceNav}
+          streams={taskStreams}
+        />
+      );
+    }
+
     // Compute selected index: by taskId for stability across refetches; fallback to 0.
     const selectedIndex = React.useMemo(() => {
       if (!childSelectedTaskId || children.length === 0) return 0;
