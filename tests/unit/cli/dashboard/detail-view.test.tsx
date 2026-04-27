@@ -14,7 +14,20 @@ import { LoopDetail } from '../../../../src/cli/dashboard/views/loop-detail.js';
 import { OrchestrationDetail } from '../../../../src/cli/dashboard/views/orchestration-detail.js';
 import { ScheduleDetail } from '../../../../src/cli/dashboard/views/schedule-detail.js';
 import { TaskDetail } from '../../../../src/cli/dashboard/views/task-detail.js';
-import type { Loop, LoopIteration, Orchestration, Schedule, Task } from '../../../../src/core/domain.js';
+import type {
+  Loop,
+  LoopIteration,
+  Orchestration,
+  OrchestratorId,
+  Pipeline,
+  PipelineId,
+  PipelineStatus,
+  PipelineStepDefinition,
+  Schedule,
+  Task,
+  TaskId,
+  TaskUsage,
+} from '../../../../src/core/domain.js';
 import {
   LoopStatus,
   LoopStrategy,
@@ -611,5 +624,228 @@ describe('formatElapsed', () => {
 
   it('returns "0s" for exactly now', () => {
     expect(formatElapsed(FROZEN_NOW)).toBe('0s');
+  });
+});
+
+// ============================================================================
+// Phase C: TaskDetail enhancements — orchestrator attribution, dependencies, usage
+// ============================================================================
+
+describe('TaskDetail — Phase C enhancements', () => {
+  it('shows orchestrator ID when task has orchestratorId', () => {
+    const task = makeTask({ orchestratorId: 'orch-parent-001' as Task['orchestratorId'] });
+    const { lastFrame } = render(<TaskDetail task={task} animFrame={0} />);
+    expect(lastFrame()).toContain('orch-parent-001');
+    expect(lastFrame()).toContain('Orchestrator');
+  });
+
+  it('does not show Orchestrator field when orchestratorId is absent', () => {
+    const task = makeTask({ orchestratorId: undefined });
+    const { lastFrame } = render(<TaskDetail task={task} animFrame={0} />);
+    expect(lastFrame()).not.toContain('Orchestrator');
+  });
+
+  it('shows Dependencies section with blocked-by tasks', () => {
+    const task = makeTask();
+    const deps = [
+      { taskId: 'task-dep-aaa111222333', status: 'completed' },
+      { taskId: 'task-dep-bbb444555666', status: 'running' },
+    ];
+    const { frames } = render(<TaskDetail task={task} animFrame={0} dependencies={deps} />);
+    // Use all frames to get full output (ink-testing-library may clip lastFrame by terminal height)
+    const allOutput = frames.join('\n');
+    expect(allOutput).toContain('Dependencies');
+    expect(allOutput).toContain('Blocked by');
+    expect(allOutput).toContain('task-dep-aaa');
+    expect(allOutput).toContain('completed');
+    expect(allOutput).toContain('running');
+  });
+
+  it('shows Dependencies section with blocks tasks', () => {
+    const task = makeTask();
+    const dependents = [{ taskId: 'task-blocked-ccc777', status: 'queued' }];
+    const { lastFrame } = render(<TaskDetail task={task} animFrame={0} dependents={dependents} />);
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('Dependencies');
+    expect(frame).toContain('Blocks');
+    expect(frame).toContain('queued');
+  });
+
+  it('hides Dependencies section when both arrays are empty', () => {
+    const task = makeTask();
+    const { lastFrame } = render(<TaskDetail task={task} animFrame={0} dependencies={[]} dependents={[]} />);
+    expect(lastFrame()).not.toContain('Dependencies');
+  });
+
+  it('hides Dependencies section when props are undefined', () => {
+    const task = makeTask();
+    const { lastFrame } = render(<TaskDetail task={task} animFrame={0} />);
+    expect(lastFrame()).not.toContain('Dependencies');
+  });
+
+  it('shows Usage section when usage data has tokens', () => {
+    const task = makeTask();
+    const usage: TaskUsage = {
+      taskId: task.id,
+      inputTokens: 45_000,
+      outputTokens: 12_000,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 890_000,
+      totalCostUsd: 0.23,
+    };
+    const { lastFrame } = render(<TaskDetail task={task} animFrame={0} usage={usage} />);
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('Usage');
+    expect(frame).toContain('In:');
+    expect(frame).toContain('Out:');
+    expect(frame).toContain('$0.23');
+  });
+
+  it('hides Usage section when usage is undefined', () => {
+    const task = makeTask();
+    const { lastFrame } = render(<TaskDetail task={task} animFrame={0} />);
+    expect(lastFrame()).not.toContain('Usage');
+  });
+
+  it('hides Usage section when all zeros', () => {
+    const task = makeTask();
+    const usage: TaskUsage = {
+      taskId: task.id,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+      totalCostUsd: 0,
+    };
+    const { lastFrame } = render(<TaskDetail task={task} animFrame={0} usage={usage} />);
+    expect(lastFrame()).not.toContain('Usage');
+  });
+});
+
+// ============================================================================
+// Phase C: LoopDetail enhancements — eval config, best score highlight
+// ============================================================================
+
+describe('LoopDetail — Phase C enhancements', () => {
+  it('shows evalType when present', () => {
+    const loop = makeLoop({ evalType: 'judge' as Loop['evalType'] });
+    const { lastFrame } = render(<LoopDetail loop={loop} iterations={undefined} scrollOffset={0} animFrame={0} />);
+    expect(lastFrame()).toContain('judge');
+    expect(lastFrame()).toContain('Eval Type');
+  });
+
+  it('shows judgeAgent when present', () => {
+    const loop = makeLoop({ judgeAgent: 'claude' as Loop['judgeAgent'] });
+    const { lastFrame } = render(<LoopDetail loop={loop} iterations={undefined} scrollOffset={0} animFrame={0} />);
+    expect(lastFrame()).toContain('Judge Agent');
+    expect(lastFrame()).toContain('claude');
+  });
+
+  it('shows judgePrompt as LongField when present', () => {
+    const loop = makeLoop({ judgePrompt: 'Rate the quality of this implementation from 1-10.' });
+    const { lastFrame } = render(<LoopDetail loop={loop} iterations={undefined} scrollOffset={0} animFrame={0} />);
+    expect(lastFrame()).toContain('Judge Prompt');
+    expect(lastFrame()).toContain('Rate the quality');
+  });
+
+  it('hides eval config fields when absent', () => {
+    const loop = makeLoop({ evalType: undefined, judgeAgent: undefined, judgePrompt: undefined });
+    const { lastFrame } = render(<LoopDetail loop={loop} iterations={undefined} scrollOffset={0} animFrame={0} />);
+    expect(lastFrame()).not.toContain('Eval Type');
+    expect(lastFrame()).not.toContain('Judge Agent');
+    expect(lastFrame()).not.toContain('Judge Prompt');
+  });
+
+  it('renders iteration with gitDiffSummary below the row', () => {
+    const loop = makeLoop({ bestIterationId: undefined });
+    const iter = makeLoopIteration({ iterationNumber: 1, gitDiffSummary: '3 files changed, 42 insertions(+)' });
+    const { lastFrame } = render(<LoopDetail loop={loop} iterations={[iter]} scrollOffset={0} animFrame={0} />);
+    expect(lastFrame()).toContain('3 files changed');
+  });
+});
+
+// ============================================================================
+// Phase C: ScheduleDetail enhancements — pipeline steps section
+// ============================================================================
+
+describe('ScheduleDetail — Phase C pipeline steps', () => {
+  it('shows Pipeline Steps section when pipelineSteps present', () => {
+    const schedule = makeSchedule({
+      pipelineSteps: [
+        { prompt: 'Setup database migrations', priority: undefined } as unknown as Schedule['pipelineSteps'][0],
+        { prompt: 'Generate API endpoints', priority: undefined } as unknown as Schedule['pipelineSteps'][0],
+      ],
+    });
+    const { lastFrame } = render(
+      <ScheduleDetail schedule={schedule} executions={undefined} scrollOffset={0} animFrame={0} />,
+    );
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('Pipeline Steps');
+    expect(frame).toContain('Setup database migrations');
+    expect(frame).toContain('Generate API endpoints');
+    expect(frame).toContain('1.');
+    expect(frame).toContain('2.');
+  });
+
+  it('hides Pipeline Steps section when pipelineSteps is absent', () => {
+    const schedule = makeSchedule({ pipelineSteps: undefined });
+    const { lastFrame } = render(
+      <ScheduleDetail schedule={schedule} executions={undefined} scrollOffset={0} animFrame={0} />,
+    );
+    expect(lastFrame()).not.toContain('Pipeline Steps');
+  });
+});
+
+// ============================================================================
+// Phase C: OrchestrationDetail enhancements — progress indicators
+// ============================================================================
+
+describe('OrchestrationDetail — Phase C progress indicators', () => {
+  it('shows progress section when orchestration has workers limit', () => {
+    const orch = makeOrchestration({ maxWorkers: 4, maxDepth: 0, maxIterations: 0 });
+    const children = [
+      {
+        taskId: 'task-run-1' as TaskId,
+        kind: 'direct',
+        status: 'running',
+        prompt: 'p1',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        agent: undefined,
+      },
+      {
+        taskId: 'task-run-2' as TaskId,
+        kind: 'direct',
+        status: 'running',
+        prompt: 'p2',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        agent: undefined,
+      },
+      {
+        taskId: 'task-done-1' as TaskId,
+        kind: 'direct',
+        status: 'completed',
+        prompt: 'p3',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        agent: undefined,
+      },
+    ];
+    const { lastFrame } = render(<OrchestrationDetail orchestration={orch} animFrame={0} children={children} />);
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('Progress');
+    expect(frame).toContain('Workers');
+    expect(frame).toContain('2/4');
+  });
+
+  it('shows children count in progress section', () => {
+    const orch = makeOrchestration({ maxWorkers: 0, maxDepth: 0, maxIterations: 0 });
+    const { lastFrame } = render(
+      <OrchestrationDetail orchestration={orch} animFrame={0} children={[]} childrenTotal={42} />,
+    );
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('Progress');
+    expect(frame).toContain('42');
   });
 });

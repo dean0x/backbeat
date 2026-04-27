@@ -135,6 +135,8 @@ export const App: React.FC<AppProps> = React.memo(({ ctx, version, mutations, re
   const childTaskStatuses = data?.workspaceData?.childTaskStatuses ?? new Map();
 
   // Live output streaming — only enabled when in workspace view and outputRepository is available
+  // Phase C prep: a future `o` toggle in task detail would also enable streaming here.
+  // That requires keyboard handler changes (handle-detail-keys) deferred to a later phase.
   const streamingEnabled = view.kind === 'workspace' && outputRepository !== undefined;
   const { streams } = useTaskOutputStream(
     outputRepository ?? ctx.outputRepository,
@@ -222,7 +224,15 @@ export const App: React.FC<AppProps> = React.memo(({ ctx, version, mutations, re
 
   return (
     <Box flexDirection="column" width="100%">
-      <Header version={version} data={data} refreshedAt={refreshedAt} error={error} viewKind={view.kind} />
+      <Header
+        version={version}
+        data={data}
+        refreshedAt={refreshedAt}
+        error={error}
+        viewKind={view.kind}
+        entityType={view.kind === 'detail' ? view.entityType : undefined}
+        entityId={view.kind === 'detail' ? view.entityId : undefined}
+      />
       {renderView()}
       <Footer viewKind={view.kind} hasMutations={mutations !== undefined} />
     </Box>

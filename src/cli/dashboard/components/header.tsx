@@ -5,7 +5,8 @@
 
 import { Box, Text } from 'ink';
 import React from 'react';
-import type { DashboardData } from '../types.js';
+import { shortId } from '../format.js';
+import type { DashboardData, PanelId } from '../types.js';
 
 interface HeaderProps {
   readonly version: string;
@@ -17,6 +18,16 @@ interface HeaderProps {
    * Optional for backward compatibility with tests that don't pass it.
    */
   readonly viewKind?: 'main' | 'workspace' | 'detail';
+  /**
+   * Phase C: which entity type is being viewed in detail mode.
+   * Used to build entity-specific breadcrumb trails.
+   */
+  readonly entityType?: PanelId;
+  /**
+   * Phase C: the entity ID for breadcrumb display in detail mode.
+   * Combined with entityType to show e.g. "Metrics · Task a1b2c3d4ef12".
+   */
+  readonly entityId?: string;
 }
 
 /**
@@ -67,54 +78,79 @@ function formatTime(date: Date): string {
 }
 
 /**
+ * Entity-type label abbreviations for detail breadcrumbs.
+ * Kept short to stay compact in the header row.
+ */
+const ENTITY_LABEL: Record<PanelId, string> = {
+  tasks: 'Task',
+  loops: 'Loop',
+  schedules: 'Schedule',
+  orchestrations: 'Orch',
+  pipelines: 'Pipeline',
+};
+
+/**
  * Build breadcrumb text for the current view kind.
+ * When in detail mode with entityType + entityId, produces an entity-specific trail:
+ *   "Metrics · Task a1b2c3d4ef12"
  * Returns a short label that fits in the header row.
  */
-function buildBreadcrumb(viewKind: 'main' | 'workspace' | 'detail' | undefined): string {
+function buildBreadcrumb(
+  viewKind: 'main' | 'workspace' | 'detail' | undefined,
+  entityType?: PanelId,
+  entityId?: string,
+): string {
   switch (viewKind) {
     case 'main':
       return '[M] Metrics';
     case 'workspace':
       return '[W] Workspace';
-    case 'detail':
+    case 'detail': {
+      if (entityType !== undefined && entityId !== undefined) {
+        const label = ENTITY_LABEL[entityType];
+        return `[D] Metrics · ${label} ${shortId(entityId)}`;
+      }
       return '[D] Detail';
+    }
     default:
       return '';
   }
 }
 
-export const Header: React.FC<HeaderProps> = React.memo(({ version, data, refreshedAt, error, viewKind }) => {
-  const healthSummary = data !== null ? buildHealthSummary(data) : '—';
-  const timestamp = refreshedAt !== null ? formatTime(refreshedAt) : '—';
-  const breadcrumb = buildBreadcrumb(viewKind);
+export const Header: React.FC<HeaderProps> = React.memo(
+  ({ version, data, refreshedAt, error, viewKind, entityType, entityId }) => {
+    const healthSummary = data !== null ? buildHealthSummary(data) : '—';
+    const timestamp = refreshedAt !== null ? formatTime(refreshedAt) : '—';
+    const breadcrumb = buildBreadcrumb(viewKind, entityType, entityId);
 
-  return (
-    <Box flexDirection="column">
-      <Box flexDirection="row" justifyContent="space-between" paddingX={1}>
-        <Text color="cyan" bold>
-          {'Autobeat v'}
-          {version}
-        </Text>
-        <Box flexDirection="row" gap={2}>
-          {breadcrumb !== '' && <Text dimColor>{breadcrumb}</Text>}
-          <Text>{healthSummary}</Text>
-        </Box>
-        <Box flexDirection="row" gap={2}>
-          <Text dimColor>{timestamp}</Text>
-          <Text dimColor>q=quit</Text>
-        </Box>
-      </Box>
-      {error !== null && (
-        <Box paddingX={1}>
-          <Text color="yellow" dimColor>
-            {'⚠ DB error: '}
-            {error.length > 80 ? `${error.slice(0, 77)}...` : error}
-            {', showing cached data'}
+    return (
+      <Box flexDirection="column">
+        <Box flexDirection="row" justifyContent="space-between" paddingX={1}>
+          <Text color="cyan" bold>
+            {'Autobeat v'}
+            {version}
           </Text>
+          <Box flexDirection="row" gap={2}>
+            {breadcrumb !== '' && <Text dimColor>{breadcrumb}</Text>}
+            <Text>{healthSummary}</Text>
+          </Box>
+          <Box flexDirection="row" gap={2}>
+            <Text dimColor>{timestamp}</Text>
+            <Text dimColor>q=quit</Text>
+          </Box>
         </Box>
-      )}
-    </Box>
-  );
-});
+        {error !== null && (
+          <Box paddingX={1}>
+            <Text color="yellow" dimColor>
+              {'⚠ DB error: '}
+              {error.length > 80 ? `${error.slice(0, 77)}...` : error}
+              {', showing cached data'}
+            </Text>
+          </Box>
+        )}
+      </Box>
+    );
+  },
+);
 
 Header.displayName = 'Header';

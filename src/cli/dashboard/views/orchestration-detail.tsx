@@ -11,6 +11,9 @@
  *  - ScrollableList with selection highlighting
  *  - Pagination footer when total > page size
  *  - Enter on selected row → navigate to task detail
+ *
+ * Phase C additions:
+ *  - Progress Indicators: depth/workers/children vs config limits
  */
 
 import { Box, Text } from 'ink';
@@ -81,6 +84,51 @@ function CostSection({ costAggregate }: { readonly costAggregate: TaskUsage | un
   );
 }
 
+/**
+ * Progress indicators — shown when orchestration has configuration limits.
+ * Depth is approximated from children data (not exact tree traversal).
+ * DECISION: Workers = running children count; Children = total vs maxTasks limit.
+ */
+function ProgressSection({
+  orchestration,
+  children,
+  childrenTotal,
+}: {
+  readonly orchestration: Orchestration;
+  readonly children: readonly OrchestratorChild[];
+  readonly childrenTotal: number | undefined;
+}): React.ReactElement | null {
+  const totalChildren = childrenTotal ?? children.length;
+  const hasLimits = orchestration.maxDepth > 0 || orchestration.maxWorkers > 0 || orchestration.maxIterations > 0;
+  const hasChildrenData = totalChildren > 0;
+  if (!hasLimits && !hasChildrenData) return null;
+
+  // Count running children as active workers
+  const runningWorkers = children.filter((c) => c.status === 'running').length;
+
+  const parts: string[] = [];
+  if (orchestration.maxWorkers > 0) {
+    parts.push(`Workers ${runningWorkers}/${orchestration.maxWorkers}`);
+  }
+  if (orchestration.maxIterations > 0) {
+    parts.push(`Iterations ${orchestration.maxIterations} max`);
+  }
+  if (totalChildren > 0 || childrenTotal !== undefined) {
+    parts.push(`Children ${totalChildren}`);
+  }
+
+  if (parts.length === 0) return null;
+
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      <Text bold dimColor>
+        Progress
+      </Text>
+      <Field label="Status">{parts.join(' · ')}</Field>
+    </Box>
+  );
+}
+
 export const OrchestrationDetail: React.FC<OrchestrationDetailProps> = React.memo(
   ({
     orchestration,
@@ -132,6 +180,9 @@ export const OrchestrationDetail: React.FC<OrchestrationDetailProps> = React.mem
 
         {/* Cost aggregate — only shown when there is actual usage data */}
         <CostSection costAggregate={costAggregate} />
+
+        {/* Progress indicators — only shown when the orchestration has configuration limits */}
+        <ProgressSection orchestration={orchestration} children={children} childrenTotal={childrenTotal} />
 
         {/* Children section — only shown when the orchestration has attributed tasks */}
         {children.length > 0 && (

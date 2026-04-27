@@ -2,6 +2,9 @@
  * ScheduleDetail — full-screen schedule detail view
  * ARCHITECTURE: Pure view component — all data passed as props
  * Pattern: Functional core, no side effects
+ *
+ * Phase C additions:
+ *  - Pipeline Steps section: numbered step definitions when schedule.pipelineSteps present
  */
 
 import { Box, Text } from 'ink';
@@ -87,6 +90,21 @@ export const ScheduleDetail: React.FC<ScheduleDetailProps> = React.memo(
         {schedule.expiresAt !== undefined ? <Field label="Expires At">{relativeTime(schedule.expiresAt)}</Field> : null}
         <Field label="Created">{relativeTime(schedule.createdAt)}</Field>
         <Field label="Updated">{relativeTime(schedule.updatedAt)}</Field>
+
+        {/* Pipeline Steps section — only shown when schedule triggers a pipeline */}
+        {schedule.pipelineSteps !== undefined && schedule.pipelineSteps.length > 0 && (
+          <Box flexDirection="column" marginTop={1}>
+            <Text bold dimColor>
+              Pipeline Steps
+            </Text>
+            {schedule.pipelineSteps.map((step, idx) => (
+              <Box key={idx} flexDirection="row" paddingLeft={2}>
+                <Text dimColor>{`${idx + 1}. `}</Text>
+                <Text>{truncateCell(step.prompt, 60)}</Text>
+              </Box>
+            ))}
+          </Box>
+        )}
 
         {/* Execution history */}
         <Box marginTop={1} marginBottom={0}>

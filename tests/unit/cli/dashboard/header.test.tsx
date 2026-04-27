@@ -272,3 +272,127 @@ describe('Header — viewKind breadcrumb', () => {
     expect(lastFrame()).toContain('Autobeat v1.0.0');
   });
 });
+
+// ============================================================================
+// Entity-specific breadcrumbs — Phase C
+// ============================================================================
+
+describe('Header — entity-specific breadcrumbs (Phase C)', () => {
+  const TASK_ID = 'task-a1b2c3d4ef12-xyz';
+  const LOOP_ID = 'loop-bb223344ccdd-uvw';
+  const SCHEDULE_ID = 'schedule-001122334455-pqr';
+  const ORCH_ID = 'orch-aabbccddeeff-stu';
+  const PIPELINE_ID = 'pipeline-00112233-abc';
+
+  it('shows Task breadcrumb with shortId when entityType=tasks', () => {
+    const { lastFrame } = render(
+      <Header
+        version="1.0.0"
+        data={null}
+        refreshedAt={null}
+        error={null}
+        viewKind="detail"
+        entityType="tasks"
+        entityId={TASK_ID}
+      />,
+    );
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('[D]');
+    expect(frame).toContain('Task');
+    expect(frame).toContain(TASK_ID.slice(0, 12));
+  });
+
+  it('shows Loop breadcrumb with shortId when entityType=loops', () => {
+    const { lastFrame } = render(
+      <Header
+        version="1.0.0"
+        data={null}
+        refreshedAt={null}
+        error={null}
+        viewKind="detail"
+        entityType="loops"
+        entityId={LOOP_ID}
+      />,
+    );
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('Loop');
+    expect(frame).toContain(LOOP_ID.slice(0, 12));
+  });
+
+  it('shows Schedule breadcrumb with shortId when entityType=schedules', () => {
+    const { lastFrame } = render(
+      <Header
+        version="1.0.0"
+        data={null}
+        refreshedAt={null}
+        error={null}
+        viewKind="detail"
+        entityType="schedules"
+        entityId={SCHEDULE_ID}
+      />,
+    );
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('Schedule');
+    expect(frame).toContain(SCHEDULE_ID.slice(0, 12));
+  });
+
+  it('shows Orch breadcrumb with shortId when entityType=orchestrations', () => {
+    const { lastFrame } = render(
+      <Header
+        version="1.0.0"
+        data={null}
+        refreshedAt={null}
+        error={null}
+        viewKind="detail"
+        entityType="orchestrations"
+        entityId={ORCH_ID}
+      />,
+    );
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('Orch');
+    expect(frame).toContain(ORCH_ID.slice(0, 12));
+  });
+
+  it('shows Pipeline breadcrumb with shortId when entityType=pipelines', () => {
+    const { lastFrame } = render(
+      <Header
+        version="1.0.0"
+        data={null}
+        refreshedAt={null}
+        error={null}
+        viewKind="detail"
+        entityType="pipelines"
+        entityId={PIPELINE_ID}
+      />,
+    );
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('Pipeline');
+    expect(frame).toContain(PIPELINE_ID.slice(0, 12));
+  });
+
+  it('falls back to [D] Detail when entityType is missing', () => {
+    const { lastFrame } = render(
+      <Header version="1.0.0" data={null} refreshedAt={null} error={null} viewKind="detail" />,
+    );
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('[D]');
+    expect(frame).toContain('Detail');
+    expect(frame).not.toContain('Metrics ·');
+  });
+
+  it('contains Metrics in entity trail', () => {
+    const { lastFrame } = render(
+      <Header
+        version="1.0.0"
+        data={null}
+        refreshedAt={null}
+        error={null}
+        viewKind="detail"
+        entityType="tasks"
+        entityId={TASK_ID}
+      />,
+    );
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('Metrics');
+  });
+});
