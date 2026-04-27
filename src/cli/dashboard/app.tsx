@@ -2,16 +2,22 @@
  * Dashboard App root component
  * ARCHITECTURE: Shell — composes data hook, keyboard hook, and view components
  * Pattern: State lives here; pure view components receive data as props
+ *
+ * DECISION (Phase A): Replaced triple useState (view + nav + workspaceNav) with
+ * useReducer(dashboardReducer) so all state transitions are centralised and testable
+ * as a pure function. Keyboard handlers retain setView/setNav setter signatures —
+ * thin adapters dispatch SET_VIEW / UPDATE_NAV actions so no handler rewrite needed.
  */
 
 import { Box, useApp } from 'ink';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useReducer } from 'react';
 import type { ActivityEntry } from '../../core/domain.js';
 import type { OutputRepository, ResourceMonitor } from '../../core/interfaces.js';
 import type { ReadOnlyContext } from '../read-only-context.js';
 import { Footer } from './components/footer.js';
 import { Header } from './components/header.js';
 import { computeMetricsLayout, computeWorkspaceLayout } from './layout.js';
+import { type DashboardState, dashboardReducer } from './nav-reducer.js';
 import type { DashboardMutationContext, NavState, ViewState } from './types.js';
 import { openDetail } from './types.js';
 import { useDashboardData } from './use-dashboard-data.js';
@@ -22,7 +28,6 @@ import { useTerminalSize } from './use-terminal-size.js';
 import { DetailView } from './views/detail-view.js';
 import { MetricsView } from './views/metrics-view.js';
 import { WorkspaceView } from './views/workspace-view.js';
-import type { WorkspaceNavState } from './workspace-types.js';
 import { createInitialWorkspaceNavState } from './workspace-types.js';
 
 interface AppProps {
@@ -57,6 +62,13 @@ const INITIAL_NAV: NavState = {
   orchestrationChildPage: 0,
 };
 
+const INITIAL_DASHBOARD_STATE: DashboardState = {
+  view: { kind: 'main' },
+  nav: INITIAL_NAV,
+  workspaceNav: createInitialWorkspaceNavState(),
+  animFrame: 0,
+};
+
 /**
  * Root dashboard component.
  * Renders to stderr via the render() call in index.tsx.
@@ -64,15 +76,39 @@ const INITIAL_NAV: NavState = {
 export const App: React.FC<AppProps> = React.memo(({ ctx, version, mutations, resourceMonitor, outputRepository }) => {
   const { exit } = useApp();
 
-  const [view, setView] = useState<ViewState>({ kind: 'main' });
-  const [nav, setNav] = useState<NavState>(INITIAL_NAV);
-  const [workspaceNav, setWorkspaceNav] = useState<WorkspaceNavState>(createInitialWorkspaceNavState());
+  const [state, dispatch] = useReducer(dashboardReducer, INITIAL_DASHBOARD_STATE);
+  const { view, nav, workspaceNav, animFrame } = state;
+
+  // Adapter setters — keep keyboard handler signatures stable
+  const setView = useCallback((v: ViewState) => dispatch({ type: 'SET_VIEW', view: v }), []);
+  const setNav = useCallback((updaterOrValue: NavState | ((prev: NavState) => NavState)) => {
+    if (typeof updaterOrValue === 'function') {
+      dispatch({ type: 'UPDATE_NAV', updater: updaterOrValue });
+    } else {
+      dispatch({ type: 'SET_NAV', nav: updaterOrValue });
+    }
+  }, []);
+  const setWorkspaceNav = useCallback(
+    (
+      updaterOrValue:
+        | import('./workspace-types.js').WorkspaceNavState
+        | ((
+            prev: import('./workspace-types.js').WorkspaceNavState,
+          ) => import('./workspace-types.js').WorkspaceNavState),
+    ) => {
+      if (typeof updaterOrValue === 'function') {
+        dispatch({ type: 'UPDATE_WORKSPACE_NAV', updater: updaterOrValue });
+      } else {
+        dispatch({ type: 'SET_WORKSPACE_NAV', workspaceNav: updaterOrValue });
+      }
+    },
+    [],
+  );
 
   // Shared animation frame counter — single interval drives all StatusBadge animations
-  const [animFrame, setAnimFrame] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => {
-      setAnimFrame((prev) => prev + 1);
+      dispatch({ type: 'TICK_ANIM' });
     }, 250);
     return () => clearInterval(timer);
   }, []);
