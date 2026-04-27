@@ -24,6 +24,14 @@ interface LoopDetailProps {
   readonly animFrame: number;
 }
 
+/** Map an iteration status to its display color. Best iterations override to green. */
+function iterationStatusColor(status: string, isBest: boolean): string | undefined {
+  if (isBest) return 'green';
+  if (status === 'pass' || status === 'keep') return 'green';
+  if (status === 'fail' || status === 'crash') return 'red';
+  return undefined;
+}
+
 /**
  * Create a renderIterationRow function that closes over bestIterationId for highlighting.
  * The best iteration is highlighted in bold green to surface the top-scoring run quickly.
@@ -50,18 +58,7 @@ function makeRenderIterationRow(
             {String(iter.iterationNumber).padStart(3, ' ')}
           </Text>
           <Text> </Text>
-          <Text
-            bold={isBest}
-            color={
-              isBest
-                ? 'green'
-                : iter.status === 'pass' || iter.status === 'keep'
-                  ? 'green'
-                  : iter.status === 'fail' || iter.status === 'crash'
-                    ? 'red'
-                    : undefined
-            }
-          >
+          <Text bold={isBest} color={iterationStatusColor(iter.status, isBest)}>
             {statusText.padEnd(11, ' ')}
           </Text>
           <Text> </Text>

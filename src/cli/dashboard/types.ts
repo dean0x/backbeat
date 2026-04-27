@@ -13,6 +13,7 @@ import type {
   OrchestratorChild,
   OrchestratorId,
   Pipeline,
+  PipelineId,
   Schedule,
   ScheduleId,
   Task,
@@ -108,6 +109,12 @@ export type ViewState =
       readonly entityType: 'orchestrations';
       readonly entityId: OrchestratorId;
       readonly returnTo: 'main' | 'workspace';
+    }
+  | {
+      readonly kind: 'detail';
+      readonly entityType: 'pipelines';
+      readonly entityId: PipelineId;
+      readonly returnTo: 'main' | 'workspace';
     };
 
 /**
@@ -122,9 +129,10 @@ export function openDetail(
   entityId: OrchestratorId,
   returnTo?: 'main' | 'workspace',
 ): ViewState;
+export function openDetail(entityType: 'pipelines', entityId: PipelineId, returnTo?: 'main' | 'workspace'): ViewState;
 export function openDetail(
-  entityType: 'loops' | 'tasks' | 'schedules' | 'orchestrations',
-  entityId: LoopId | TaskId | ScheduleId | OrchestratorId,
+  entityType: 'loops' | 'tasks' | 'schedules' | 'orchestrations' | 'pipelines',
+  entityId: LoopId | TaskId | ScheduleId | OrchestratorId | PipelineId,
   returnTo: DetailReturnTarget = 'main',
 ): ViewState {
   return {

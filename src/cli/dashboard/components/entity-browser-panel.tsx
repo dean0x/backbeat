@@ -12,7 +12,6 @@
 
 import { Box, Text } from 'ink';
 import React from 'react';
-import type { Loop, Orchestration, Pipeline, Schedule, Task } from '../../../core/domain.js';
 import { formatElapsed, shortId, statusColor, statusIcon } from '../format.js';
 import type { Identifiable } from '../keyboard/types.js';
 import type { DashboardData, EntityCounts, PanelId } from '../types.js';
@@ -46,7 +45,7 @@ function getEntityDisplayFields(panelId: PanelId, entityId: string, data: Dashbo
 
   switch (panelId) {
     case 'tasks': {
-      const task = data.tasks.find((t: Task) => t.id === entityId);
+      const task = data.tasks.find((t) => t.id === entityId);
       if (!task) return { elapsed: '—', description: '' };
       return {
         elapsed: task.startedAt ? formatElapsed(task.startedAt) : '—',
@@ -54,7 +53,7 @@ function getEntityDisplayFields(panelId: PanelId, entityId: string, data: Dashbo
       };
     }
     case 'loops': {
-      const loop = data.loops.find((l: Loop) => l.id === entityId);
+      const loop = data.loops.find((l) => l.id === entityId);
       if (!loop) return { elapsed: '—', description: '' };
       return {
         elapsed: formatElapsed(loop.createdAt),
@@ -62,7 +61,7 @@ function getEntityDisplayFields(panelId: PanelId, entityId: string, data: Dashbo
       };
     }
     case 'schedules': {
-      const schedule = data.schedules.find((s: Schedule) => s.id === entityId);
+      const schedule = data.schedules.find((s) => s.id === entityId);
       if (!schedule) return { elapsed: '—', description: '' };
       return {
         elapsed: '—',
@@ -70,7 +69,7 @@ function getEntityDisplayFields(panelId: PanelId, entityId: string, data: Dashbo
       };
     }
     case 'orchestrations': {
-      const orch = data.orchestrations.find((o: Orchestration) => o.id === entityId);
+      const orch = data.orchestrations.find((o) => o.id === entityId);
       if (!orch) return { elapsed: '—', description: '' };
       return {
         elapsed: formatElapsed(orch.createdAt),
@@ -78,13 +77,13 @@ function getEntityDisplayFields(panelId: PanelId, entityId: string, data: Dashbo
       };
     }
     case 'pipelines': {
-      const pipeline = data.pipelines.find((p: Pipeline) => p.id === entityId);
+      const pipeline = data.pipelines.find((p) => p.id === entityId);
       if (!pipeline) return { elapsed: '—', description: '' };
       const stepCount = pipeline.steps.length;
-      const completedSteps = pipeline.stepTaskIds.filter((id) => id !== null).length;
+      const assignedSteps = pipeline.stepTaskIds.filter((id) => id !== null).length;
       return {
         elapsed: formatElapsed(pipeline.createdAt),
-        description: `${completedSteps}/${stepCount} steps`,
+        description: `${assignedSteps}/${stepCount} assigned`,
       };
     }
   }
@@ -180,42 +179,33 @@ export const EntityBrowserPanel: React.FC<EntityBrowserPanelProps> = React.memo(
     const hasScrollDown = scrollOffset + effectiveHeight < filteredItems.length;
     const visibleSlice = filteredItems.slice(scrollOffset, scrollOffset + effectiveHeight);
 
-    const renderBody = () => {
-      if (filteredItems.length === 0) {
-        if (filterStatus !== null) {
-          return (
-            <Box flexDirection="column" alignItems="center" flexGrow={1} paddingY={1}>
-              <Text dimColor>{`No ${focusedType} matching '${filterStatus}'`}</Text>
-              <Text dimColor>{'f to clear filter'}</Text>
-            </Box>
-          );
-        }
-        return (
+    const body =
+      filteredItems.length === 0 ? (
+        filterStatus !== null ? (
+          <Box flexDirection="column" alignItems="center" flexGrow={1} paddingY={1}>
+            <Text dimColor>{`No ${focusedType} matching '${filterStatus}'`}</Text>
+            <Text dimColor>{'f to clear filter'}</Text>
+          </Box>
+        ) : (
           <Box alignItems="center" justifyContent="center" flexGrow={1}>
             <Text dimColor>{`No ${focusedType} found`}</Text>
           </Box>
-        );
-      }
-
-      return (
+        )
+      ) : (
         <Box flexDirection="column" flexGrow={1}>
           {hasScrollUp && <Text dimColor>{' ↑ more'}</Text>}
-          {visibleSlice.map((item, idx) => {
-            const absoluteIndex = scrollOffset + idx;
-            return (
-              <EntityRow
-                key={item.id}
-                item={item}
-                isSelected={absoluteIndex === selectedIndex}
-                panelId={focusedType}
-                data={data}
-              />
-            );
-          })}
+          {visibleSlice.map((item, idx) => (
+            <EntityRow
+              key={item.id}
+              item={item}
+              isSelected={scrollOffset + idx === selectedIndex}
+              panelId={focusedType}
+              data={data}
+            />
+          ))}
           {hasScrollDown && <Text dimColor>{` ↓ ${filteredItems.length - scrollOffset - effectiveHeight} more`}</Text>}
         </Box>
       );
-    };
 
     return (
       <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={borderColor}>
@@ -225,7 +215,7 @@ export const EntityBrowserPanel: React.FC<EntityBrowserPanelProps> = React.memo(
             <Text color="cyan" dimColor>{`[filter: ${filterStatus}]`}</Text>
           </Box>
         )}
-        {renderBody()}
+        {body}
       </Box>
     );
   },

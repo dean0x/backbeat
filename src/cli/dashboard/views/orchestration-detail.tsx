@@ -132,9 +132,8 @@ function renderGrid({ orchestrations, children, layout, nav, streams }: GridMode
 
   // Header line: orchestration summary
   const orchGoalShort = focusedOrchestration ? truncateCell(focusedOrchestration.goal, 40) : '';
-  const costText = ''; // per-child cost aggregate not yet available
   const headerText = focusedOrchestration
-    ? `${focusedOrchestration.id.slice(-8)} · "${orchGoalShort}" · ${focusedOrchestration.status}${costText}`
+    ? `${focusedOrchestration.id.slice(-8)} · "${orchGoalShort}" · ${focusedOrchestration.status}`
     : '';
 
   // No children

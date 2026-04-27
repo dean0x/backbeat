@@ -18,7 +18,6 @@ import { CostTile } from '../components/cost-tile.js';
 import { EntityBrowserPanel } from '../components/entity-browser-panel.js';
 import { ResourcesTile } from '../components/resources-tile.js';
 import { ThroughputTile } from '../components/throughput-tile.js';
-import { PANEL_ORDER } from '../keyboard/constants.js';
 import { filteredLength, getPanelItems } from '../keyboard/helpers.js';
 import type { MetricsLayout } from '../layout.js';
 import type { DashboardData, EntityCounts, NavState, PanelId } from '../types.js';

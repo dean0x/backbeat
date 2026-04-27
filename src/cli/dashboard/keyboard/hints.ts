@@ -39,11 +39,11 @@ export function detailHints(): string {
  */
 export function getHints(viewKind: 'main' | 'workspace' | 'detail', hasMutations: boolean): string {
   switch (viewKind) {
-    case 'detail':
-      return detailHints();
+    case 'main':
+      return mainHints(hasMutations);
     case 'workspace':
       return workspaceHints();
-    default:
-      return mainHints(hasMutations);
+    case 'detail':
+      return detailHints();
   }
 }

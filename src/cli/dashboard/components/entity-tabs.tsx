@@ -9,6 +9,7 @@
 
 import { Box, Text } from 'ink';
 import React from 'react';
+import { PANEL_ORDER } from '../keyboard/constants.js';
 import type { EntityCounts, PanelId } from '../types.js';
 
 interface EntityTabsProps {
@@ -52,11 +53,9 @@ function buildCountBadge(counts: EntityCounts): string {
  * Inactive tabs are dim for visual hierarchy.
  */
 export const EntityTabs: React.FC<EntityTabsProps> = React.memo(({ activeTab, entityCounts, focused }) => {
-  const panels: readonly PanelId[] = ['tasks', 'loops', 'schedules', 'orchestrations', 'pipelines'];
-
   return (
     <Box flexDirection="row" gap={1} paddingX={1}>
-      {panels.map((panelId) => {
+      {PANEL_ORDER.map((panelId) => {
         const isActive = panelId === activeTab;
         const label = TAB_LABELS[panelId];
         const counts = entityCounts[panelId];

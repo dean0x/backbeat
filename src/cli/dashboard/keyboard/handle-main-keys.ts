@@ -14,7 +14,7 @@
  *  - Esc when activityFocused → return to panel focus (loops)
  */
 
-import type { LoopId, OrchestratorId, ScheduleId, TaskId } from '../../../core/domain.js';
+import type { LoopId, OrchestratorId, PipelineId, ScheduleId, TaskId } from '../../../core/domain.js';
 import { FILTER_CYCLES, PANEL_JUMP_KEYS, PANEL_ORDER } from './constants.js';
 import { cancelEntity, deleteEntity } from './entity-mutations.js';
 import {
@@ -236,6 +236,14 @@ export function handleMainKeys(input: string, key: InkKey, params: KeyHandlerPar
           kind: 'detail',
           entityType: 'orchestrations',
           entityId: selectedItem.id as OrchestratorId,
+          returnTo: 'main',
+        });
+        break;
+      case 'pipelines':
+        setView({
+          kind: 'detail',
+          entityType: 'pipelines',
+          entityId: selectedItem.id as PipelineId,
           returnTo: 'main',
         });
         break;

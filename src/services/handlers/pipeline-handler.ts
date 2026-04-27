@@ -152,9 +152,11 @@ export class PipelineHandler extends BaseEventHandler {
       return ok(undefined);
     }
 
-    // Fetch all step task statuses
-    const statuses: string[] = [];
-    for (const tid of taskIds) {
+    // Fetch all step task statuses, tracking per-step status for failed-step detection
+    const stepStatuses: Array<{ taskId: TaskId; status: string; stepIndex: number }> = [];
+    for (let stepIdx = 0; stepIdx < pipeline.stepTaskIds.length; stepIdx++) {
+      const tid = pipeline.stepTaskIds[stepIdx];
+      if (tid === null) continue;
       const taskResult = await this.taskRepository.findById(tid);
       if (!taskResult.ok) {
         this.logger.warn('PipelineHandler: failed to fetch step task', {
@@ -165,9 +167,11 @@ export class PipelineHandler extends BaseEventHandler {
         return ok(undefined); // best-effort — skip this pipeline update
       }
       if (taskResult.value) {
-        statuses.push(taskResult.value.status);
+        stepStatuses.push({ taskId: tid, status: taskResult.value.status, stepIndex: stepIdx });
       }
     }
+
+    const statuses = stepStatuses.map((s) => s.status);
 
     // Aggregate: cancelled takes priority, then failed, then check completion
     const newStatus = this.aggregateStatus(statuses, taskIds.length);
@@ -195,8 +199,11 @@ export class PipelineHandler extends BaseEventHandler {
       return saveResult;
     }
 
+    // Find the first failed/cancelled step for event payload
+    const failedStep = stepStatuses.find((s) => s.status === 'failed' || s.status === 'cancelled');
+
     // Emit pipeline lifecycle event
-    await this.emitPipelineEvent(updated);
+    await this.emitPipelineEvent(updated, failedStep);
 
     this.logger.info('PipelineHandler: pipeline status updated', {
       pipelineId: pipeline.id,
@@ -227,22 +234,21 @@ export class PipelineHandler extends BaseEventHandler {
 
   /**
    * Emit the appropriate pipeline lifecycle event based on the new status.
+   * @param failedStep - The first failed/cancelled step details (only used for PipelineFailed).
    */
-  private async emitPipelineEvent(pipeline: Pipeline): Promise<void> {
+  private async emitPipelineEvent(
+    pipeline: Pipeline,
+    failedStep?: { taskId: TaskId; status: string; stepIndex: number },
+  ): Promise<void> {
     switch (pipeline.status) {
       case PipelineStatus.COMPLETED:
         await this.emitEvent(this.eventBus, 'PipelineCompleted', { pipelineId: pipeline.id });
         break;
       case PipelineStatus.FAILED: {
-        // Find the first failed step index for the event payload
-        const failedIdx = pipeline.stepTaskIds.findIndex((_, i) => {
-          // We use index as stepIndex — exact task ID not available here without another lookup
-          return i;
-        });
         await this.emitEvent(this.eventBus, 'PipelineFailed', {
           pipelineId: pipeline.id,
-          failedStepIndex: failedIdx >= 0 ? failedIdx : 0,
-          taskId: pipeline.stepTaskIds[0] ?? '',
+          failedStepIndex: failedStep?.stepIndex ?? 0,
+          taskId: failedStep?.taskId ?? (pipeline.stepTaskIds[0] as TaskId) ?? ('' as TaskId),
         });
         break;
       }
