@@ -72,13 +72,15 @@ export function statusColor(status: string): string {
 const STATUS_ICONS: Record<string, string> = {
   running: '●',
   active: '●',
-  planning: '○',
+  planning: '◎',
   pending: '○',
   queued: '○',
   completed: '✓',
   failed: '✗',
-  cancelled: '✗',
+  cancelled: '⊘',
   paused: '⏸',
+  blocked: '⊖', // gray — blocked by dependency
+  expired: '○', // gray — schedule expired
 };
 
 /**

@@ -96,7 +96,10 @@ function makeCtx(overrides: Partial<ReadOnlyContext> = {}): ReadOnlyContext {
     ),
   };
 
-  const pipelineRepo = makeMockRepo();
+  const pipelineRepo = {
+    ...makeMockRepo(),
+    findUpdatedSince: vi.fn().mockResolvedValue(ok([])),
+  };
 
   return {
     taskRepository: taskRepo as unknown as ReadOnlyContext['taskRepository'],

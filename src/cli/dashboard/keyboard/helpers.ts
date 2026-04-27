@@ -70,7 +70,7 @@ export function resolveChildIndex(selectedTaskId: string | null, children: reado
  */
 export function activityKindToEntityType(
   kind: ActivityEntry['kind'],
-): 'tasks' | 'loops' | 'orchestrations' | 'schedules' {
+): 'tasks' | 'loops' | 'orchestrations' | 'schedules' | 'pipelines' {
   switch (kind) {
     case 'task':
       return 'tasks';
@@ -80,6 +80,8 @@ export function activityKindToEntityType(
       return 'orchestrations';
     case 'schedule':
       return 'schedules';
+    case 'pipeline':
+      return 'pipelines';
   }
 }
 

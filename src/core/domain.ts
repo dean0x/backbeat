@@ -896,7 +896,7 @@ export interface OrchestratorChild {
  */
 export interface ActivityEntry {
   readonly timestamp: number;
-  readonly kind: 'task' | 'loop' | 'orchestration' | 'schedule';
+  readonly kind: 'task' | 'loop' | 'orchestration' | 'schedule' | 'pipeline';
   readonly entityId: string;
   readonly status: string;
   readonly action: string; // short verb: 'created', 'completed', 'failed', 'iteration 3'

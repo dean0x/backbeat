@@ -46,6 +46,8 @@ function kindLabel(kind: ActivityEntry['kind']): string {
       return 'orch'.padEnd(COL_KIND_W);
     case 'schedule':
       return 'sched'.padEnd(COL_KIND_W);
+    case 'pipeline':
+      return 'pipe'.padEnd(COL_KIND_W);
   }
 }
 

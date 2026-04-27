@@ -308,6 +308,7 @@ async function fetchMetricsExtras(
     recentLoopsResult,
     recentOrchsResult,
     recentSchedsResult,
+    recentPipelinesResult,
   ] = await Promise.all([
     ctx.usageRepository.sumGlobal(since24h),
     ctx.usageRepository.topOrchestrationsByCost(since24h, 3),
@@ -316,6 +317,7 @@ async function fetchMetricsExtras(
     ctx.loopRepository.findUpdatedSince(since1h, 50),
     ctx.orchestrationRepository.findUpdatedSince(since1h, 50),
     ctx.scheduleRepository.findUpdatedSince(since1h, 50),
+    ctx.pipelineRepository.findUpdatedSince(since1h, 50),
   ]);
 
   const activityFeed = buildActivityFeed({
@@ -323,6 +325,7 @@ async function fetchMetricsExtras(
     loops: recentLoopsResult.ok ? recentLoopsResult.value : [],
     orchestrations: recentOrchsResult.ok ? recentOrchsResult.value : [],
     schedules: recentSchedsResult.ok ? recentSchedsResult.value : [],
+    pipelines: recentPipelinesResult.ok ? recentPipelinesResult.value : [],
     limit: 50,
   });
 
