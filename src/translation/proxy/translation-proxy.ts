@@ -221,8 +221,12 @@ function countApproxChars(parsed: unknown): number {
 
 export class TranslationProxy {
   private server: http.Server | null = null;
+  /** Pre-computed target URL to avoid per-request string concatenation. */
+  private readonly chatCompletionsUrl: URL;
 
-  constructor(private readonly config: TranslationProxyConfig) {}
+  constructor(private readonly config: TranslationProxyConfig) {
+    this.chatCompletionsUrl = new URL(config.targetBaseUrl.replace(/\/$/, '') + '/chat/completions');
+  }
 
   async start(): Promise<Result<{ port: number }>> {
     return new Promise((resolve) => {
@@ -386,7 +390,7 @@ export class TranslationProxy {
     }
 
     const targetBody = JSON.stringify(serializeResult.value);
-    const targetUrl = new URL(this.config.targetBaseUrl.replace(/\/$/, '') + '/chat/completions');
+    const targetUrl = this.chatCompletionsUrl;
 
     // Build outbound headers (strip anthropic-specific, set auth)
     const outboundHeaders = stripAnthropicHeaders(req.headers);
@@ -482,8 +486,23 @@ export class TranslationProxy {
     }
 
     const chunks: Buffer[] = [];
-    backendRes.on('data', (chunk: Buffer) => chunks.push(chunk));
+    let bodyBytesAccum = 0;
+    let bodyTooLarge = false;
+    backendRes.on('data', (chunk: Buffer) => {
+      if (bodyTooLarge) return;
+      bodyBytesAccum += chunk.length;
+      if (bodyBytesAccum > MAX_BODY_BYTES) {
+        bodyTooLarge = true;
+        backendRes.resume(); // drain remaining data so the socket can close cleanly
+        clearTimeout(responseTimeout);
+        sendError(res, 502, 'api_error', 'Backend response too large');
+        resolve();
+        return;
+      }
+      chunks.push(chunk);
+    });
     backendRes.on('end', () => {
+      if (bodyTooLarge) return;
       clearTimeout(responseTimeout);
       this.processNonStreamingResponse(Buffer.concat(chunks).toString(), res, middlewares);
       resolve();
@@ -582,8 +601,25 @@ export class TranslationProxy {
     ctx: StreamCallbackContext,
   ): void {
     const chunks: Buffer[] = [];
-    backendRes.on('data', (chunk: Buffer) => chunks.push(chunk));
+    let bodyBytesAccum = 0;
+    let bodyTooLarge = false;
+    backendRes.on('data', (chunk: Buffer) => {
+      if (bodyTooLarge) return;
+      bodyBytesAccum += chunk.length;
+      if (bodyBytesAccum > MAX_BODY_BYTES) {
+        bodyTooLarge = true;
+        backendRes.resume(); // drain remaining data so the socket can close cleanly
+        ctx.clearIdleTimer();
+        if (!res.headersSent) {
+          sendError(res, 502, 'api_error', 'Backend response too large');
+        }
+        ctx.resolve();
+        return;
+      }
+      chunks.push(chunk);
+    });
     backendRes.on('end', () => {
+      if (bodyTooLarge) return;
       ctx.clearIdleTimer();
       if (!res.headersSent) {
         this.processNonStreamingResponse(Buffer.concat(chunks).toString(), res, middlewares);
