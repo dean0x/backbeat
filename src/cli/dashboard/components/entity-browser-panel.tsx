@@ -4,7 +4,7 @@
  * Pattern: Tab bar (EntityTabs) + scrollable entity list with filter support
  *
  * Columns (fixed-width via Box):
- *   cursor (2) | icon (2) | shortId (13) | status (11) | elapsed (7) | agent (8) | description (flex)
+ *   cursor (2) | icon (2) | shortId (13) | status (11) | elapsed (9) | agent (8) | description (flex)
  *
  * Phase B (Dashboard Visibility Overhaul): Provides first-class pipeline visibility
  * alongside the existing four entity panels in a unified browser interface.
