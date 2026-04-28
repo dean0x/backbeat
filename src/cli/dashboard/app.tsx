@@ -137,6 +137,8 @@ export const App: React.FC<AppProps> = React.memo(({ ctx, version, mutations, re
   // Live output streaming — only enabled when in workspace view and outputRepository is available
   // Phase C prep: a future `o` toggle in task detail would also enable streaming here.
   // That requires keyboard handler changes (handle-detail-keys) deferred to a later phase.
+  // TODO: When grid/detail mode is fully wired via the 'v' toggle, also enable streaming
+  // for orchestration detail in grid mode (view.kind === 'detail' && view.entityType === 'orchestrations').
   const streamingEnabled = view.kind === 'workspace' && outputRepository !== undefined;
   const { streams } = useTaskOutputStream(
     outputRepository ?? ctx.outputRepository,
@@ -176,6 +178,9 @@ export const App: React.FC<AppProps> = React.memo(({ ctx, version, mutations, re
           break;
         case 'schedule':
           setView(openDetail('schedules', entry.entityId as never, 'main'));
+          break;
+        case 'pipeline':
+          setView(openDetail('pipelines', entry.entityId as never, 'main'));
           break;
       }
     },

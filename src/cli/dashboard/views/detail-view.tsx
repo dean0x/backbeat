@@ -55,7 +55,29 @@ export const DetailView: React.FC<DetailViewProps> = React.memo(
       case 'tasks': {
         const task = data?.tasks.find((t) => t.id === entityId);
         if (task === undefined) return <NotFound entityType={entityType} entityId={entityId} />;
-        return <TaskDetail task={task} animFrame={animFrame} />;
+        // Resolve dependency refs from sibling tasks in data — match taskId to status
+        const dependencies =
+          task.dependsOn !== undefined && task.dependsOn.length > 0
+            ? task.dependsOn.map((depId) => {
+                const depTask = data?.tasks.find((t) => t.id === depId);
+                return { taskId: depId, status: depTask?.status ?? 'unknown' };
+              })
+            : undefined;
+        // Resolve dependent refs — tasks whose dependsOn list includes this task's ID
+        const dependents = data?.tasks
+          .filter((t) => t.dependsOn?.includes(entityId))
+          .map((t) => ({ taskId: t.id, status: t.status }));
+        // TODO(Phase C): usage data requires a dedicated TaskUsage lookup by taskId —
+        // DashboardData does not carry per-task usage; fetch from UsageRepository when
+        // detail-view extras are extended (similar to orchestrationCostAggregate pattern).
+        return (
+          <TaskDetail
+            task={task}
+            animFrame={animFrame}
+            dependencies={dependencies}
+            dependents={dependents && dependents.length > 0 ? dependents : undefined}
+          />
+        );
       }
       case 'schedules': {
         const schedule = data?.schedules.find((s) => s.id === entityId);

@@ -4,7 +4,7 @@
  * Pattern: Tab bar (EntityTabs) + scrollable entity list with filter support
  *
  * Columns (fixed-width via Box):
- *   cursor (2) | icon (2) | shortId (13) | status (11) | elapsed (7) | description (flex)
+ *   cursor (2) | icon (2) | shortId (13) | status (11) | elapsed (7) | agent (8) | description (flex)
  *
  * Phase B (Dashboard Visibility Overhaul): Provides first-class pipeline visibility
  * alongside the existing four entity panels in a unified browser interface.
@@ -15,6 +15,7 @@ import React from 'react';
 import { formatElapsed, shortId, statusColor, statusIcon } from '../format.js';
 import type { Identifiable } from '../keyboard/types.js';
 import type { DashboardData, EntityCounts, PanelId } from '../types.js';
+import { FETCH_LIMIT } from '../use-dashboard-data.js';
 import { EntityTabs } from './entity-tabs.js';
 
 // ============================================================================
@@ -26,6 +27,7 @@ const COL_ICON_W = 2;
 const COL_ID_W = 13;
 const COL_STATUS_W = 11;
 const COL_ELAPSED_W = 7;
+const COL_AGENT_W = 8;
 
 // ============================================================================
 // Entity display helpers
@@ -33,6 +35,7 @@ const COL_ELAPSED_W = 7;
 
 interface EntityDisplayFields {
   readonly elapsed: string;
+  readonly agent: string;
   readonly description: string;
 }
 
@@ -41,48 +44,53 @@ interface EntityDisplayFields {
  * Returns sensible defaults when the entity or fields are missing.
  */
 function getEntityDisplayFields(panelId: PanelId, entityId: string, data: DashboardData | null): EntityDisplayFields {
-  if (data === null) return { elapsed: '—', description: '' };
+  if (data === null) return { elapsed: '—', agent: '—', description: '' };
 
   switch (panelId) {
     case 'tasks': {
       const task = data.tasks.find((t) => t.id === entityId);
-      if (!task) return { elapsed: '—', description: '' };
+      if (!task) return { elapsed: '—', agent: '—', description: '' };
       return {
         elapsed: task.startedAt ? formatElapsed(task.startedAt) : '—',
+        agent: task.agent ?? '—',
         description: task.prompt?.slice(0, 60) ?? '',
       };
     }
     case 'loops': {
       const loop = data.loops.find((l) => l.id === entityId);
-      if (!loop) return { elapsed: '—', description: '' };
+      if (!loop) return { elapsed: '—', agent: '—', description: '' };
       return {
         elapsed: formatElapsed(loop.createdAt),
+        agent: loop.taskTemplate.agent ?? '—',
         description: loop.taskTemplate.prompt?.slice(0, 60) ?? '',
       };
     }
     case 'schedules': {
       const schedule = data.schedules.find((s) => s.id === entityId);
-      if (!schedule) return { elapsed: '—', description: '' };
+      if (!schedule) return { elapsed: '—', agent: '—', description: '' };
       return {
         elapsed: '—',
+        agent: schedule.taskTemplate.agent ?? '—',
         description: schedule.taskTemplate.prompt?.slice(0, 60) ?? '',
       };
     }
     case 'orchestrations': {
       const orch = data.orchestrations.find((o) => o.id === entityId);
-      if (!orch) return { elapsed: '—', description: '' };
+      if (!orch) return { elapsed: '—', agent: '—', description: '' };
       return {
         elapsed: formatElapsed(orch.createdAt),
+        agent: orch.agent ?? '—',
         description: orch.goal?.slice(0, 60) ?? '',
       };
     }
     case 'pipelines': {
       const pipeline = data.pipelines.find((p) => p.id === entityId);
-      if (!pipeline) return { elapsed: '—', description: '' };
+      if (!pipeline) return { elapsed: '—', agent: '—', description: '' };
       const stepCount = pipeline.steps.length;
       const assignedSteps = pipeline.stepTaskIds.filter((id) => id !== null).length;
       return {
         elapsed: formatElapsed(pipeline.createdAt),
+        agent: pipeline.agent ?? '—',
         description: `${assignedSteps}/${stepCount} assigned`,
       };
     }
@@ -106,7 +114,8 @@ const EntityRow: React.FC<EntityRowProps> = React.memo(({ item, isSelected, pane
   const id = shortId(item.id);
   const color = statusColor(item.status);
   const statusText = item.status.slice(0, COL_STATUS_W - 1);
-  const { elapsed, description } = getEntityDisplayFields(panelId, item.id, data);
+  const { elapsed, agent, description } = getEntityDisplayFields(panelId, item.id, data);
+  const agentText = agent.slice(0, COL_AGENT_W - 1);
 
   return (
     <Box flexDirection="row">
@@ -126,6 +135,9 @@ const EntityRow: React.FC<EntityRowProps> = React.memo(({ item, isSelected, pane
       </Box>
       <Box width={COL_ELAPSED_W}>
         <Text dimColor>{elapsed}</Text>
+      </Box>
+      <Box width={COL_AGENT_W}>
+        <Text dimColor>{agentText}</Text>
       </Box>
       <Box flexGrow={1}>
         <Text dimColor wrap="truncate">
@@ -216,6 +228,11 @@ export const EntityBrowserPanel: React.FC<EntityBrowserPanelProps> = React.memo(
           </Box>
         )}
         {body}
+        {items.length >= FETCH_LIMIT && (
+          <Box paddingX={1}>
+            <Text dimColor>{`Showing first ${FETCH_LIMIT} — more items exist`}</Text>
+          </Box>
+        )}
       </Box>
     );
   },

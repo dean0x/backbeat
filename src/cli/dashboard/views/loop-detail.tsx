@@ -142,6 +142,13 @@ export const LoopDetail: React.FC<LoopDetailProps> = React.memo(({ loop, iterati
         </Text>
       </Box>
 
+      {/* TODO: Iteration row selection — selectedIndex is fixed at -1 (no keyboard selection).
+           To enable Enter-to-drill-through on iteration rows, this would require:
+           1. Adding iterationSelectedIndex to NavState in types.ts
+           2. Updating handleDetailKeys (keyboard/handle-detail-keys.ts) to handle ↑/↓/Enter for loops,
+              mirroring the orchestration drill-through pattern (D3 detail Enter → task detail)
+           3. Wiring Enter on a selected iteration row to push a task-detail view using iter.taskId
+           This is deferred as a future enhancement — requires changes across 3+ files. */}
       {iterations === undefined || iterations.length === 0 ? (
         <Text dimColor>No iterations yet</Text>
       ) : (
