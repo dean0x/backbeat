@@ -398,7 +398,8 @@ export class ScheduleManagerService implements ScheduleService {
     }
 
     // Persist Pipeline entity for first-class tracking (Phase A)
-    // DECISION: Pipeline entity created after all schedule steps succeed; stepTaskIds start as null (tasks not yet dispatched)
+    // DECISION: Pipeline entity created after all schedule steps succeed; stepTaskIds start as null (tasks not yet dispatched).
+    // scheduleId per step is stored so PipelineHandler can correlate TaskDelegated events → tasks → pipeline.
     const pipelineEntity = createPipeline({
       steps: steps.map((s, i) => ({
         index: i,
@@ -408,6 +409,7 @@ export class ScheduleManagerService implements ScheduleService {
         agent: s.agent ?? request.agent,
         model: s.model ?? request.model,
         systemPrompt: s.systemPrompt ?? request.systemPrompt,
+        scheduleId: createdSteps[i].scheduleId,
       })),
       priority: request.priority,
       workingDirectory: request.workingDirectory,
@@ -424,6 +426,18 @@ export class ScheduleManagerService implements ScheduleService {
           pipelineEntityId: pipelineEntity.id,
           error: saveResult.error.message,
         });
+      } else {
+        // Emit PipelineCreated so subscribers can track pipeline lifecycle
+        const emitResult = await this.eventBus.emit('PipelineCreated', {
+          pipelineId: pipelineEntity.id,
+          steps: steps.length,
+        });
+        if (!emitResult.ok) {
+          this.logger.warn('Failed to emit PipelineCreated event', {
+            pipelineEntityId: pipelineEntity.id,
+            error: emitResult.error.message,
+          });
+        }
       }
     }
 

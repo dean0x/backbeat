@@ -941,6 +941,13 @@ export interface PipelineRepository {
   delete(id: PipelineId): Promise<Result<void>>;
   countByStatus(): Promise<Result<Record<string, number>>>;
   findUpdatedSince(sinceMs: number, limit: number): Promise<Result<readonly Pipeline[]>>;
+  /** Find all active (pending/running) pipelines that contain the given task ID in their stepTaskIds. */
+  findActiveByTaskId(taskId: TaskId): Promise<Result<readonly Pipeline[]>>;
+  /**
+   * Find all active (pending/running) pipelines that contain the given schedule ID in a step definition.
+   * Used by PipelineHandler to populate stepTaskIds when a scheduled step's task is first delegated.
+   */
+  findActiveByStepScheduleId(scheduleId: ScheduleId): Promise<Result<readonly Pipeline[]>>;
 }
 
 // Re-export for convenience (consumers can import from interfaces instead of domain)

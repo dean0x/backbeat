@@ -923,6 +923,10 @@ export enum PipelineStatus {
 /**
  * A single step definition in a pipeline.
  * ARCHITECTURE: Immutable snapshot of step config at pipeline creation time.
+ * scheduleId is set for immediate pipelines (createPipeline) so PipelineHandler
+ * can correlate TaskDelegated events back to the pipeline entity.
+ * It is absent for scheduled-pipeline triggers (tasks are created atomically and
+ * stepTaskIds are populated directly by the schedule-handler path).
  */
 export interface PipelineStepDefinition {
   readonly index: number;
@@ -932,6 +936,8 @@ export interface PipelineStepDefinition {
   readonly agent?: AgentProvider;
   readonly model?: string;
   readonly systemPrompt?: string;
+  /** Optional: schedule ID that will dispatch this step's task (immediate pipelines only). */
+  readonly scheduleId?: ScheduleId;
 }
 
 /**

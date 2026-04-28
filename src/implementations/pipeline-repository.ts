@@ -62,6 +62,8 @@ const StepDefinitionSchema = z.array(
     agent: z.enum(AGENT_PROVIDERS_TUPLE).optional(),
     model: z.string().optional(),
     systemPrompt: z.string().optional(),
+    // Optional: schedule ID for immediate pipelines (createPipeline path)
+    scheduleId: z.string().optional(),
   }),
 );
 
@@ -310,6 +312,23 @@ export class SQLitePipelineRepository implements PipelineRepository {
     );
   }
 
+  /**
+   * Find all active (non-terminal) pipelines that have a step with the given scheduleId.
+   * Used by PipelineHandler to populate stepTaskIds when a scheduled step's task is first delegated.
+   * ARCHITECTURE: Same bounded-scan pattern as findActiveByTaskId.
+   */
+  async findActiveByStepScheduleId(scheduleId: ScheduleId): Promise<Result<readonly Pipeline[]>> {
+    return tryCatchAsync(
+      async () => {
+        const rows = this.findActiveStmt.all() as PipelineRow[];
+        const pipelines = rows.map((row) => this.rowToPipeline(row));
+        // Filter in-process: check if any step definition carries this scheduleId
+        return pipelines.filter((p) => p.steps.some((s) => s.scheduleId === scheduleId));
+      },
+      operationErrorHandler('find active pipelines by step schedule ID', { scheduleId }),
+    );
+  }
+
   // ============================================================================
   // Row conversion helpers
   // Pattern: Validate at boundary — ensures data integrity from database
@@ -360,6 +379,7 @@ export class SQLitePipelineRepository implements PipelineRepository {
         agent: s.agent as AgentProvider | undefined,
         model: s.model,
         systemPrompt: s.systemPrompt,
+        scheduleId: s.scheduleId ? ScheduleId(s.scheduleId) : undefined,
       }));
     } catch (e) {
       throw new Error(`Invalid steps JSON for pipeline ${data.id}: ${e}`);

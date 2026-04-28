@@ -2,31 +2,37 @@
  * Pipeline handler — subscribes to task lifecycle events and updates pipeline status.
  *
  * ARCHITECTURE: Event-driven, best-effort status aggregation.
- * - Subscribes to TaskCompleted, TaskFailed, TaskCancelled.
- * - On each event, looks up active pipelines containing the task ID.
+ * - Subscribes to ScheduleExecuted to populate stepTaskIds as tasks are dispatched.
+ * - Subscribes to TaskCompleted, TaskFailed, TaskCancelled for status aggregation.
+ * - On each task event, looks up active pipelines containing the task ID.
  * - Aggregates step task statuses to determine new pipeline status.
- * - Emits PipelineCompleted / PipelineFailed / PipelineCancelled as appropriate.
+ * - Emits PipelineStatusChanged for all transitions; PipelineCompleted / PipelineFailed / PipelineCancelled for terminal states.
+ * - Emits PipelineStepCompleted when an individual step task completes.
  * Pattern: Factory pattern for async initialization (matches UsageCaptureHandler).
  */
 
 import { type Pipeline, PipelineStatus, type TaskId } from '../../core/domain.js';
 import { AutobeatError, ErrorCode } from '../../core/errors.js';
 import type { EventBus } from '../../core/events/event-bus.js';
-import type { TaskCancelledEvent, TaskCompletedEvent, TaskFailedEvent } from '../../core/events/events.js';
+import type {
+  ScheduleExecutedEvent,
+  TaskCancelledEvent,
+  TaskCompletedEvent,
+  TaskFailedEvent,
+} from '../../core/events/events.js';
 import { BaseEventHandler } from '../../core/events/handlers.js';
-import type { Logger, TaskRepository } from '../../core/interfaces.js';
+import type { Logger, PipelineRepository, TaskRepository } from '../../core/interfaces.js';
 import { err, ok, type Result } from '../../core/result.js';
-import type { SQLitePipelineRepository } from '../../implementations/pipeline-repository.js';
 
 export interface PipelineHandlerDeps {
-  readonly pipelineRepository: SQLitePipelineRepository;
+  readonly pipelineRepository: PipelineRepository;
   readonly taskRepository: TaskRepository;
   readonly eventBus: EventBus;
   readonly logger: Logger;
 }
 
 export class PipelineHandler extends BaseEventHandler {
-  private readonly pipelineRepository: SQLitePipelineRepository;
+  private readonly pipelineRepository: PipelineRepository;
   private readonly taskRepository: TaskRepository;
   private readonly eventBus: EventBus;
 
@@ -60,6 +66,8 @@ export class PipelineHandler extends BaseEventHandler {
 
   private subscribeToEvents(): Result<void, AutobeatError> {
     const subs = [
+      // ScheduleExecuted: populate stepTaskIds as each step's schedule fires and creates a task
+      this.eventBus.subscribe('ScheduleExecuted', this.handleScheduleExecuted.bind(this)),
       this.eventBus.subscribe('TaskCompleted', this.handleTaskCompleted.bind(this)),
       this.eventBus.subscribe('TaskFailed', this.handleTaskFailed.bind(this)),
       this.eventBus.subscribe('TaskCancelled', this.handleTaskCancelled.bind(this)),
@@ -80,21 +88,73 @@ export class PipelineHandler extends BaseEventHandler {
     return ok(undefined);
   }
 
+  /**
+   * Populate stepTaskIds when a step schedule executes and creates its task.
+   * ARCHITECTURE: Only populates steps for immediate pipelines (createPipeline path) where
+   * step.scheduleId is set. Scheduled-pipeline triggers populate stepTaskIds via the
+   * schedule-handler path directly.
+   */
+  private async handleScheduleExecuted(event: ScheduleExecutedEvent): Promise<void> {
+    await this.handleEvent(event, async (e) => {
+      // Only act when the event carries a taskId (pipeline/single-task trigger, not loop)
+      if (!e.taskId) {
+        return ok(undefined);
+      }
+
+      const pipelinesResult = await this.pipelineRepository.findActiveByStepScheduleId(e.scheduleId);
+      if (!pipelinesResult.ok) {
+        this.logger.warn('PipelineHandler: failed to look up pipelines by step schedule ID', {
+          scheduleId: e.scheduleId,
+          error: pipelinesResult.error.message,
+        });
+        return ok(undefined); // best-effort
+      }
+
+      for (const pipeline of pipelinesResult.value) {
+        const stepIndex = pipeline.steps.findIndex((s) => s.scheduleId === e.scheduleId);
+        if (stepIndex === -1) continue;
+
+        // Update the stepTaskIds array at the matching step index
+        const newStepTaskIds = [...pipeline.stepTaskIds] as (TaskId | null)[];
+        newStepTaskIds[stepIndex] = e.taskId;
+
+        const updated: Pipeline = { ...pipeline, stepTaskIds: newStepTaskIds, updatedAt: Date.now() };
+        const saveResult = await this.pipelineRepository.update(updated);
+        if (!saveResult.ok) {
+          this.logger.warn('PipelineHandler: failed to update stepTaskIds', {
+            pipelineId: pipeline.id,
+            stepIndex,
+            taskId: e.taskId,
+            error: saveResult.error.message,
+          });
+        } else {
+          this.logger.debug('PipelineHandler: populated stepTaskId', {
+            pipelineId: pipeline.id,
+            stepIndex,
+            taskId: e.taskId,
+          });
+        }
+      }
+
+      return ok(undefined);
+    });
+  }
+
   private async handleTaskCompleted(event: TaskCompletedEvent): Promise<void> {
     await this.handleEvent(event, async (e) => {
-      return this.onTaskTerminated(e.taskId);
+      return this.onTaskTerminated(e.taskId, true);
     });
   }
 
   private async handleTaskFailed(event: TaskFailedEvent): Promise<void> {
     await this.handleEvent(event, async (e) => {
-      return this.onTaskTerminated(e.taskId);
+      return this.onTaskTerminated(e.taskId, false);
     });
   }
 
   private async handleTaskCancelled(event: TaskCancelledEvent): Promise<void> {
     await this.handleEvent(event, async (e) => {
-      return this.onTaskTerminated(e.taskId);
+      return this.onTaskTerminated(e.taskId, false);
     });
   }
 
@@ -102,8 +162,10 @@ export class PipelineHandler extends BaseEventHandler {
    * Core pipeline status aggregation logic.
    * Called when any step task terminates (completed, failed, cancelled).
    * Finds associated active pipelines and recomputes their aggregate status.
+   * @param taskId - The task that terminated.
+   * @param isCompletion - True when triggered by TaskCompleted; used to emit PipelineStepCompleted.
    */
-  private async onTaskTerminated(taskId: TaskId): Promise<Result<void>> {
+  private async onTaskTerminated(taskId: TaskId, isCompletion: boolean): Promise<Result<void>> {
     // Find active pipelines that contain this task ID
     const pipelinesResult = await this.pipelineRepository.findActiveByTaskId(taskId);
     if (!pipelinesResult.ok) {
@@ -122,6 +184,18 @@ export class PipelineHandler extends BaseEventHandler {
 
     // Process each associated pipeline
     for (const pipeline of pipelines) {
+      // Emit PipelineStepCompleted when a step task successfully completes
+      if (isCompletion) {
+        const stepIndex = pipeline.stepTaskIds.indexOf(taskId);
+        if (stepIndex !== -1) {
+          await this.emitEvent(this.eventBus, 'PipelineStepCompleted', {
+            pipelineId: pipeline.id,
+            stepIndex,
+            taskId,
+          });
+        }
+      }
+
       const updateResult = await this.updatePipelineStatus(pipeline);
       if (!updateResult.ok) {
         this.logger.warn('PipelineHandler: failed to update pipeline status', {
@@ -199,10 +273,17 @@ export class PipelineHandler extends BaseEventHandler {
       return saveResult;
     }
 
+    // Emit PipelineStatusChanged for every status transition (including PENDING → RUNNING)
+    await this.emitEvent(this.eventBus, 'PipelineStatusChanged', {
+      pipelineId: pipeline.id,
+      fromStatus: pipeline.status,
+      toStatus: newStatus,
+    });
+
     // Find the first failed/cancelled step for event payload
     const failedStep = stepStatuses.find((s) => s.status === 'failed' || s.status === 'cancelled');
 
-    // Emit pipeline lifecycle event
+    // Emit terminal pipeline lifecycle event (Completed / Failed / Cancelled)
     await this.emitPipelineEvent(updated, failedStep);
 
     this.logger.info('PipelineHandler: pipeline status updated', {

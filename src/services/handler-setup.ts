@@ -17,6 +17,7 @@ import {
   LoopService,
   OutputCapture,
   OutputRepository,
+  PipelineRepository,
   ResourceMonitor,
   ScheduleRepository,
   SyncLoopOperations,
@@ -31,7 +32,6 @@ import {
   WorkerPool,
 } from '../core/interfaces.js';
 import { err, ok, Result } from '../core/result.js';
-import type { SQLitePipelineRepository } from '../implementations/pipeline-repository.js';
 import { AgentExitConditionEvaluator } from './agent-exit-condition-evaluator.js';
 import { CompositeExitConditionEvaluator } from './composite-exit-condition-evaluator.js';
 import { ShellExitConditionEvaluator } from './exit-condition-evaluator.js';
@@ -74,7 +74,7 @@ export interface HandlerDependencies {
   /** Optional — enables cancel cascade for attributed sub-tasks (v1.3.0) */
   readonly taskManager?: TaskManager;
   /** Optional — enables pipeline lifecycle tracking (Phase A: Dashboard Visibility Overhaul) */
-  readonly pipelineRepository?: SQLitePipelineRepository;
+  readonly pipelineRepository?: PipelineRepository;
 }
 
 /**
@@ -203,7 +203,7 @@ export function extractHandlerDependencies(container: Container): Result<Handler
   const taskManager = taskManagerResult.ok ? taskManagerResult.value : undefined;
 
   // Optional: PipelineRepository for PipelineHandler (graceful if not registered)
-  const pipelineRepositoryResult = getDependency<SQLitePipelineRepository>(container, 'pipelineRepository');
+  const pipelineRepositoryResult = getDependency<PipelineRepository>(container, 'pipelineRepository');
   const pipelineRepository = pipelineRepositoryResult.ok ? pipelineRepositoryResult.value : undefined;
 
   return ok({
