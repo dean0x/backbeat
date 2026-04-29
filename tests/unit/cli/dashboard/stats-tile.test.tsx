@@ -41,9 +41,7 @@ const DEFAULT_STATS = {
 describe('StatsTile', () => {
   describe('title', () => {
     it('renders "Stats" title text', () => {
-      const { lastFrame } = render(
-        <StatsTile costRollup24h={makeUsage()} top={[]} stats={DEFAULT_STATS} />,
-      );
+      const { lastFrame } = render(<StatsTile costRollup24h={makeUsage()} top={[]} stats={DEFAULT_STATS} />);
       expect(lastFrame()).toContain('Stats');
     });
   });
@@ -51,11 +49,7 @@ describe('StatsTile', () => {
   describe('cost formatting', () => {
     it('renders cost as $X.XX format', () => {
       const { lastFrame } = render(
-        <StatsTile
-          costRollup24h={makeUsage({ totalCostUsd: 1.23 })}
-          top={[]}
-          stats={DEFAULT_STATS}
-        />,
+        <StatsTile costRollup24h={makeUsage({ totalCostUsd: 1.23 })} top={[]} stats={DEFAULT_STATS} />,
       );
       expect(lastFrame()).toContain('$1.23');
     });
@@ -69,11 +63,7 @@ describe('StatsTile', () => {
 
     it('renders fractional cent cost with two decimal places', () => {
       const { lastFrame } = render(
-        <StatsTile
-          costRollup24h={makeUsage({ totalCostUsd: 0.05 })}
-          top={[]}
-          stats={DEFAULT_STATS}
-        />,
+        <StatsTile costRollup24h={makeUsage({ totalCostUsd: 0.05 })} top={[]} stats={DEFAULT_STATS} />,
       );
       expect(lastFrame()).toContain('$0.05');
     });
@@ -82,11 +72,7 @@ describe('StatsTile', () => {
   describe('token formatting', () => {
     it('renders small token counts as plain integers', () => {
       const { lastFrame } = render(
-        <StatsTile
-          costRollup24h={makeUsage({ inputTokens: 500, outputTokens: 200 })}
-          top={[]}
-          stats={DEFAULT_STATS}
-        />,
+        <StatsTile costRollup24h={makeUsage({ inputTokens: 500, outputTokens: 200 })} top={[]} stats={DEFAULT_STATS} />,
       );
       const frame = lastFrame() ?? '';
       expect(frame).toContain('500');
@@ -123,44 +109,28 @@ describe('StatsTile', () => {
   describe('cache rows', () => {
     it('hides cache create row when cacheCreationInputTokens is zero', () => {
       const { lastFrame } = render(
-        <StatsTile
-          costRollup24h={makeUsage({ cacheCreationInputTokens: 0 })}
-          top={[]}
-          stats={DEFAULT_STATS}
-        />,
+        <StatsTile costRollup24h={makeUsage({ cacheCreationInputTokens: 0 })} top={[]} stats={DEFAULT_STATS} />,
       );
       expect(lastFrame()).not.toContain('Cache create');
     });
 
     it('shows cache create row when cacheCreationInputTokens is non-zero', () => {
       const { lastFrame } = render(
-        <StatsTile
-          costRollup24h={makeUsage({ cacheCreationInputTokens: 1000 })}
-          top={[]}
-          stats={DEFAULT_STATS}
-        />,
+        <StatsTile costRollup24h={makeUsage({ cacheCreationInputTokens: 1000 })} top={[]} stats={DEFAULT_STATS} />,
       );
       expect(lastFrame()).toContain('Cache create');
     });
 
     it('hides cache read row when cacheReadInputTokens is zero', () => {
       const { lastFrame } = render(
-        <StatsTile
-          costRollup24h={makeUsage({ cacheReadInputTokens: 0 })}
-          top={[]}
-          stats={DEFAULT_STATS}
-        />,
+        <StatsTile costRollup24h={makeUsage({ cacheReadInputTokens: 0 })} top={[]} stats={DEFAULT_STATS} />,
       );
       expect(lastFrame()).not.toContain('Cache read');
     });
 
     it('shows cache read row when cacheReadInputTokens is non-zero', () => {
       const { lastFrame } = render(
-        <StatsTile
-          costRollup24h={makeUsage({ cacheReadInputTokens: 5000 })}
-          top={[]}
-          stats={DEFAULT_STATS}
-        />,
+        <StatsTile costRollup24h={makeUsage({ cacheReadInputTokens: 5000 })} top={[]} stats={DEFAULT_STATS} />,
       );
       expect(lastFrame()).toContain('Cache read');
     });
@@ -182,33 +152,21 @@ describe('StatsTile', () => {
   describe('duration formatting', () => {
     it('renders seconds duration', () => {
       const { lastFrame } = render(
-        <StatsTile
-          costRollup24h={makeUsage()}
-          top={[]}
-          stats={{ ...DEFAULT_STATS, avgDurationMs: 45_000 }}
-        />,
+        <StatsTile costRollup24h={makeUsage()} top={[]} stats={{ ...DEFAULT_STATS, avgDurationMs: 45_000 }} />,
       );
       expect(lastFrame()).toContain('45s');
     });
 
     it('renders minutes and seconds duration', () => {
       const { lastFrame } = render(
-        <StatsTile
-          costRollup24h={makeUsage()}
-          top={[]}
-          stats={{ ...DEFAULT_STATS, avgDurationMs: 150_000 }}
-        />,
+        <StatsTile costRollup24h={makeUsage()} top={[]} stats={{ ...DEFAULT_STATS, avgDurationMs: 150_000 }} />,
       );
       expect(lastFrame()).toContain('2m 30s');
     });
 
     it('renders hours duration', () => {
       const { lastFrame } = render(
-        <StatsTile
-          costRollup24h={makeUsage()}
-          top={[]}
-          stats={{ ...DEFAULT_STATS, avgDurationMs: 3_900_000 }}
-        />,
+        <StatsTile costRollup24h={makeUsage()} top={[]} stats={{ ...DEFAULT_STATS, avgDurationMs: 3_900_000 }} />,
       );
       expect(lastFrame()).toContain('1h 5m');
     });
@@ -232,22 +190,14 @@ describe('StatsTile', () => {
 
     it('renders success percentage rounded to integer', () => {
       const { lastFrame } = render(
-        <StatsTile
-          costRollup24h={makeUsage()}
-          top={[]}
-          stats={{ ...DEFAULT_STATS, successRate: 0.876 }}
-        />,
+        <StatsTile costRollup24h={makeUsage()} top={[]} stats={{ ...DEFAULT_STATS, successRate: 0.876 }} />,
       );
       expect(lastFrame()).toContain('88%');
     });
 
     it('renders 100% when successRate is 1', () => {
       const { lastFrame } = render(
-        <StatsTile
-          costRollup24h={makeUsage()}
-          top={[]}
-          stats={{ ...DEFAULT_STATS, successRate: 1 }}
-        />,
+        <StatsTile costRollup24h={makeUsage()} top={[]} stats={{ ...DEFAULT_STATS, successRate: 1 }} />,
       );
       expect(lastFrame()).toContain('100%');
     });
@@ -255,17 +205,13 @@ describe('StatsTile', () => {
 
   describe('top entries list', () => {
     it('hides top section when entries array is empty', () => {
-      const { lastFrame } = render(
-        <StatsTile costRollup24h={makeUsage()} top={[]} stats={DEFAULT_STATS} />,
-      );
+      const { lastFrame } = render(<StatsTile costRollup24h={makeUsage()} top={[]} stats={DEFAULT_STATS} />);
       expect(lastFrame()).not.toContain('Top:');
     });
 
     it('shows top section when one entry is provided', () => {
       const top = [{ orchestrationId: OrchestratorId('orchestrator-abc123'), totalCost: 0.5 }];
-      const { lastFrame } = render(
-        <StatsTile costRollup24h={makeUsage()} top={top} stats={DEFAULT_STATS} />,
-      );
+      const { lastFrame } = render(<StatsTile costRollup24h={makeUsage()} top={top} stats={DEFAULT_STATS} />);
       const frame = lastFrame() ?? '';
       expect(frame).toContain('Top:');
       expect(frame).toContain('$0.50');
@@ -277,9 +223,7 @@ describe('StatsTile', () => {
         { orchestrationId: OrchestratorId('orchestrator-bbb'), totalCost: 0.5 },
         { orchestrationId: OrchestratorId('orchestrator-ccc'), totalCost: 0.25 },
       ];
-      const { lastFrame } = render(
-        <StatsTile costRollup24h={makeUsage()} top={top} stats={DEFAULT_STATS} />,
-      );
+      const { lastFrame } = render(<StatsTile costRollup24h={makeUsage()} top={top} stats={DEFAULT_STATS} />);
       const frame = lastFrame() ?? '';
       expect(frame).toContain('$1.00');
       expect(frame).toContain('$0.50');
@@ -294,9 +238,7 @@ describe('StatsTile', () => {
         { orchestrationId: OrchestratorId('orchestrator-ddd'), totalCost: 0.4 },
         { orchestrationId: OrchestratorId('orchestrator-eee'), totalCost: 0.2 },
       ];
-      const { lastFrame } = render(
-        <StatsTile costRollup24h={makeUsage()} top={top} stats={DEFAULT_STATS} />,
-      );
+      const { lastFrame } = render(<StatsTile costRollup24h={makeUsage()} top={top} stats={DEFAULT_STATS} />);
       const frame = lastFrame() ?? '';
       // 4th and 5th entries must not appear
       expect(frame).not.toContain('$0.40');
@@ -308,12 +250,8 @@ describe('StatsTile', () => {
     });
 
     it('renders a short ID for each top entry', () => {
-      const top = [
-        { orchestrationId: OrchestratorId('orchestrator-xyz99999'), totalCost: 0.1 },
-      ];
-      const { lastFrame } = render(
-        <StatsTile costRollup24h={makeUsage()} top={top} stats={DEFAULT_STATS} />,
-      );
+      const top = [{ orchestrationId: OrchestratorId('orchestrator-xyz99999'), totalCost: 0.1 }];
+      const { lastFrame } = render(<StatsTile costRollup24h={makeUsage()} top={top} stats={DEFAULT_STATS} />);
       // shortId returns first 12 chars — "orchestrator" is exactly 12
       expect(lastFrame()).toContain('orchestrator');
     });
@@ -321,9 +259,7 @@ describe('StatsTile', () => {
 
   describe('resilience', () => {
     it('renders without crashing with all-zero values', () => {
-      const { lastFrame } = render(
-        <StatsTile costRollup24h={makeUsage()} top={[]} stats={DEFAULT_STATS} />,
-      );
+      const { lastFrame } = render(<StatsTile costRollup24h={makeUsage()} top={[]} stats={DEFAULT_STATS} />);
       expect(lastFrame()).toBeTruthy();
     });
 

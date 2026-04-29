@@ -369,9 +369,9 @@ describe('SQLitePipelineRepository - Unit Tests', () => {
       const scheduleId = ScheduleId('sched-middle-step');
       const pipeline = createPipeline({
         steps: [
-          { index: 0, prompt: 'step 0' },                        // no scheduleId
-          { index: 1, prompt: 'step 1', scheduleId },            // target
-          { index: 2, prompt: 'step 2' },                        // no scheduleId
+          { index: 0, prompt: 'step 0' }, // no scheduleId
+          { index: 1, prompt: 'step 1', scheduleId }, // target
+          { index: 2, prompt: 'step 2' }, // no scheduleId
         ],
       });
       await repo.save({ ...pipeline, status: PipelineStatus.PENDING });

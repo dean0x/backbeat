@@ -264,9 +264,7 @@ describe('PipelineHandler', () => {
     it('emits PipelineStepCompleted with correct step index when step task completes', async () => {
       const capturedEvents: Array<{ pipelineId: PipelineId; stepIndex: number; taskId: TaskId }> = [];
       eventBus.on('PipelineStepCompleted', (evt) => {
-        capturedEvents.push(
-          evt as { pipelineId: PipelineId; stepIndex: number; taskId: TaskId },
-        );
+        capturedEvents.push(evt as { pipelineId: PipelineId; stepIndex: number; taskId: TaskId });
       });
 
       const taskId0 = TaskId('task-step-evt-0');

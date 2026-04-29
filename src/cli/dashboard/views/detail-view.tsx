@@ -24,7 +24,11 @@ interface TaskDependencyInfo {
  * Dependencies: tasks this task depends on (depId → status lookup).
  * Dependents: sibling tasks whose dependsOn list includes this task's ID.
  */
-function resolveTaskDependencyInfo(task: Task, taskId: string, allTasks: readonly Task[] | undefined): TaskDependencyInfo {
+function resolveTaskDependencyInfo(
+  task: Task,
+  taskId: string,
+  allTasks: readonly Task[] | undefined,
+): TaskDependencyInfo {
   const dependencies =
     task.dependsOn !== undefined && task.dependsOn.length > 0
       ? task.dependsOn.map((depId) => {
@@ -87,9 +91,7 @@ export const DetailView: React.FC<DetailViewProps> = React.memo(
         // TODO(Phase C): usage data requires a dedicated TaskUsage lookup by taskId —
         // DashboardData does not carry per-task usage; fetch from UsageRepository when
         // detail-view extras are extended (similar to orchestrationCostAggregate pattern).
-        return (
-          <TaskDetail task={task} animFrame={animFrame} dependencies={dependencies} dependents={dependents} />
-        );
+        return <TaskDetail task={task} animFrame={animFrame} dependencies={dependencies} dependents={dependents} />;
       }
       case 'schedules': {
         const schedule = data?.schedules.find((s) => s.id === entityId);

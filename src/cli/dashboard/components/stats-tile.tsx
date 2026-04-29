@@ -27,7 +27,6 @@ interface StatsTileProps {
   readonly stats: ThroughputStats;
 }
 
-
 export const StatsTile: React.FC<StatsTileProps> = React.memo(({ costRollup24h, top, stats }) => {
   const { totalCostUsd, inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens } = costRollup24h;
   const cacheSavings = cacheReadInputTokens;
