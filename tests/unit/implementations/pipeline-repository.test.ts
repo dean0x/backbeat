@@ -11,6 +11,7 @@ import {
   PipelineId,
   PipelineStatus,
   Priority,
+  ScheduleId,
   TaskId,
 } from '../../../src/core/domain.js';
 import { Database } from '../../../src/implementations/database.js';
@@ -297,6 +298,89 @@ describe('SQLitePipelineRepository - Unit Tests', () => {
     it('returns ok for deleting non-existent pipeline (idempotent)', async () => {
       const result = await repo.delete(PipelineId('ghost'));
       expect(result.ok).toBe(true);
+    });
+  });
+
+  // ============================================================================
+  // findActiveByStepScheduleId
+  // ============================================================================
+
+  describe('findActiveByStepScheduleId', () => {
+    it('returns active pipeline whose step carries the target scheduleId', async () => {
+      const scheduleId = ScheduleId('sched-find-active');
+      const pipeline = createPipeline({
+        steps: [
+          { index: 0, prompt: 'step 0', scheduleId },
+          { index: 1, prompt: 'step 1' },
+        ],
+      });
+      await repo.save({ ...pipeline, status: PipelineStatus.RUNNING });
+
+      const result = await repo.findActiveByStepScheduleId(scheduleId);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error();
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0].id).toBe(pipeline.id);
+    });
+
+    it('returns empty array when no active pipeline has the scheduleId', async () => {
+      const scheduleId = ScheduleId('sched-no-match');
+      const other = ScheduleId('sched-other');
+      const pipeline = createPipeline({
+        steps: [{ index: 0, prompt: 'step', scheduleId: other }],
+      });
+      await repo.save({ ...pipeline, status: PipelineStatus.RUNNING });
+
+      const result = await repo.findActiveByStepScheduleId(scheduleId);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error();
+      expect(result.value).toHaveLength(0);
+    });
+
+    it('does not return terminal (completed/failed/cancelled) pipelines', async () => {
+      const scheduleId = ScheduleId('sched-terminal');
+      const completedPipeline = createPipeline({
+        steps: [{ index: 0, prompt: 'step', scheduleId }],
+      });
+      const failedPipeline = createPipeline({
+        steps: [{ index: 0, prompt: 'step', scheduleId }],
+      });
+      const cancelledPipeline = createPipeline({
+        steps: [{ index: 0, prompt: 'step', scheduleId }],
+      });
+      const runningPipeline = createPipeline({
+        steps: [{ index: 0, prompt: 'step', scheduleId }],
+      });
+
+      await repo.save({ ...completedPipeline, status: PipelineStatus.COMPLETED });
+      await repo.save({ ...failedPipeline, status: PipelineStatus.FAILED });
+      await repo.save({ ...cancelledPipeline, status: PipelineStatus.CANCELLED });
+      await repo.save({ ...runningPipeline, status: PipelineStatus.RUNNING });
+
+      const result = await repo.findActiveByStepScheduleId(scheduleId);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error();
+      // Only the running pipeline is active
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0].id).toBe(runningPipeline.id);
+    });
+
+    it('handles multi-step pipelines correctly — matches on any step not just step 0', async () => {
+      const scheduleId = ScheduleId('sched-middle-step');
+      const pipeline = createPipeline({
+        steps: [
+          { index: 0, prompt: 'step 0' },                        // no scheduleId
+          { index: 1, prompt: 'step 1', scheduleId },            // target
+          { index: 2, prompt: 'step 2' },                        // no scheduleId
+        ],
+      });
+      await repo.save({ ...pipeline, status: PipelineStatus.PENDING });
+
+      const result = await repo.findActiveByStepScheduleId(scheduleId);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error();
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0].id).toBe(pipeline.id);
     });
   });
 

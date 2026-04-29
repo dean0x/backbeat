@@ -177,6 +177,208 @@ describe('PipelineHandler', () => {
   });
 
   // ============================================================================
+  // ScheduleExecuted — populates stepTaskIds for matched step scheduleId
+  // ============================================================================
+
+  describe('ScheduleExecuted — populates stepTaskIds', () => {
+    it('populates stepTaskIds slot when event carries taskId matching a step scheduleId', async () => {
+      const scheduleId = 'sched-step-0' as import('../../../../src/core/domain.js').ScheduleId;
+      const taskId = TaskId('task-from-sched');
+
+      const pipeline = createPipeline({
+        steps: [{ index: 0, prompt: 'step 0', scheduleId }],
+        stepTaskIds: [null],
+      });
+      const stored: Pipeline = { ...pipeline, status: PipelineStatus.RUNNING };
+      await pipelineRepo.save(stored);
+
+      await eventBus.emit('ScheduleExecuted', {
+        scheduleId,
+        taskId,
+        executedAt: Date.now(),
+      });
+      await flushEventLoop();
+
+      const result = await pipelineRepo.findById(pipeline.id);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error();
+      expect(result.value?.stepTaskIds[0]).toBe(taskId);
+    });
+
+    it('is a no-op when event has no taskId (loop trigger)', async () => {
+      const scheduleId = 'sched-loop-trigger' as import('../../../../src/core/domain.js').ScheduleId;
+
+      const pipeline = createPipeline({
+        steps: [{ index: 0, prompt: 'step 0', scheduleId }],
+        stepTaskIds: [null],
+      });
+      await pipelineRepo.save(pipeline);
+
+      // ScheduleExecuted without taskId — loop trigger path
+      await eventBus.emit('ScheduleExecuted', {
+        scheduleId,
+        // taskId deliberately omitted
+        executedAt: Date.now(),
+      });
+      await flushEventLoop();
+
+      const result = await pipelineRepo.findById(pipeline.id);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error();
+      // stepTaskId must remain null — event was ignored
+      expect(result.value?.stepTaskIds[0]).toBeNull();
+    });
+
+    it('is a no-op when no active pipeline has the scheduleId', async () => {
+      const scheduleId = 'sched-unmatched' as import('../../../../src/core/domain.js').ScheduleId;
+      const taskId = TaskId('task-unmatched');
+
+      // Save a pipeline with a *different* scheduleId
+      const otherScheduleId = 'sched-other' as import('../../../../src/core/domain.js').ScheduleId;
+      const pipeline = createPipeline({
+        steps: [{ index: 0, prompt: 'step 0', scheduleId: otherScheduleId }],
+        stepTaskIds: [null],
+      });
+      await pipelineRepo.save(pipeline);
+
+      await eventBus.emit('ScheduleExecuted', {
+        scheduleId,
+        taskId,
+        executedAt: Date.now(),
+      });
+      await flushEventLoop();
+
+      // Pipeline stepTaskIds should be unchanged
+      const result = await pipelineRepo.findById(pipeline.id);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error();
+      expect(result.value?.stepTaskIds[0]).toBeNull();
+    });
+  });
+
+  // ============================================================================
+  // PipelineStepCompleted — emitted when a step task successfully completes
+  // ============================================================================
+
+  describe('PipelineStepCompleted event', () => {
+    it('emits PipelineStepCompleted with correct step index when step task completes', async () => {
+      const capturedEvents: Array<{ pipelineId: PipelineId; stepIndex: number; taskId: TaskId }> = [];
+      eventBus.on('PipelineStepCompleted', (evt) => {
+        capturedEvents.push(
+          evt as { pipelineId: PipelineId; stepIndex: number; taskId: TaskId },
+        );
+      });
+
+      const taskId0 = TaskId('task-step-evt-0');
+      const taskId1 = TaskId('task-step-evt-1');
+      const pipeline = await savePipelineWithTasks([taskId0, taskId1]);
+
+      // Only step 0 completes — step 1 still queued
+      await taskRepo.update(taskId0, { status: TaskStatus.COMPLETED });
+
+      await eventBus.emit('TaskCompleted', { taskId: taskId0, exitCode: 0, duration: 300 });
+      await flushEventLoop();
+
+      expect(capturedEvents).toHaveLength(1);
+      expect(capturedEvents[0].pipelineId).toBe(pipeline.id);
+      expect(capturedEvents[0].stepIndex).toBe(0);
+      expect(capturedEvents[0].taskId).toBe(taskId0);
+    });
+
+    it('does not emit PipelineStepCompleted when step task fails', async () => {
+      const capturedEvents: unknown[] = [];
+      eventBus.on('PipelineStepCompleted', (evt) => {
+        capturedEvents.push(evt);
+      });
+
+      const taskId = TaskId('task-step-fail-evt');
+      await savePipelineWithTasks([taskId]);
+
+      await taskRepo.update(taskId, { status: TaskStatus.FAILED });
+
+      const { AutobeatError, ErrorCode } = await import('../../../../src/core/errors.js');
+      await eventBus.emit('TaskFailed', {
+        taskId,
+        error: new AutobeatError(ErrorCode.SYSTEM_ERROR, 'step failed'),
+      });
+      await flushEventLoop();
+
+      expect(capturedEvents).toHaveLength(0);
+    });
+  });
+
+  // ============================================================================
+  // PipelineStatusChanged — emitted on every status transition
+  // ============================================================================
+
+  describe('PipelineStatusChanged event', () => {
+    it('emits PipelineStatusChanged with correct fromStatus and toStatus on completion', async () => {
+      const capturedEvents: Array<{
+        pipelineId: PipelineId;
+        fromStatus: PipelineStatus;
+        toStatus: PipelineStatus;
+      }> = [];
+      eventBus.on('PipelineStatusChanged', (evt) => {
+        capturedEvents.push(
+          evt as {
+            pipelineId: PipelineId;
+            fromStatus: PipelineStatus;
+            toStatus: PipelineStatus;
+          },
+        );
+      });
+
+      const taskId = TaskId('task-status-change');
+      const pipeline = await savePipelineWithTasks([taskId]);
+
+      await taskRepo.update(taskId, { status: TaskStatus.COMPLETED });
+
+      await eventBus.emit('TaskCompleted', { taskId, exitCode: 0, duration: 100 });
+      await flushEventLoop();
+
+      expect(capturedEvents).toHaveLength(1);
+      expect(capturedEvents[0].pipelineId).toBe(pipeline.id);
+      expect(capturedEvents[0].fromStatus).toBe(PipelineStatus.RUNNING);
+      expect(capturedEvents[0].toStatus).toBe(PipelineStatus.COMPLETED);
+    });
+
+    it('does not emit PipelineStatusChanged when status does not change', async () => {
+      // A pipeline is RUNNING; a task from a different (unrelated) pipeline completes.
+      // The running pipeline's task is still pending → status stays RUNNING → no event.
+      const capturedEvents: unknown[] = [];
+      eventBus.on('PipelineStatusChanged', (evt) => {
+        capturedEvents.push(evt);
+      });
+
+      const taskIdRunning = TaskId('task-already-running');
+      const taskIdOther = TaskId('task-unrelated-other');
+
+      // Pipeline with two steps — step 0 in progress, step 1 null
+      const runningPipeline = createPipeline({
+        steps: [
+          { index: 0, prompt: 'step 0' },
+          { index: 1, prompt: 'step 1' },
+        ],
+        stepTaskIds: [taskIdRunning, null],
+      });
+      await pipelineRepo.save({ ...runningPipeline, status: PipelineStatus.RUNNING });
+
+      const runningTask = createTask({ prompt: 'running step' });
+      await taskRepo.save({ ...runningTask, id: taskIdRunning, status: TaskStatus.RUNNING });
+
+      // Emit completed for a task NOT in this pipeline — no pipeline matches
+      const otherTask = createTask({ prompt: 'other' });
+      await taskRepo.save({ ...otherTask, id: taskIdOther });
+
+      await taskRepo.update(taskIdOther, { status: TaskStatus.COMPLETED });
+      await eventBus.emit('TaskCompleted', { taskId: taskIdOther, exitCode: 0, duration: 50 });
+      await flushEventLoop();
+
+      expect(capturedEvents).toHaveLength(0);
+    });
+  });
+
+  // ============================================================================
   // Multi-step pipeline — partial completion does not complete pipeline
   // ============================================================================
 
