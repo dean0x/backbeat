@@ -251,6 +251,28 @@ export function truncationNotice(
 }
 
 // ============================================================================
+// Cost and token formatting
+// ============================================================================
+
+/**
+ * Format a USD cost value as a compact dollar string.
+ * Examples: "$0.05", "$1.23"
+ */
+export function formatCost(usd: number): string {
+  return `$${usd.toFixed(2)}`;
+}
+
+/**
+ * Format a token count with K/M suffix for compact display.
+ * Examples: "500", "1.5K", "2.3M"
+ */
+export function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+// ============================================================================
 // Short ID
 // ============================================================================
 

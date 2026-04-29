@@ -3,7 +3,7 @@
  * ARCHITECTURE: Pure component — all state from props
  * Pattern: Functional core — formats timestamps, renders recent activity rows
  *
- * Mirrors the tile pattern (ResourcesTile/CostTile/ThroughputTile): no interactive
+ * Mirrors the tile pattern (ResourcesTile/StatsTile): no interactive
  * focus state, no scroll, just a bounded snapshot of recent activity.
  */
 

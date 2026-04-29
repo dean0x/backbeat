@@ -7,7 +7,7 @@
 import { Box, Text } from 'ink';
 import React from 'react';
 import type { OrchestratorId, TaskUsage } from '../../../core/domain.js';
-import { shortId } from '../format.js';
+import { formatCost, formatMs, formatTokens, shortId } from '../format.js';
 
 interface TopEntry {
   readonly orchestrationId: OrchestratorId;
@@ -27,25 +27,6 @@ interface StatsTileProps {
   readonly stats: ThroughputStats;
 }
 
-function formatCost(usd: number): string {
-  return `$${usd.toFixed(2)}`;
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
-}
-
-function formatDurationMs(ms: number): string {
-  const totalSeconds = Math.round(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
-  return `${seconds}s`;
-}
 
 export const StatsTile: React.FC<StatsTileProps> = React.memo(({ costRollup24h, top, stats }) => {
   const { totalCostUsd, inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens } = costRollup24h;
@@ -65,7 +46,7 @@ export const StatsTile: React.FC<StatsTileProps> = React.memo(({ costRollup24h, 
         {tasksPerHour} tasks/hr {loopsPerHour} loops/hr
       </Text>
       <Text>
-        Success {successPercent}% Avg {formatDurationMs(avgDurationMs)}
+        Success {successPercent}% Avg {formatMs(avgDurationMs)}
       </Text>
       {top.length > 0 && (
         <Box flexDirection="column">
