@@ -3686,8 +3686,11 @@ export class MCPAdapter {
 
         const taskResult = await this.taskManager.getStatus(taskId);
         if (!taskResult.ok) return { ...base, taskStatus: null, taskDuration: null, agent: null };
+        const taskValue = taskResult.value;
+        // getStatus with a single TaskId returns a single Task; guard against unexpected array
+        if (!('id' in taskValue)) return { ...base, taskStatus: null, taskDuration: null, agent: null };
 
-        const task = taskResult.value as Task;
+        const task: Task = taskValue;
         const duration = task.completedAt != null ? task.completedAt - task.createdAt : Date.now() - task.createdAt;
         return {
           ...base,
@@ -3782,7 +3785,7 @@ export class MCPAdapter {
       return { content: [{ type: 'text', text: 'Pipeline repository not available' }], isError: true };
     }
 
-    const { pipelineId, reason } = parseResult.data;
+    const { pipelineId, reason, cancelTasks } = parseResult.data;
     const findResult = await this.pipelineRepository.findById(PipelineId(pipelineId));
     if (!findResult.ok) {
       return {
@@ -3841,13 +3844,35 @@ export class MCPAdapter {
       };
     }
 
-    this.logger.info('Pipeline cancelled via MCP', { pipelineId, reason });
+    this.logger.info('Pipeline cancelled via MCP', { pipelineId, reason, cancelTasks });
+
+    // Optionally cancel in-flight step tasks
+    if (cancelTasks) {
+      const activeTaskIds = pipeline.stepTaskIds.filter((id): id is TaskId => id !== null);
+      for (const taskId of activeTaskIds) {
+        const cancelResult = await this.taskManager.cancel(taskId, `Pipeline ${pipelineId} cancelled`);
+        if (!cancelResult.ok) {
+          this.logger.warn('Failed to cancel pipeline step task', {
+            taskId,
+            pipelineId,
+            error: cancelResult.error.message,
+          });
+        }
+      }
+    }
+
     return {
       content: [
         {
           type: 'text',
           text: JSON.stringify(
-            { success: true, pipelineId, status: PipelineStatus.CANCELLED, reason: reason ?? null },
+            {
+              success: true,
+              pipelineId,
+              status: PipelineStatus.CANCELLED,
+              reason: reason ?? null,
+              cancelTasksRequested: cancelTasks,
+            },
             null,
             2,
           ),
